@@ -1,7 +1,7 @@
 # Elsewhere 全量重建基线审计
 
-**日期：** 2026-07-13  
-**分支：** `codex/elsewhere-full-visual-rebuild`  
+**日期：** 2026-07-13
+**分支：** `codex/elsewhere-full-visual-rebuild`
 **独立工作区：** `/Users/tangyixuan/trip_memory_elsewhere/.worktrees/elsewhere-full-visual-rebuild`
 
 ## 1. 审计范围

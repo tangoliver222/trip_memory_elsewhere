@@ -1,12 +1,14 @@
 # Elsewhere 全页面与语义粒子系统重建设计
 
-**日期：** 2026-07-13  
-**状态：** 总任务提示词预先批准自主实施  
+**日期：** 2026-07-13
+**状态：** 总任务提示词预先批准自主实施
 **基线审计：** `docs/audits/2026-07-13-elsewhere-baseline-audit.md`
 
 ## 1. 目标
 
 把 `design-lab/prototypes-vanilla` 建成唯一、独立、可安装、可构建、可测试的 Elsewhere 产品；31 个路由/状态全部围绕真实碎片、权威数据对象和证据顺序重构，并由单一 Three.js + GSAP 视觉引擎提供语义化地球、点云、关系流和路由心流。
+
+最高优先级体验目标不是“暗色 UI + 粒子装饰”，而是由同一批点云、真实原件、空间深度与目标形态转换构成电影级私人记忆宇宙。首次进入 5 秒内必须出现清晰 Wow 时刻；进入震撼、探索沉浸、聚焦安静、发现再次爆发、阅读克制、操作稳定。
 
 ## 2. 方案比较
 
@@ -111,11 +113,15 @@ connection / discovery / capsule / else / quiet-tool
 
 每种模式定义 particle target、颜色、密度、depth、noise、focus 与交互策略。页面离开只释放该模式独占 geometry/material/texture 和 listener。
 
+同一 `Points` 粒子池跨 World、City、Field、Discovery 与 Else 复用。转场改变 target buffer、camera distance、depth 和 DOM 投影关系；核心页面不得重新初始化一套星空或只做 fade。
+
 ### 粒子系统
 
 `THREE.Points + BufferGeometry + ShaderMaterial`。Attributes：`aRandom`、`aScale`、`aPhase`、`aAmplitude`、`aColorMix`、`aTargetIndex`。Uniforms：`uTime`、`uProgress`、`uPositionRandom`、`uDepth`、`uNoiseStrength`、`uPointer`、`uFocus`、`uOpacity`、`uPixelRatio`、`uReducedMotion`。
 
 顶点 shader 使用嵌入式 simplex noise；首次世界/关键章节用约 3 秒聚拢，普通路由为 0.6–1.2 秒，用户交互立即解除动画阻塞。Fragment shader 使用圆形 alpha falloff、深度尺寸衰减与低饱和冷暖混合。
+
+首次世界从极深的爆炸式散布回流成清晰地球，城市点最后点亮、标题最后显影。地球进入 Bangkok 时先转向、城市点释放波纹、球体局部解构并向前景涌出，最终与 DOM 照片/票据/地图/菜单形成城市碎片场。这个过程在同一 canvas 内连续完成。
 
 ### 地球
 
@@ -129,9 +135,22 @@ connection / discovery / capsule / else / quiet-tool
 
 DOM 原件与 Three.js 空间骨架共享 camera model。LOD 分为城市群、事件群、原件。pointer/touch 支持 pan、zoom、inertia、focus；搜索 Common Grounds 调整 target positions，筛选触发 layout transition。Lens 关闭恢复 camera/filter/selection。
 
+城市群必须分布在不同 z-depth；搜索让远处相关节点回流到中心并生成关系光流，非相关内容退入远景；选中时背景降噪。Lens 用共享元素与 camera push-back 把空间节点提取为可读面板，并可反向返回原位置。
+
 ### GSAP Flow Controller
 
 只暴露命名 timeline：`routeExit`、`routeEnter`、`evidenceReveal`、`relationDraw`、`fragmentFocus`、`lensOpen`、`lensClose`、`elseOpen`、`elseAnswer`、`clusterFilter`、`globeToCity`、`cityToCapsule`。所有 timeline 存入 scope，路由离开统一 kill。ScrollTrigger 仅用于 Capsule、发现详情和长场景页；Flip 仅用于原件/Lens、城市/地球、发现来源连续性。
+
+发现详情必须让三个日期节点从不同纵深出现，先成时间骨架，再连接粒子，再凝聚共同地点，最后显影标题。Else 的 idle/reading/found/uncertain/conflict 都使用同一场景中的局部粒子状态，Orb 打开时移动到抽屉而不是复制。
+
+### 视觉强度分级
+
+- **S：** 首次进入、World、World→City、Fragment Field、Discovery Detail、Capsule 关键章节、Else found；视觉大胆且具标志性。
+- **A：** City World、Time、Place、Connection、Scene、Place Detail、Import Receipt；强空间感但让原件主导。
+- **B：** Import、Processing、Inbox、Lens、Writings；只在状态变化时明显。
+- **C：** Permissions、Privacy、Storage、Delete、Settings、长文本编辑；静态或几乎关闭。
+
+四张单页截图——World、City World、Fragment Field、Discovery Detail——必须能在没有产品名解释时仍体现 Elsewhere 独有的真实媒介、空间深度和记忆显影语法。
 
 ## 6. 视觉语言
 
@@ -176,13 +195,14 @@ DOM 原件与 Three.js 空间骨架共享 camera model。LOD 分为城市群、�
 
 第一轮只检查语义与构图：粒子来源、照片主次、地球辨识、Field 稳定中心、发现证据顺序、Else 安静程度与工具页克制。记录 before/after 参数与截图。
 
+第一轮还必须对六个标志性视觉时刻逐帧审查：首次地球凝聚、World→City、Field 搜索回流、Discovery 生长、Lens 提取、Else 状态转换；若任何一项退化为 fade、背景点或二维卡片墙，本轮不通过。
+
 第二轮只检查性能与设备：high/balanced/low profile、DPR、首次载入、390px 帧率、暂停/恢复、dispose、timeline/listener 清理、触控发热、context lost 与 reduced motion。输出 `performance-report.json`、关键截图和视频。
 
 ## 10. 自审结论
 
-- 无 `TBD`、`TODO` 或依赖用户补充才能实现的功能要求；
+- 无未决占位符或依赖用户补充才能实现的功能要求；
 - 缺失真实资产有明确诚实 fallback；
 - 架构与“唯一 canonical vanilla、单 Canvas、DOM 原件、统一数据层”一致；
 - 全部路由、overlay、两轮粒子优化、截图、录屏和最终报告均进入实施范围；
 - 不引入 React、R3F、Motion 或新的 UI/状态框架。
-
