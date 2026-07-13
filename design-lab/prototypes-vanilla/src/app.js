@@ -3,9 +3,10 @@ import './styles/base.css';
 import './styles/layout.css';
 import './styles/shell.css';
 import './styles/motion.css';
+import './styles/components.css';
+import './styles/pages.css';
 import { renderAppShell, renderElseOrb } from './components/app-shell.js';
 import { renderNavigation } from './components/navigation.js';
-import { escapeHtml } from './components/primitives.js';
 import { createActionController } from './controllers/action-controller.js';
 import { renderFragmentLens } from './overlays/fragment-lens.js';
 import { renderOriginalViewer } from './overlays/original-viewer.js';
@@ -14,24 +15,13 @@ import { matchRoute } from './router.js';
 import { getFragmentContext } from './selectors.js';
 import { createInitialState, createStore } from './store.js';
 import { MemorySceneManager } from './visual/scene-manager.js';
+import { renderRoute as renderPageRoute } from './pages/render-route.js';
 
 const root = document.querySelector('#app-root');
 const initialHash = window.location.hash || '#/onboarding';
 const store = createStore(createInitialState({ route: initialHash }));
 const sceneManager = new MemorySceneManager();
 let sceneKey = '';
-
-function renderPlaceholderPage(route) {
-  const contract = route.contract;
-  return `<main class="page page--placeholder" data-page-id="${escapeHtml(route.pageId)}">
-    <div class="page-placeholder__content">
-      <p class="eyebrow">${escapeHtml(contract.objectType)} · ${escapeHtml(contract.intensity)} 级体验</p>
-      <h1>${escapeHtml(contract.focus)}</h1>
-      <p>${escapeHtml(contract.purpose)}</p>
-      <button class="primary-action" type="button" data-action="navigate" data-route="#/world">${escapeHtml(contract.primaryAction)}</button>
-    </div>
-  </main>`;
-}
 
 function renderOverlays(state) {
   return state.overlays.map((overlay) => {
@@ -45,7 +35,8 @@ function renderOverlays(state) {
 function updateShell() {
   const state = store.getState();
   const route = matchRoute(state.route);
-  const pageHtml = renderPlaceholderPage(route);
+  const view = renderPageRoute(route, state);
+  const pageHtml = view.html;
   const overlayHtml = renderOverlays(state);
   const viewport = root.querySelector('.app-viewport');
 
@@ -68,7 +59,7 @@ function updateShell() {
 
   const topOverlay = state.overlays.at(-1)?.name || '';
   const desiredMode = topOverlay === 'fragmentLens' ? 'lens'
-    : (state.else.open ? 'else' : route.contract.sceneMode);
+    : (state.else.open ? 'else' : view.sceneMode);
   const nextSceneKey = `${route.path}|${desiredMode}|${topOverlay}|${state.else.state}|${state.field.filters.query}`;
   if (sceneKey !== nextSceneKey && sceneManager.debug().particlePoolId) {
     const isFirstWorld = route.pageId === 'world-home' && !window.sessionStorage.getItem('elsewhere:world-formed');
@@ -78,6 +69,7 @@ function updateShell() {
       : undefined;
     sceneManager.setMode(mode, {
       ...route.params,
+      ...view.scenePayload,
       transition,
       query: state.field.filters.query,
       fragmentId: state.selectedFragmentId,

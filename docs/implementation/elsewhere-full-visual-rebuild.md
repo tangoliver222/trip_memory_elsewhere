@@ -343,7 +343,7 @@ git commit -m "feat: add three particle scene architecture"
 - Each renderer returns `{ html, sceneMode, scenePayload, afterRender }`.
 - Routes: five onboarding routes, world, cities, city.
 
-- [ ] **Step 1: Write failing page contract tests**
+- [x] **Step 1: Write failing page contract tests**
 
 ```js
 for (const path of onboardingAndWorldPaths) {
@@ -361,21 +361,21 @@ test('world and cities share the world scene and real coordinates', () => {
 });
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: `npm test -- tests/unit/pages-world.test.js`
 Expected: FAIL because the new renderer contracts are not implemented.
 
-- [ ] **Step 3: Implement the pages and globe interactions**
+- [x] **Step 3: Implement the pages and globe interactions**
 
 Build evidence-first onboarding, low-motion permission tools, selection batch, real processing stages, the 17-minute relation, and a cinematic point-cloud globe with OrbitControls. The first visit begins in extreme z-depth, returns into a clear globe in about three seconds, lights cities in sequence, and reveals the title last within five seconds. `globeToCity` rotates to Bangkok, pulses the city, locally disassembles the globe, pushes particles forward, and reforms around DOM originals without a black cut. Preserve year/list state and keep Capsule/Explore visible by the first viewport end.
 
-- [ ] **Step 4: Run GREEN and build**
+- [x] **Step 4: Run GREEN and build**
 
 Run: `npm test && npm run build`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add design-lab/prototypes-vanilla/src/pages design-lab/prototypes-vanilla/src/components design-lab/prototypes-vanilla/src/styles design-lab/prototypes-vanilla/tests/unit/pages-world.test.js
