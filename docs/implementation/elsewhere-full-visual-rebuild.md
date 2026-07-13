@@ -102,7 +102,7 @@ design-lab/prototypes-vanilla/
 - Produces: `compileRoute(pattern)`, `matchRoute(hash)`, `navigate(hash)`, `safeBack(fallback)`, `ROUTES`.
 - Route result: `{ pageId, path, params, query, contract }`.
 
-- [ ] **Step 1: Write the failing router/package tests**
+- [x] **Step 1: Write the failing router/package tests**
 
 ```js
 import test from 'node:test';
@@ -122,12 +122,12 @@ test('every manifest route matches its page id', () => {
 });
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: `cd design-lab/prototypes-vanilla && node --test tests/unit/router.test.js`
 Expected: FAIL because `page-manifest.js` and the exported router functions do not exist.
 
-- [ ] **Step 3: Implement the exact route API and independent scripts**
+- [x] **Step 3: Implement the exact route API and independent scripts**
 
 ```json
 {
@@ -149,12 +149,12 @@ Expected: FAIL because `page-manifest.js` and the exported router functions do n
 
 `compileRoute` splits on `/`, escapes literal segments, converts only `:name` segments to `([^/]+)`, and stores parameter names. `matchRoute` uses `URLSearchParams` and returns a dedicated `not-found` contract instead of silently rendering world.
 
-- [ ] **Step 4: Run GREEN and build**
+- [x] **Step 4: Run GREEN and build**
 
 Run: `cd design-lab/prototypes-vanilla && npm install && npm test && npm run build`
 Expected: router tests PASS and Vite build exits 0.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add README.md design-lab/prototypes-vanilla

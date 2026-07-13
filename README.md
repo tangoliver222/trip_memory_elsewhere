@@ -1,20 +1,11 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Elsewhere
 
-# Run and deploy your AI Studio app
+The production application is the independent vanilla project at [`design-lab/prototypes-vanilla`](./design-lab/prototypes-vanilla/README.md).
 
-This contains everything you need to run your app locally.
+```bash
+cd design-lab/prototypes-vanilla
+npm install
+npm run dev
+```
 
-View your app in AI Studio: https://ai.studio/apps/25e8cd64-68e3-4d8a-9320-78910b8de8ca
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+The root React/Vite project is an imported preview workbench. `design-lab/elsewhere-frontend-v1` is archived reference code and is not a second runnable product.
