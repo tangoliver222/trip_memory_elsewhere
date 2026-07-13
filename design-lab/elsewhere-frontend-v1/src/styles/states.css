@@ -1,0 +1,90 @@
+/**
+ * Elsewhere Visual State Indications
+ */
+
+/* Visual Status Borders and Colors */
+.status-confirmed-border {
+  border-color: var(--color-accent-green) !important;
+}
+
+.status-confirmed-text {
+  color: var(--color-accent-green);
+}
+
+.status-confirmed-bg {
+  background-color: rgba(151, 171, 155, 0.08);
+}
+
+.status-suggested-border {
+  border-color: var(--color-accent-amber) !important;
+}
+
+.status-suggested-text {
+  color: var(--color-accent-amber);
+}
+
+.status-suggested-bg {
+  background-color: rgba(226, 176, 126, 0.08);
+}
+
+.status-unresolved-border {
+  border-color: var(--color-accent-red) !important;
+}
+
+.status-unresolved-text {
+  color: var(--color-accent-red);
+}
+
+.status-unresolved-bg {
+  background-color: rgba(202, 122, 114, 0.08);
+}
+
+/* Animations and Transitions */
+.fade-in {
+  animation: fade-in-animation 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.slide-up-fade {
+  animation: slide-up-fade-animation 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+
+@keyframes fade-in-animation {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up-fade-animation {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Reduced Motion Override */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-delay: -1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    background-attachment: initial !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+}
+
+/* Glass panel background helper */
+.glass-panel {
+  background: rgba(16, 16, 16, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}

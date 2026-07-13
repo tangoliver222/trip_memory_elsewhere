@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1.0",
+  "journey": {
+    "id": "journey-bangkok-2024-autumn",
+    "city": "Bangkok",
+    "label": "Bangkok · 2024 秋",
+    "range": { "start": "2024-10-12", "end": "2024-10-22" },
+    "timezone": "Asia/Bangkok"
+  },
+  "coverage": {
+    "journeyFragmentCount": 63,
+    "representativeFixtureCount": 10,
+    "rule": "This is a design representative set, not a claim that ten records are the complete journey. Do not reuse one visual asset as evidence for a different date."
+  },
+  "fragments": [
+    {
+      "id": "frag-ari-1012-photo",
+      "type": "photo",
+      "capturedAt": "2024-10-12T08:42:00+07:00",
+      "asset": "../assets/bangkok-photo-04-ari-coffee.png",
+      "placeCandidate": "Common Grounds · Ari",
+      "status": "confirmed",
+      "displayRole": "primary-original"
+    },
+    {
+      "id": "frag-ari-1016-receipt",
+      "type": "receipt",
+      "capturedAt": "2024-10-16T08:47:00+07:00",
+      "asset": null,
+      "requiredAsset": "receipt-01.webp",
+      "evidencePreview": "COMMON GROUNDS · 16 OCT · 124 THB",
+      "placeCandidate": "Common Grounds · Ari",
+      "status": "confirmed",
+      "displayRole": "time-and-place-anchor"
+    },
+    {
+      "id": "frag-ari-1016-photo",
+      "type": "photo",
+      "capturedAt": "2024-10-16T08:56:00+07:00",
+      "asset": "../assets/bangkok-photo-01-ari-morning.jpg",
+      "placeCandidate": "Common Grounds · Ari",
+      "status": "confirmed",
+      "displayRole": "supporting-original"
+    },
+    {
+      "id": "frag-ari-1019-visit",
+      "type": "receipt",
+      "capturedAt": "2024-10-19T09:03:00+07:00",
+      "asset": null,
+      "requiredAsset": "receipt-02.webp",
+      "evidencePreview": "COMMON GROUNDS · 19 OCT · 09:03",
+      "placeCandidate": "Common Grounds · Ari",
+      "status": "confirmed",
+      "displayRole": "time-and-place-anchor"
+    },
+    {
+      "id": "frag-river-1018-ticket",
+      "type": "ticket",
+      "capturedAt": "2024-10-18T17:42:00+07:00",
+      "asset": null,
+      "requiredAsset": "ferry-ticket.webp",
+      "evidencePreview": "CHAO PHRAYA FERRY · 18 OCT · 17:42",
+      "placeCandidate": "Chao Phraya Ferry · Riverside",
+      "status": "confirmed",
+      "displayRole": "time-and-place-anchor"
+    },
+    {
+      "id": "frag-river-1018-photo",
+      "type": "photo",
+      "capturedAt": "2024-10-18T17:59:00+07:00",
+      "asset": "../assets/bangkok-photo-02-riverside.jpg",
+      "placeCandidate": "Chao Phraya Ferry · Riverside",
+      "status": "confirmed",
+      "displayRole": "primary-original"
+    },
+    {
+      "id": "frag-old-town-1017-photo",
+      "type": "photo",
+      "capturedAt": "2024-10-17T15:31:00+07:00",
+      "asset": "../assets/bangkok-photo-03-old-town.jpg",
+      "placeCandidate": "Old Town",
+      "locationConfidence": "low",
+      "status": "unresolved",
+      "displayRole": "unplaced-edge"
+    },
+    {
+      "id": "frag-old-town-1017-menu",
+      "type": "menu",
+      "capturedAt": "2024-10-17T16:08:00+07:00",
+      "asset": null,
+      "requiredAsset": "menu.webp",
+      "evidencePreview": "外文菜单 · 无 GPS · 与街景时间接近",
+      "placeCandidate": "Old Town",
+      "status": "unresolved",
+      "displayRole": "unplaced-edge"
+    },
+    {
+      "id": "frag-river-1022-map",
+      "type": "screenshot",
+      "capturedAt": "2024-10-22T18:04:00+07:00",
+      "asset": null,
+      "requiredAsset": "map-screenshot.webp",
+      "evidencePreview": "ferry · 码头附近 · 具体地点待确认",
+      "placeCandidate": "Chao Phraya Ferry · Riverside",
+      "status": "unresolved",
+      "displayRole": "unplaced-edge"
+    }
+  ]
+}

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elsewhere - Design Laboratory Workbench</title>
+  
+  <!-- Typography & Tailwind -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/index.css">
+
+  <style>
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background-color: #030303;
+      color: #e5e5e5;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex overflow-hidden">
+
+  <!-- Desktop Laboratory Outer Control Bar -->
+  <aside class="w-[320px] bg-[#0c0c0c] border-r border-stone-900 p-6 flex flex-col justify-between flex-shrink-0">
+    <div class="space-y-8">
+      <!-- Title -->
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+          <span class="text-sm font-medium tracking-widest text-stone-200 uppercase">Elsewhere Lab</span>
+        </div>
+        <h1 class="text-xl font-medium text-white mt-2">交互原型实验室</h1>
+        <p class="text-xs text-stone-500 mt-1">Elsewhere Phase 6.2-6.3 Visual & Interactive Workbench</p>
+      </div>
+
+      <!-- Prototype Selectors -->
+      <div class="space-y-3">
+        <h3 class="text-xs font-semibold text-stone-500 uppercase tracking-wider">选择演示原型</h3>
+        
+        <div class="space-y-2">
+          <button id="btn-world-home" 
+                  class="w-full text-left p-3.5 bg-stone-900/60 hover:bg-stone-900 border border-stone-850 rounded-xl text-xs text-stone-300 font-sans transition-all flex flex-col gap-1"
+                  onclick="switchPrototype('world-home', 'prototypes-vanilla/#/world')">
+            <span class="font-medium text-stone-200">1. World Home</span>
+            <span class="mono text-[10px] text-stone-500">#/world</span>
+          </button>
+
+          <button id="btn-city-fragment-field" 
+                  class="w-full text-left p-3.5 bg-stone-900/60 hover:bg-stone-900 border border-stone-850 rounded-xl text-xs text-stone-300 font-sans transition-all flex flex-col gap-1"
+                  onclick="switchPrototype('city-fragment-field', 'prototypes-vanilla/#/world/city/bangkok')">
+            <span class="font-medium text-stone-200">2. City Fragment Field</span>
+            <span class="mono text-[10px] text-stone-500">#/world/city/bangkok</span>
+          </button>
+
+          <button id="btn-fragment-field" 
+                  class="w-full text-left p-3.5 bg-stone-900/60 hover:bg-stone-900 border border-stone-850 rounded-xl text-xs text-stone-300 font-sans transition-all flex flex-col gap-1"
+                  onclick="switchPrototype('fragment-field', 'prototypes-vanilla/#/world/fragments')">
+            <span class="font-medium text-stone-200">3. Fragment Field</span>
+            <span class="mono text-[10px] text-stone-500">#/world/fragments</span>
+          </button>
+
+          <button id="btn-discovery-detail" 
+                  class="w-full text-left p-3.5 bg-stone-900/60 hover:bg-stone-900 border border-stone-850 rounded-xl text-xs text-stone-300 font-sans transition-all flex flex-col gap-1"
+                  onclick="switchPrototype('discovery-detail', 'prototypes-vanilla/#/discover/disc-ari-mornings')">
+            <span class="font-medium text-stone-200">4. Discovery Clue Detail</span>
+            <span class="mono text-[10px] text-stone-500">#/discover/disc-ari-mornings</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info Footer -->
+    <div class="space-y-4 pt-6 border-t border-stone-900">
+      <div class="space-y-1.5 text-xs text-stone-500">
+        <p>● 移动优先 (Mobile Viewport Active)</p>
+        <p>● 纯 Vanilla (Vanilla HTML/CSS/JS ONLY)</p>
+        <p>● 本地模拟状态与路由控制系统</p>
+      </div>
+      <div class="text-[10px] text-stone-600">
+        Elsewhere © 2026. All rights reserved.
+      </div>
+    </div>
+  </aside>
+
+  <!-- Central Canvas representing simulated mobile phone -->
+  <main class="flex-1 bg-[#050505] flex items-center justify-center p-8 relative">
+    <!-- Starfield back accent -->
+    <div class="absolute inset-0 opacity-15 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:24px_24px]"></div>
+
+    <!-- Mock phone container -->
+    <div class="relative w-full max-w-[430px] h-full max-h-[880px] bg-black rounded-[48px] border-[12px] border-stone-900 shadow-[0_0_80px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden z-10">
+      
+      <!-- Top Speaker/Camera notch -->
+      <div class="absolute top-2.5 left-1/2 -translate-x-1/2 w-32 h-6 bg-stone-900 rounded-full z-20 flex items-center justify-end px-5">
+        <span class="w-1.5 h-1.5 rounded-full bg-stone-800"></span>
+      </div>
+
+      <!-- Live sandbox Iframe -->
+      <iframe id="prototype-frame" class="w-full h-full border-0 rounded-[36px]" src=""></iframe>
+    </div>
+  </main>
+
+  <script>
+    // Supported prototype slugs
+    const prototypes = {
+      'world-home': 'prototypes-vanilla/#/world',
+      'city-fragment-field': 'prototypes-vanilla/#/world/city/bangkok',
+      'fragment-field': 'prototypes-vanilla/#/world/fragments',
+      'discovery-detail': 'prototypes-vanilla/#/discover/disc-ari-mornings'
+    };
+
+    function switchPrototype(slug, urlPath) {
+      // Clear active states on buttons
+      Object.keys(prototypes).forEach(key => {
+        const btn = document.getElementById('btn-' + key);
+        if (btn) {
+          btn.classList.remove('border-amber-500/50', 'bg-stone-900');
+          btn.classList.add('border-stone-850', 'bg-stone-900/60');
+        }
+      });
+
+      // Highlight selected button
+      const activeBtn = document.getElementById('btn-' + slug);
+      if (activeBtn) {
+        activeBtn.classList.remove('border-stone-850', 'bg-stone-900/60');
+        activeBtn.classList.add('border-amber-500/50', 'bg-stone-900');
+      }
+
+      // Refresh iframe path
+      document.getElementById('prototype-frame').src = urlPath;
+    }
+
+    // Parse incoming URL query parameter (?prototype=world-home)
+    function init() {
+      const urlParams = new URLSearchParams(window.location.search);
+      let p = urlParams.get('prototype') || 'world-home';
+      
+      if (!prototypes[p]) {
+        p = 'world-home';
+      }
+
+      switchPrototype(p, prototypes[p]);
+    }
+
+    init();
+  </script>
+</body>
+</html>

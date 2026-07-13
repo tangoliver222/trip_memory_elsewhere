@@ -1,0 +1,142 @@
+/**
+ * Elsewhere Special Page Layouts
+ */
+
+/* Onboarding Pages */
+.onboarding-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100%;
+  padding: 40px 24px;
+}
+
+.onboarding-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-amber);
+}
+
+/* Fragment Field (全部碎片 & City Fragment Field) */
+.fragment-field-canvas {
+  position: relative;
+  width: 100%;
+  height: 480px;
+  background-color: #050505;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fragment-node {
+  position: absolute;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.fragment-node:hover {
+  transform: scale(1.05) rotate(1deg);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.8);
+}
+
+.fragment-node.photo {
+  width: 80px;
+  height: 80px;
+  background-color: #111;
+}
+
+.fragment-node.receipt {
+  width: 60px;
+  height: 90px;
+  background-color: #f7f6f2; /* Light paper */
+  color: #1a1a1a;
+  padding: 6px;
+  font-family: var(--font-mono);
+  font-size: 5px;
+  line-height: 1.1;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.fragment-node.ticket {
+  width: 90px;
+  height: 45px;
+  background-color: #eeebd9;
+  color: #333;
+  padding: 4px;
+  font-family: var(--font-mono);
+  font-size: 5px;
+  border: 1px dashed rgba(0, 0, 0, 0.2);
+}
+
+.fragment-node.screenshot {
+  width: 70px;
+  height: 110px;
+  background-color: #222;
+  border: 1.5px solid #333;
+}
+
+/* Time Scroll Line */
+.vertical-timeline {
+  position: relative;
+  padding-left: 32px;
+}
+
+.vertical-timeline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 11px;
+  width: 1px;
+  height: 100%;
+  background-color: #222;
+}
+
+.timeline-dot {
+  position: absolute;
+  left: 6px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background-color: #444;
+  border: 2px solid #090909;
+}
+
+.timeline-dot.confirmed {
+  background-color: var(--color-accent-green);
+}
+
+.timeline-dot.unresolved {
+  background-color: var(--color-accent-red);
+}
+
+/* Common Text and Cards */
+.archive-card {
+  background-color: #0f0f0f;
+  border: 1px solid #1c1c1e;
+  border-radius: 12px;
+  padding: 16px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.archive-card:hover {
+  border-color: #2c2c2e;
+  background-color: #141414;
+}
+
+.serif-quote {
+  font-family: Georgia, serif;
+  font-style: italic;
+  font-size: 18px;
+  line-height: 1.6;
+  color: #d1cbc4;
+}

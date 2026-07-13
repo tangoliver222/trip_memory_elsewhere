@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0",
+  "discoveries": [
+    {
+      "id": "disc-ari-mornings",
+      "type": "repeated_place",
+      "status": "new",
+      "title": "三个早晨都从 Ari 开始",
+      "timeRange": "12—19 OCT 2024",
+      "supportingFragments": ["frag-ari-1012-photo", "frag-ari-1016-receipt", "frag-ari-1016-photo"],
+      "sharedEntity": "Common Grounds · Ari",
+      "observation": "三份可确认的时间与地点证据在 Ari 相遇。",
+      "uncertainty": null,
+      "primaryAction": "在地点中查看"
+    },
+    {
+      "id": "disc-river-evidence",
+      "type": "cross_media_visit",
+      "status": "supported",
+      "title": "票据和河岸照片靠近同一个傍晚",
+      "timeRange": "18 OCT 2024 · 17:42—17:59",
+      "supportingFragments": ["frag-river-1018-ticket", "frag-river-1018-photo"],
+      "sharedEntity": "Chao Phraya Ferry · Riverside",
+      "observation": "两种媒介相隔 17 分钟，支持同一次到访。",
+      "uncertainty": null,
+      "primaryAction": "查看连接依据"
+    },
+    {
+      "id": "disc-river-open-thread",
+      "type": "open_thread",
+      "status": "unresolved",
+      "title": "一张交通截图仍在河边之外",
+      "timeRange": "22 OCT 2024",
+      "supportingFragments": ["frag-river-1022-map"],
+      "sharedEntity": "Chao Phraya Ferry · Riverside",
+      "observation": "截图文字靠近渡船语境，但没有足够依据确认地点。",
+      "uncertainty": "需要用户确认具体码头或保留未安放。",
+      "primaryAction": "帮助确认"
+    }
+  ]
+}

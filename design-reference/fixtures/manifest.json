@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0",
+  "purpose": "Canonical design-time data for Gemini visual prototypes and screenshot review. It mirrors the product concepts without requiring Gemini to read production source code.",
+  "coverage": {
+    "world": "world.json",
+    "fragments": "bangkok-fragments.json",
+    "places": "places.json",
+    "scenes": "scenes.json",
+    "relations": "relations.json",
+    "discoveries": "discoveries.json",
+    "userWritings": "user-writings.json",
+    "intakeAndInbox": "intake-and-inbox.json",
+    "elseContext": "else-context.json"
+  },
+  "assetPolicy": {
+    "providedAssets": "Use only files present in ../assets.",
+    "missingAssets": "Do not fabricate a user original. Render an explicit pending-original or evidence-text state and preserve the fixture status.",
+    "representativeSets": "A fixture may contain representative originals while total counts describe a larger private collection. Never display a representative subset as the full dataset."
+  },
+  "knownPrototypeCorrections": [
+    "Do not reuse the Old Town street image as evidence for an Ari visit.",
+    "Do not reuse Bangkok visuals as Chiang Mai or Tokyo originals when those city assets are absent.",
+    "Treat suggested and unresolved relations as visibly incomplete; they are not confirmed facts."
+  ]
+}

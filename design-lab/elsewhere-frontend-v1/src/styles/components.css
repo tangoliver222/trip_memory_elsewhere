@@ -1,0 +1,189 @@
+/**
+ * Elsewhere Standard Component Styling
+ */
+
+/* Bottom Navigation */
+.bottom-navigation {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 64px;
+  background-color: rgba(14, 14, 14, 0.85);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 35;
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #666;
+  text-decoration: none;
+  transition: color 0.2s ease, transform 0.2s ease;
+  flex: 1;
+  height: 100%;
+}
+
+.nav-item.active {
+  color: #e5e5e5;
+}
+
+.nav-item svg {
+  width: 20px;
+  height: 20px;
+  margin-bottom: 4px;
+  stroke-width: 1.5px;
+}
+
+/* Else Orb - Floating Anchor */
+.else-orb-container {
+  position: absolute;
+  bottom: 80px;
+  right: 20px;
+  z-index: 38;
+}
+
+.else-orb {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background-color: #111;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 
+              inset 0 0 12px rgba(255, 255, 255, 0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  position: relative;
+}
+
+.else-orb:hover {
+  transform: scale(1.05);
+}
+
+/* States of the Else Orb matching the guidelines */
+.else-orb.idle::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.02);
+}
+
+.else-orb.reading::after {
+  content: '';
+  position: absolute;
+  width: 80%;
+  height: 80%;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  animation: pulse-recede 3s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.else-orb.found::after {
+  content: '';
+  position: absolute;
+  width: 90%;
+  height: 90%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, transparent 70%);
+  animation: flash-converge 0.8s ease-out forwards;
+}
+
+.else-orb.uncertain::after {
+  content: '';
+  position: absolute;
+  width: 85%;
+  height: 85%;
+  border-radius: 50%;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+}
+
+.else-orb.conflict::after {
+  content: '';
+  position: absolute;
+  width: 95%;
+  height: 95%;
+  border-radius: 50%;
+  border-left: 1.5px solid rgba(202, 122, 114, 0.4);
+  border-right: 1.5px solid rgba(202, 122, 114, 0.4);
+}
+
+/* Animations */
+@keyframes pulse-recede {
+  0% { transform: scale(1.2); opacity: 0; }
+  50% { transform: scale(0.9); opacity: 0.8; }
+  100% { transform: scale(0.8); opacity: 0.1; }
+}
+
+@keyframes flash-converge {
+  0% { transform: scale(1.4); opacity: 0.8; }
+  100% { transform: scale(0.9); opacity: 0; }
+}
+
+/* Bottom Sheet */
+.bottom-sheet-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 45;
+}
+
+.bottom-sheet-backdrop.active {
+  opacity: 1;
+}
+
+.bottom-sheet-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-height: 85%;
+  background-color: #0f0f0f;
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8);
+  z-index: 50;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bottom-sheet-container.active {
+  transform: translateY(0);
+}
+
+.bottom-sheet-drag-handle {
+  width: 36px;
+  height: 4px;
+  background-color: #2a2a2a;
+  border-radius: 2px;
+  margin: 12px auto;
+  flex-shrink: 0;
+}
+
+.bottom-sheet-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 24px 32px 24px;
+}

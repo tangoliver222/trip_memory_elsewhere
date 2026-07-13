@@ -1,0 +1,73 @@
+/**
+ * Centered App Viewport Mimicking Mobile Device Frame on Desktop
+ */
+.viewport-outer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  height: 100vh;
+  background-color: #030303;
+  overflow: hidden;
+}
+
+#app-viewport {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  height: 100%;
+  max-height: 932px; /* iOS Max Height */
+  background-color: #090909;
+  border-left: 1px solid #141414;
+  border-right: 1px solid #141414;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+}
+
+@media (min-height: 932px) {
+  #app-viewport {
+    height: 844px; /* Standardize preview sizing */
+    border-radius: 40px;
+    border: 6px solid #1c1c1e;
+  }
+}
+
+/* Page Shell is the main router view container */
+.page-shell {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 96px; /* Space for bottom navigation bar */
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Top Sticky Header */
+.page-header {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  z-index: 30;
+  background: linear-gradient(to bottom, rgba(9, 9, 9, 0.95) 80%, rgba(9, 9, 9, 0));
+  backdrop-filter: blur(8px);
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+/* Overlay Host handles custom sheet modals */
+#overlay-host {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 40;
+  pointer-events: none; /* Allows click-through when closed */
+}
+
+#overlay-host > * {
+  pointer-events: auto; /* Re-enable clicks for individual active overlays */
+}

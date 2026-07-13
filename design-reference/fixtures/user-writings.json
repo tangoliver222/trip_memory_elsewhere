@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0",
+  "writings": [
+    {
+      "id": "writing-city-reflection",
+      "type": "city_reflection",
+      "createdAt": "2024-10-22",
+      "text": "离开 Bangkok 以后，我最常想起的是河上的风。",
+      "related": ["journey-bangkok-2024-autumn"],
+      "status": "private"
+    },
+    {
+      "id": "writing-ari-name",
+      "type": "user_name",
+      "createdAt": "2024-10-19",
+      "text": "等雨停的早晨",
+      "related": ["place-common-grounds", "rel-ari-repeat-mornings"],
+      "status": "private"
+    },
+    {
+      "id": "writing-ari-scene-note",
+      "type": "scene_note",
+      "createdAt": "2024-10-16",
+      "text": "那天其实只是为了找一个能坐很久的位置。",
+      "related": ["scene-common-grounds-morning"],
+      "status": "private"
+    },
+    {
+      "id": "writing-future-letter",
+      "type": "future_letter",
+      "createdAt": null,
+      "text": "下次回来，不用急着把所有地方重新走一遍。",
+      "related": ["journey-bangkok-2024-autumn"],
+      "status": "draft"
+    }
+  ]
+}

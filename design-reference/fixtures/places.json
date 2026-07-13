@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0",
+  "journeyId": "journey-bangkok-2024-autumn",
+  "places": [
+    {
+      "id": "place-common-grounds",
+      "name": "Common Grounds",
+      "area": "Ari · 咖啡馆",
+      "coordinates": { "lat": 13.7791, "lng": 100.5443 },
+      "visitCount": 3,
+      "dateRange": "12—19 OCT 2024",
+      "status": "confirmed",
+      "representativeAsset": "../assets/bangkok-photo-01-ari-morning.jpg",
+      "fact": "三次确认到访均发生在上午 10:15 以前；其中两次由小票确认。"
+    },
+    {
+      "id": "place-chao-phraya-ferry",
+      "name": "Chao Phraya Ferry",
+      "area": "Riverside · 渡口",
+      "coordinates": { "lat": 13.7331, "lng": 100.5101 },
+      "visitCount": 3,
+      "fragmentCount": 5,
+      "dateRange": "14—22 OCT 2024",
+      "status": "supported",
+      "representativeAsset": "../assets/bangkok-photo-02-riverside.jpg",
+      "fact": "已确认的河岸碎片均在 17:30 以后；10 月 22 日的截图仍待确认。"
+    },
+    {
+      "id": "place-old-town",
+      "name": "Old Town Walk",
+      "area": "Phra Nakhon · 街区",
+      "coordinates": { "lat": 13.7567, "lng": 100.4977 },
+      "visitCount": 1,
+      "fragmentCount": 3,
+      "dateRange": "17 OCT 2024",
+      "status": "unresolved",
+      "representativeAsset": "../assets/bangkok-photo-03-old-town.jpg",
+      "fact": "街景与菜单在同一下午靠近，但缺少 GPS，地点仍是候选。"
+    },
+    {
+      "id": "place-khlong-toei-market",
+      "name": "Khlong Toei Market",
+      "area": "Khlong Toei · 市场",
+      "coordinates": { "lat": 13.7182, "lng": 100.5622 },
+      "visitCount": null,
+      "fragmentCount": 2,
+      "dateRange": "20 OCT 2024",
+      "status": "suggested",
+      "representativeAsset": null,
+      "requiredAsset": "market-photo-01.webp",
+      "fact": "两张照片可能属于一次绕路，等待用户确认。"
+    }
+  ]
+}

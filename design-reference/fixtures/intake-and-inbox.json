@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "1.0",
+  "importBatches": [
+    {
+      "id": "batch-bangkok-backfill",
+      "createdAt": "2024-10-23T10:00:00+07:00",
+      "itemCount": 28,
+      "types": { "photo": 18, "screenshot": 5, "receipt": 3, "ticket": 2 },
+      "journeyCandidate": "journey-bangkok-2024-autumn",
+      "result": { "saved": 28, "cities": 1, "places": 4, "connections": 1, "needsReview": 2, "duplicates": 0, "failed": 0 },
+      "status": "completed"
+    }
+  ],
+  "reviewQueue": [
+    {
+      "id": "review-river-1022-place",
+      "kind": "place_confirmation",
+      "prompt": "10 月 22 日的交通截图是否也靠近 Chao Phraya Ferry？",
+      "fragmentIds": ["frag-river-1022-map", "frag-river-1018-photo"],
+      "choices": ["是这段", "不是", "稍后"],
+      "status": "needs_review"
+    },
+    {
+      "id": "review-old-town-place",
+      "kind": "place_confirmation",
+      "prompt": "这张街景与菜单是否属于同一次 Old Town 步行？",
+      "fragmentIds": ["frag-old-town-1017-photo", "frag-old-town-1017-menu"],
+      "choices": ["是同一次", "不是", "稍后"],
+      "status": "needs_review"
+    }
+  ],
+  "processing": [
+    {
+      "id": "processing-market",
+      "label": "正在寻找两张市场照片的地点候选",
+      "stage": "place_resolution",
+      "status": "processing"
+    }
+  ],
+  "exceptions": [
+    {
+      "id": "exception-missing-menu",
+      "kind": "missing_original",
+      "label": "Old Town 菜单原件尚未提供",
+      "status": "needs_asset"
+    }
+  ]
+}

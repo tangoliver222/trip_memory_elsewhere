@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "relations": [
+    {
+      "id": "rel-ari-1016-same-visit",
+      "type": "same_visit",
+      "from": "frag-ari-1016-receipt",
+      "to": "frag-ari-1016-photo",
+      "status": "confirmed",
+      "evidence": ["merchant match: Common Grounds", "time distance: 9 minutes"],
+      "visualRule": "stable fine line; no moving particles"
+    },
+    {
+      "id": "rel-ari-repeat-mornings",
+      "type": "repeated_place",
+      "from": ["frag-ari-1012-photo", "frag-ari-1016-receipt", "frag-ari-1016-photo"],
+      "toEntity": "Common Grounds · Ari",
+      "status": "confirmed",
+      "evidence": ["three morning timestamps", "merchant and place confirmation"],
+      "visualRule": "three date nodes converge toward one place entity"
+    },
+    {
+      "id": "rel-river-ticket-photo",
+      "type": "same_visit",
+      "from": "frag-river-1018-ticket",
+      "to": "frag-river-1018-photo",
+      "status": "confirmed",
+      "evidence": ["time distance: 17 minutes", "ferry and riverside context"],
+      "visualRule": "stable line with ticket as time anchor and photo as primary original"
+    },
+    {
+      "id": "rel-river-1022-suggestion",
+      "type": "temporal_and_textual_near",
+      "from": "frag-river-1022-map",
+      "toEntity": "Chao Phraya Ferry · Riverside",
+      "status": "suggested",
+      "evidence": ["screenshot text: ferry", "near known ferry dates"],
+      "uncertainty": "cannot confirm the exact pier or visit",
+      "visualRule": "broken path; particles do not reach the destination"
+    },
+    {
+      "id": "rel-old-town-unplaced",
+      "type": "place_candidate",
+      "from": "frag-old-town-1017-photo",
+      "toEntity": "Old Town",
+      "status": "unresolved",
+      "evidence": ["visual context only"],
+      "uncertainty": "GPS is absent",
+      "visualRule": "no completed relation; keep fragment on the field edge"
+    }
+  ]
+}

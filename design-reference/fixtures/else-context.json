@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0",
+  "contexts": [
+    {
+      "scope": "world",
+      "label": "全部世界",
+      "suggestedQuestions": ["我反复去过哪里？", "哪些碎片还没有落点？"]
+    },
+    {
+      "scope": "journey-bangkok-2024-autumn",
+      "label": "Bangkok · 2024 秋",
+      "suggestedQuestions": ["河边的几次分别是哪一天？", "三个 Ari 早晨由哪些原件支持？"]
+    },
+    {
+      "scope": "place-chao-phraya-ferry",
+      "label": "Chao Phraya Ferry",
+      "suggestedQuestions": ["哪些到访已确认？", "10 月 22 日为什么仍未确认？"]
+    }
+  ],
+  "sampleAnswer": {
+    "question": "河边的几次分别是哪一天？",
+    "answer": "已确认的来源指向 10 月 18 日的船票与河岸照片；10 月 22 日的交通截图只靠近渡船语境，尚不能确认具体码头。",
+    "citations": ["frag-river-1018-ticket", "frag-river-1018-photo", "frag-river-1022-map"],
+    "uncertainty": "10 月 22 日缺少可确认的地点原件。",
+    "nextAction": "查看连接依据"
+  }
+}

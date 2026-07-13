@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0",
+  "journeyId": "journey-bangkok-2024-autumn",
+  "scenes": [
+    {
+      "id": "scene-common-grounds-morning",
+      "date": "2024-10-12",
+      "label": "Ari 的第一个早晨",
+      "timeRange": "08:47—10:03",
+      "placeId": "place-common-grounds",
+      "fragmentIds": ["frag-ari-1012-photo"],
+      "status": "confirmed",
+      "primaryAsset": "../assets/bangkok-photo-01-ari-morning.jpg"
+    },
+    {
+      "id": "scene-river-evening",
+      "date": "2024-10-18",
+      "label": "河岸候船",
+      "timeRange": "17:42—18:26",
+      "placeId": "place-chao-phraya-ferry",
+      "fragmentIds": ["frag-river-1018-ticket", "frag-river-1018-photo"],
+      "status": "supported",
+      "primaryAsset": "../assets/bangkok-photo-02-riverside.jpg"
+    },
+    {
+      "id": "scene-old-town-walk",
+      "date": "2024-10-17",
+      "label": "还没有完整落点的步行",
+      "timeRange": "15:31—17:06",
+      "placeId": "place-old-town",
+      "fragmentIds": ["frag-old-town-1017-photo", "frag-old-town-1017-menu"],
+      "status": "unresolved",
+      "primaryAsset": "../assets/bangkok-photo-03-old-town.jpg"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "world": {
+    "totalCities": 3,
+    "totalFragments": 172,
+    "totalConnections": 14,
+    "recommendedCityId": "city-bangkok-2024-autumn"
+  },
+  "cities": [
+    {
+      "id": "city-bangkok-2024-autumn",
+      "name": "Bangkok",
+      "localizedName": "曼谷",
+      "coordinates": { "lat": 13.7563, "lng": 100.5018 },
+      "period": "2024 秋",
+      "placeCount": 11,
+      "fragmentCount": 63,
+      "status": ["current", "has_new_discovery"],
+      "representativeAsset": "../assets/bangkok-photo-01-ari-morning.jpg"
+    },
+    {
+      "id": "city-chiang-mai-2024-summer",
+      "name": "Chiang Mai",
+      "localizedName": "清迈",
+      "coordinates": { "lat": 18.7883, "lng": 98.9853 },
+      "period": "2024 夏",
+      "placeCount": 7,
+      "fragmentCount": 28,
+      "status": ["formed"],
+      "representativeAsset": null,
+      "requiredAsset": "chiang-mai-photo-01.webp"
+    },
+    {
+      "id": "city-tokyo-2023-winter",
+      "name": "Tokyo",
+      "localizedName": "东京",
+      "coordinates": { "lat": 35.6762, "lng": 139.6503 },
+      "period": "2023 冬",
+      "placeCount": 14,
+      "fragmentCount": 81,
+      "status": ["formed"],
+      "representativeAsset": null,
+      "requiredAsset": "tokyo-photo-01.webp"
+    }
+  ]
+}

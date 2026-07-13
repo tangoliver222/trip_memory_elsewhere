@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-dark: #0a0a0a;
+  --color-bg-panel: #141414;
+  --color-accent-amber: #e2b07e;
+  --color-accent-muted: #8e8880;
+  --color-accent-green: #97ab9b;
+  --color-accent-red: #ca7a72;
+  --color-border-subtle: #242424;
+  --font-display: "Space Grotesk", "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* Base Overrides for elsewhere look-and-feel */
+body {
+  background-color: #030303;
+  color: #e5e5e5;
+  font-family: var(--font-sans);
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* App Shell controls internal scrolling */
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom subtle scrollbars */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
