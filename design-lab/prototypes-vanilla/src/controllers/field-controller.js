@@ -8,8 +8,13 @@ const matchesQuery = (fragment, query) => {
   return haystack.includes(query.trim().toLowerCase());
 };
 
-export function createFieldLayout(query = '') {
+export function createFieldLayout(query = '', { compact = false } = {}) {
   const focused = query ? fragments.filter((fragment) => matchesQuery(fragment, query)).map((fragment) => fragment.id) : [];
+  const compactAnchors = [
+    [-148, -118, -44], [-4, -138, 24], [137, -104, -82],
+    [-176, 6, 8], [-48, 3, 54], [87, 20, -26],
+    [174, 77, -96], [-112, 132, -18], [29, 143, 34],
+  ];
   let focusIndex = 0;
   return fragments.map((fragment, index) => {
     const isFocused = focused.includes(fragment.id);
@@ -18,9 +23,15 @@ export function createFieldLayout(query = '') {
       focusIndex += 1;
       return { id: fragment.id, x: (position - (focused.length - 1) / 2) * 86, y: ((position % 2) - 0.5) * 76, z: 42 - position * 8, relevance: 1 };
     }
+    if (compact && !query) {
+      const anchor = compactAnchors[index % compactAnchors.length];
+      return { id: fragment.id, x: anchor[0], y: anchor[1], z: anchor[2], relevance: 1 };
+    }
     const band = index % 4;
     const angle = index * 1.87 + band;
-    const radius = query ? 470 + index * 26 : 155 + band * 92;
+    const radius = query
+      ? (compact ? 260 + index * 12 : 470 + index * 26)
+      : (compact ? 105 + band * 42 : 155 + band * 92);
     return {
       id: fragment.id,
       x: Math.cos(angle) * radius,
@@ -39,7 +50,7 @@ export function createFieldController({ viewport, store, sceneManager, environme
     camera: clone(initial.camera),
     filters: clone(initial.filters),
     focusedIds: initial.filters.query ? fragments.filter((item) => matchesQuery(item, initial.filters.query)).map((item) => item.id) : [],
-    layout: createFieldLayout(initial.filters.query),
+    layout: createFieldLayout(initial.filters.query, { compact: Boolean(environment.innerWidth && environment.innerWidth <= 700) }),
     velocity: { x: 0, y: 0 },
   };
   const pointers = new Map();
@@ -90,7 +101,7 @@ export function createFieldController({ viewport, store, sceneManager, environme
     const normalized = query.trim();
     state.filters.query = normalized;
     state.focusedIds = normalized ? fragments.filter((item) => matchesQuery(item, normalized)).map((item) => item.id) : [];
-    state.layout = createFieldLayout(normalized);
+    state.layout = createFieldLayout(normalized, { compact: Boolean(environment.innerWidth && environment.innerWidth <= 700) });
     if (!normalized) state.camera = clone(resetCamera);
     store.dispatch({ type: 'SET_FIELD_FILTERS', filters: { query: normalized } });
     if (!normalized) publishCamera();
@@ -122,7 +133,7 @@ export function createFieldController({ viewport, store, sceneManager, environme
     state.camera = clone(saved.camera);
     state.filters = clone(saved.filters);
     state.focusedIds = [...(saved.focusedIds || [])];
-    state.layout = createFieldLayout(state.filters.query);
+    state.layout = createFieldLayout(state.filters.query, { compact: Boolean(environment.innerWidth && environment.innerWidth <= 700) });
     render();
     publishCamera();
     store.dispatch({ type: 'SET_FIELD_FILTERS', filters: clone(state.filters) });

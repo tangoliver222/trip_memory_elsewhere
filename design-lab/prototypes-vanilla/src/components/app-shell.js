@@ -13,7 +13,7 @@ export function renderElseOrb(state, route) {
 export function renderAppShell({ pageHtml = '', route, state, overlayHtml = '', elseHtml = '' }) {
   const intensity = route?.contract?.intensity || 'C';
   const scene = route?.contract?.sceneMode || 'quiet-tool';
-  return `<div class="app-viewport" data-intensity="${intensity}" data-scene-mode="${scene}">
+  return `<div class="app-viewport" data-intensity="${intensity}" data-scene-mode="${scene}" data-shell-page="${route?.pageId || 'unknown'}">
     <canvas id="memory-canvas" aria-hidden="true"></canvas>
     <div class="memory-vignette" aria-hidden="true"></div>
     <div id="page-content-layer" class="page-content-layer">${pageHtml}</div>

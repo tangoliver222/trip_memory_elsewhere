@@ -27,10 +27,10 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
     const random = (Math.sin((i + 1) * 91.913) * 43758.5453) % 1;
     const normalized = Math.abs(random);
     aRandom[i] = normalized;
-    aScale[i] = 0.35 + normalized * 1.35;
+    aScale[i] = 0.24 + normalized * 0.72;
     aPhase[i] = normalized * Math.PI * 2;
     aAmplitude[i] = 0.18 + normalized * 0.8;
-    aColorMix[i] = i % 19 === 0 ? 1 : normalized * 0.32;
+    aColorMix[i] = i % 71 === 0 ? 0.72 : 0.018 + normalized * 0.075;
     aTargetIndex[i] = i;
   }
 
@@ -49,13 +49,13 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
     uPositionRandom: { value: 0.16 },
     uDepth: { value: 1 },
     uNoiseStrength: { value: 0.7 },
-    uPointSize: { value: 2.4 },
+    uPointSize: { value: 1.35 },
     uPixelRatio: { value: 1 },
     uReducedMotion: { value: reducedMotion ? 1 : 0 },
     uPulse: { value: 0 },
-    uOpacity: { value: 0.9 },
-    uCoolColor: { value: new Color('#8ca8ae') },
-    uWarmColor: { value: new Color('#f0c779') },
+    uOpacity: { value: 0.84 },
+    uCoolColor: { value: new Color('#d8e0de') },
+    uWarmColor: { value: new Color('#f0d29b') },
   };
 
   const material = new ShaderMaterial({

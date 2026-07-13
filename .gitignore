@@ -7,3 +7,7 @@ coverage/
 *.log
 .env*
 !.env.example
+design-lab/prototypes-vanilla/test-results/
+design-lab/prototypes-vanilla/artifacts/playwright-report/
+design-lab/prototypes-vanilla/artifacts/contact-sheets/
+design-lab/prototypes-vanilla/artifacts/screenshots/all-pages/

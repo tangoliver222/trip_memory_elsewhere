@@ -78,9 +78,9 @@ export const vertexShader = /* glsl */`
 
     vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
     gl_Position = projectionMatrix * mvPosition;
-    float perspective = clamp(150.0 / max(1.0, -mvPosition.z), 0.4, 4.0);
-    gl_PointSize = min(12.0, uPointSize * aScale * uPixelRatio * perspective * (1.0 + uPulse * 0.5));
-    vAlpha = mix(0.3, 1.0, aScale) * smoothstep(90.0, 4.0, -mvPosition.z);
+    float perspective = clamp(110.0 / max(1.0, -mvPosition.z), 0.38, 1.85);
+    gl_PointSize = min(5.0, uPointSize * aScale * uPixelRatio * perspective * (1.0 + uPulse * 0.35));
+    vAlpha = mix(0.24, 0.92, aScale) * smoothstep(100.0, 3.0, -mvPosition.z);
     vColorMix = aColorMix;
     vDepth = perspective;
   }
@@ -97,9 +97,9 @@ export const fragmentShader = /* glsl */`
   void main() {
     vec2 centered = gl_PointCoord - vec2(0.5);
     float distanceToCenter = length(centered);
-    float softAlpha = 1.0 - smoothstep(0.08, 0.5, distanceToCenter);
-    float core = 1.0 - smoothstep(0.0, 0.13, distanceToCenter);
-    vec3 color = mix(uCoolColor, uWarmColor, clamp(vColorMix + core * 0.18, 0.0, 1.0));
+    float softAlpha = 1.0 - smoothstep(0.04, 0.5, distanceToCenter);
+    float core = 1.0 - smoothstep(0.0, 0.11, distanceToCenter);
+    vec3 color = mix(uCoolColor, uWarmColor, clamp(vColorMix + core * 0.04, 0.0, 1.0));
     gl_FragColor = vec4(color, softAlpha * vAlpha * uOpacity * clamp(vDepth, 0.45, 1.25));
   }
 `;

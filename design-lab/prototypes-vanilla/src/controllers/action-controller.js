@@ -77,8 +77,8 @@ export function createActionController({ root, store }) {
     if (target.dataset.storeAction === 'field-query') store.dispatch({ type: 'SET_FIELD_FILTERS', filters: { query: target.value } });
     if (target.dataset.storeAction === 'field-type') store.dispatch({ type: 'SET_FIELD_FILTERS', filters: { type: valueFor(target) } });
     if (target.dataset.storeAction === 'setting') store.dispatch({ type: 'SET_SETTING', key: target.dataset.key, value: target.type === 'checkbox' ? target.checked : valueFor(target) });
-    if (target.dataset.storeAction === 'else-query') store.dispatch({ type: 'SET_ELSE', value: { query: target.value } });
-    if (target.dataset.storeAction === 'note-editor') store.dispatch({ type: 'SET_NOTE', noteId: target.dataset.noteId, text: target.value });
+    if (target.dataset.storeAction === 'else-query') store.dispatch({ type: 'SET_ELSE', value: { query: target.value }, silentRender: true });
+    if (target.dataset.storeAction === 'note-editor') store.dispatch({ type: 'SET_NOTE', noteId: target.dataset.noteId, text: target.value, silentRender: true });
   };
 
   root.addEventListener('click', onClick);

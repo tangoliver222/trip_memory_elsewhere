@@ -32,7 +32,7 @@ button { color: inherit; }
   height: 100%;
 }
 
-#memory-canvas { z-index: -2; }
+#memory-canvas { z-index: -2; pointer-events: auto; touch-action: none; }
 .memory-vignette { z-index: -1; pointer-events: none; background: radial-gradient(circle, transparent 45%, rgba(0, 0, 0, .58) 100%); }
 
 .page-content-layer {
@@ -41,6 +41,9 @@ button { color: inherit; }
   overflow: auto;
   overscroll-behavior: contain;
 }
+
+.app-viewport[data-shell-page="world-home"] .page-content-layer { pointer-events: none; }
+.app-viewport[data-shell-page="world-home"] .page-content-layer button { pointer-events: auto; }
 
 .page { min-height: 100%; padding: max(24px, env(safe-area-inset-top)) 24px 128px; }
 .page--placeholder { display: grid; place-items: center; text-align: center; }
@@ -140,9 +143,10 @@ button { color: inherit; }
 .share-preview__card { min-height: 260px; margin-top: 20px; padding: 32px; display: grid; align-items: end; border-radius: 20px; background: radial-gradient(circle at 70% 20%, #4d432e, #101517 50%, #080a0b); font: 1.5rem/1.35 Georgia, serif; }
 
 @media (max-width: 600px) {
-  .fragment-lens__panel { border-radius: 28px 28px 0 0; right: 0; bottom: 0; width: 100%; max-height: 88%; }
+  .fragment-lens__panel { right: 18px; bottom: 78px; width: calc(100% - 36px); max-height: calc(100% - 104px); border-radius: 24px; padding: 18px; }
   .fragment-lens__body { grid-template-columns: 1fr; }
-  .fragment-lens__original { grid-row: auto; min-height: 220px; }
+  .fragment-lens__original { grid-row: auto; min-height: 300px; max-height: 42vh; }
+  .fragment-lens__identity h3 { font-size: 1.35rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

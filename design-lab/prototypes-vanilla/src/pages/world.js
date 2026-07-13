@@ -57,7 +57,7 @@ export function renderWorldCities() {
 export function renderCityHome(routeId = 'bangkok') {
   const city = getCityByRouteId(routeId) || cities[0];
   const isBangkok = city.slug === 'bangkok';
-  const originals = isBangkok ? fragments.slice(0, 8) : [];
+  const originals = isBangkok ? fragments.filter((fragment) => fragment.asset).slice(0, 6) : [];
   return {
     sceneMode: 'city',
     scenePayload: { target: 'city-field', cityId: city.id },

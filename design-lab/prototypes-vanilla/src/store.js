@@ -90,7 +90,15 @@ function closeOverlay(state) {
 function reduce(state, action) {
   switch (action.type) {
     case 'NAVIGATE':
-      return { state: { ...state, route: action.route }, result: {} };
+      return {
+        state: {
+          ...state,
+          route: action.route,
+          overlays: [],
+          else: { ...state.else, hidden: false, open: false, state: 'idle' },
+        },
+        result: {},
+      };
     case 'SELECT_CITY':
       return { state: { ...state, selectedCityId: action.cityId }, result: {} };
     case 'SELECT_SCENE':

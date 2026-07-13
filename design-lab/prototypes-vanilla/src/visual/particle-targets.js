@@ -23,7 +23,7 @@ function deepScatter(count) {
   return result;
 }
 
-function globe(count, radius = 12) {
+function globe(count, radius = 10.8) {
   const result = new Float32Array(count * 3);
   const golden = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < count; i += 1) {

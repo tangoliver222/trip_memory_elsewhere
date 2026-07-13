@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createFieldController } from '../../src/controllers/field-controller.js';
+import { createFieldController, createFieldLayout } from '../../src/controllers/field-controller.js';
 import { createInitialState, createStore } from '../../src/store.js';
 
 const viewport = {
@@ -33,4 +33,11 @@ test('field zoom clamps between 0.62 and 2.4 and snapshot is restorable', () => 
   field.restore(snapshot);
   assert.deepEqual(field.state.camera, snapshot.camera);
   field.destroy();
+});
+
+test('compact field layout keeps a useful ring of originals inside a phone-scale spatial radius', () => {
+  const layout = createFieldLayout('', { compact: true });
+  assert.ok(layout.every((node) => Math.abs(node.x) <= 245));
+  assert.ok(layout.every((node) => Math.abs(node.y) <= 150));
+  assert.ok(new Set(layout.map((node) => node.z)).size > 2);
 });

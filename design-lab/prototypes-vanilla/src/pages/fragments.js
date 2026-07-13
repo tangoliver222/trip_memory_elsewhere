@@ -8,7 +8,7 @@ const typeLabel = { photo: '照片', receipt: '小票', ticket: '票根', menu: 
 
 export function renderFragmentField(state) {
   const query = state.field?.filters?.query || '';
-  const layout = createFieldLayout(query);
+  const layout = createFieldLayout(query, { compact: Boolean(globalThis.innerWidth && globalThis.innerWidth <= 700) });
   const positions = Object.fromEntries(layout.map((node) => [node.id, node]));
   return {
     sceneMode: 'fragment-field',
@@ -19,8 +19,9 @@ export function renderFragmentField(state) {
       const controller = createFieldController({ viewport, store, sceneManager });
       const search = pageRoot.querySelector('[data-field-search]');
       const onSearch = (event) => controller.search(event.target.value);
+      search?.addEventListener('input', onSearch);
       search?.addEventListener('search', onSearch);
-      return () => { search?.removeEventListener('search', onSearch); controller.destroy(); };
+      return () => { search?.removeEventListener('input', onSearch); search?.removeEventListener('search', onSearch); controller.destroy(); };
     },
     html: `<main class="page fragment-field" data-page-id="world-fragments">
       <header class="field-header">

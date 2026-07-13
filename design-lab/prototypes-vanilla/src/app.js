@@ -27,6 +27,7 @@ const store = createStore(createInitialState({ route: initialHash }));
 const sceneManager = new MemorySceneManager();
 let sceneKey = '';
 let pageCleanup = null;
+let renderedRoute = null;
 gsap.registerPlugin(Flip);
 
 function syncElseOrbPlacement(state) {
@@ -38,6 +39,23 @@ function syncElseOrbPlacement(state) {
   const snapshot = Flip.getState(orb);
   target.append(orb);
   Flip.from(snapshot, { duration: 0.58, ease: 'power3.inOut', absolute: true });
+}
+
+function updateElseOrb(state, route) {
+  const host = root.querySelector('#else-orb-host');
+  let orb = root.querySelector('[data-else-orb]');
+  const shouldShow = !state.else.hidden && route.contract.elseScope !== 'none';
+  if (!shouldShow) {
+    orb?.remove();
+    return;
+  }
+  if (!orb) {
+    host.insertAdjacentHTML('beforeend', renderElseOrb(state, route));
+    orb = root.querySelector('[data-else-orb]');
+  }
+  orb.className = `else-orb else-orb--${state.else.state || 'idle'}`;
+  orb.setAttribute('aria-label', state.else.open ? '收起 Else' : '询问 Else');
+  orb.setAttribute('aria-expanded', String(Boolean(state.else.open)));
 }
 
 function renderOverlays(state) {
@@ -52,6 +70,7 @@ function renderOverlays(state) {
 
 function updateShell() {
   const state = store.getState();
+  const routeChanged = renderedRoute !== state.route;
   const route = matchRoute(state.route);
   const view = renderPageRoute(route, state);
   const pageHtml = view.html;
@@ -72,9 +91,12 @@ function updateShell() {
   } else {
     viewport.dataset.intensity = route.contract.intensity;
     viewport.dataset.sceneMode = route.contract.sceneMode;
+    viewport.dataset.shellPage = route.pageId;
     root.querySelector('#page-content-layer').innerHTML = pageHtml;
     root.querySelector('#app-navigation-host').innerHTML = renderNavigation(route);
-    root.querySelector('#else-orb-host').innerHTML = renderElseOrb(state, route);
+    const orb = root.querySelector('[data-else-orb]');
+    if (orb && orb.parentElement !== root.querySelector('#else-orb-host')) root.querySelector('#else-orb-host').append(orb);
+    updateElseOrb(state, route);
     root.querySelector('#else-drawer-host').innerHTML = elseHtml;
     root.querySelector('#overlay-root').innerHTML = overlayHtml;
   }
@@ -108,10 +130,16 @@ function updateShell() {
     route,
   });
   if (typeof cleanup === 'function') pageCleanup = cleanup;
+  if (routeChanged) root.querySelector('#page-content-layer')?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  renderedRoute = state.route;
   syncElseOrbPlacement(state);
 }
 
-store.subscribe(updateShell);
+store.subscribe((_state, action) => {
+  if (action?.silentRender) return;
+  if ((action?.type === 'SET_FIELD_FILTERS' || action?.type === 'SET_FIELD_CAMERA') && store.getState().route.startsWith('#/world/fragments')) return;
+  updateShell();
+});
 createActionController({ root, store });
 window.addEventListener('hashchange', () => {
   const route = window.location.hash || '#/world';

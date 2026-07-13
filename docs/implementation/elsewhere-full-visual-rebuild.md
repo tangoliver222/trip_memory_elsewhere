@@ -595,7 +595,7 @@ git commit -m "feat: rebuild me and settings surfaces"
 **Interfaces:**
 - `ROUTE_CASES` enumerates every manifest route plus explore query states and overlay states.
 
-- [ ] **Step 1: Write the failing route/interaction suite**
+- [x] **Step 1: Write the failing route/interaction suite**
 
 ```js
 for (const route of ROUTE_CASES) {
@@ -611,21 +611,21 @@ for (const route of ROUTE_CASES) {
 }
 ```
 
-- [ ] **Step 2: Run RED against all routes**
+- [x] **Step 2: Run RED against all routes**
 
 Run: `npm run test:e2e -- --project=mobile-390`
 Expected: suite identifies any remaining route, overflow, console, image, overlay, Else, or interaction gaps.
 
-- [ ] **Step 3: Fix only demonstrated failures and perform semantic particle pass one**
+- [x] **Step 3: Fix only demonstrated failures and perform semantic particle pass one**
 
 For each required page capture before/after, record particle count, noise, depth, point size, colors, target, GSAP duration, and the specific semantic reason for the change. Review the six signature moments in screenshots plus video frames: first globe formation, World→City, 3D Field search, Discovery growth, Lens extraction/return, and Else state changes. Reject any fade-only, generic point-globe, background-dot, 2D card-wall or dashboard result. Remove particles from C-level tools where they do not explain state while preserving S/A ambition. Build a 390/430px reference contact sheet against the four 2026-07-14 user images and score every representative page on space density, original integration, composition, material detail and relationship legibility. S/A pages require at least 9/10 and B/C pages at least 8/10; continue editing every page below the threshold.
 
-- [ ] **Step 4: Run GREEN across four viewports and reduced motion**
+- [x] **Step 4: Run GREEN across four viewports and reduced motion**
 
 Run: `npm run test:e2e`
 Expected: all route, interaction, screenshot and reduced-motion projects PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add design-lab/prototypes-vanilla/playwright.config.js design-lab/prototypes-vanilla/tests/e2e docs/visual/particle-pass-1.md artifacts/screenshots/pass-1 artifacts/diffs/pass-1 design-lab/prototypes-vanilla/src

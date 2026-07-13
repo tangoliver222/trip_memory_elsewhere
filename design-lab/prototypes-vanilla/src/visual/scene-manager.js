@@ -3,21 +3,27 @@ import {
   Scene,
   WebGLRenderer,
 } from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createFlowController } from './flow-controller.js';
 import { createParticleSystem } from './particle-system.js';
 import { createSemanticTarget } from './particle-targets.js';
 import { detectPerformanceProfile, getPerformanceProfile } from './performance-profile.js';
 
 const DEFAULT_CAMERA_Z = 44;
+const createBrowserControls = (camera, element) => (
+  typeof element?.getRootNode === 'function' ? new OrbitControls(camera, element) : null
+);
 
 export class MemorySceneManager {
   constructor({
     rendererFactory = (options) => new WebGLRenderer(options),
+    controlsFactory = createBrowserControls,
     profile,
     flowController,
     environment = globalThis,
   } = {}) {
     this.rendererFactory = rendererFactory;
+    this.controlsFactory = controlsFactory;
     this.environment = environment;
     const detected = detectPerformanceProfile(environment);
     this.profileName = typeof profile === 'string' ? profile : (profile?.name || detected.name);
@@ -31,6 +37,7 @@ export class MemorySceneManager {
     this.scene = null;
     this.camera = null;
     this.particles = null;
+    this.controls = null;
     this.mode = 'quiet-tool';
     this.phases = [];
     this.rendererCount = 0;
@@ -53,6 +60,18 @@ export class MemorySceneManager {
     this.scene = new Scene();
     this.camera = new PerspectiveCamera(44, 1, 0.1, 240);
     this.camera.position.z = DEFAULT_CAMERA_Z;
+    this.controls = this.controlsFactory?.(this.camera, canvas) || null;
+    if (this.controls) {
+      this.controls.enabled = false;
+      this.controls.enableDamping = true;
+      this.controls.dampingFactor = 0.055;
+      this.controls.enablePan = false;
+      this.controls.enableZoom = true;
+      this.controls.rotateSpeed = 0.38;
+      this.controls.zoomSpeed = 0.52;
+      this.controls.minDistance = 32;
+      this.controls.maxDistance = 54;
+    }
     this.particles = createParticleSystem(this.profile, { reducedMotion: this.reducedMotion });
     this.scene.add(this.particles.points);
 
@@ -99,6 +118,7 @@ export class MemorySceneManager {
   setMode(mode, payload = {}) {
     this.mode = mode;
     if (!this.particles) return this;
+    if (this.controls) this.controls.enabled = mode === 'world' || mode === 'world-intro';
     const options = { ...payload, reducedMotion: this.reducedMotion };
 
     if (mode === 'world-intro') {
@@ -152,6 +172,7 @@ export class MemorySceneManager {
     if (time - this.lastFrame < frameInterval) return;
     this.lastFrame = time;
     this.particles.uniforms.uTime.value = time * 0.001;
+    if (this.controls?.enabled) this.controls.update?.();
     this.renderer.render?.(this.scene, this.camera);
   }
 
@@ -189,11 +210,13 @@ export class MemorySceneManager {
     this.canvas?.removeEventListener?.('webglcontextlost', this._boundContextLost);
     this.canvas?.removeEventListener?.('webglcontextrestored', this._boundContextRestored);
     this.particles?.dispose();
+    this.controls?.dispose?.();
     this.renderer?.dispose?.();
     this.renderer = null;
     this.scene = null;
     this.camera = null;
     this.particles = null;
+    this.controls = null;
     this.canvas = null;
   }
 }

@@ -45,3 +45,17 @@ test('dispatch creates a new state object and notifies subscribers once', () => 
   assert.equal(calls, 1);
   assert.equal(store.getState().field.filters.query, 'Common Grounds');
 });
+
+test('navigation closes spatial overlays and returns Else to its route-safe idle state', () => {
+  const store = createStore(createInitialState({ route: '#/world/fragments' }));
+  store.dispatch({ type: 'OPEN_LENS', fragmentId: 'frag-river-1018-photo', snapshot });
+  store.dispatch({ type: 'SET_ELSE', value: { open: true, state: 'found', query: '河岸', answer: { text: 'answer' } } });
+
+  store.dispatch({ type: 'NAVIGATE', route: '#/world/import' });
+
+  assert.equal(store.getState().route, '#/world/import');
+  assert.deepEqual(store.getState().overlays, []);
+  assert.equal(store.getState().else.hidden, false);
+  assert.equal(store.getState().else.open, false);
+  assert.equal(store.getState().else.state, 'idle');
+});
