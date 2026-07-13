@@ -152,6 +152,14 @@ DOM 原件与 Three.js 空间骨架共享 camera model。LOD 分为城市群、�
 
 四张单页截图——World、City World、Fragment Field、Discovery Detail——必须能在没有产品名解释时仍体现 Elsewhere 独有的真实媒介、空间深度和记忆显影语法。
 
+### 用户视觉基准（2026-07-14）
+
+最终验收增加四张用户提供的硬性参考：City World/Field/Timeline/Places 组合图、Discovery Detail 长图、Settings/Lens 组合图、Importing 图。参考原文件位于 `/Users/tangyixuan/Downloads/ChatGPT Image 2026年7月14日 00_50_25*.jpg` 与 `/Users/tangyixuan/Downloads/ChatGPT Image 2026年7月14日 00_49_43.png`，详细对照记录见 `docs/visual/reference-bar-2026-07-14.md`。
+
+参考图确定的是视觉精度下限而非数据内容：采用近纯黑底、冷白高密流线粒子、真实原件嵌入拓扑、极细边界、移动端完整构图和稳定工具层级；canonical fixture 仍是城市、日期、商户、金额与关系的唯一事实来源。核心页 reference score 至少 9/10，工具页至少 8/10；任一核心页在空间密度、原件融合、构图、层级或关系可读性上明显弱于参考图时不得结束视觉迭代。
+
+这项基准适用于全部路由与 overlay，不只适用于参考图直接展示的典型页。S/A/B/C 只控制粒子与运动强度；所有级别都必须保持相同的设计精度、状态完整性、移动端构图和材质完成度。
+
 ## 6. 视觉语言
 
 - 深灰黑、蓝灰、暖灰；琥珀只用于用户确认与极少显影；

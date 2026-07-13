@@ -11,11 +11,14 @@ import { createActionController } from './controllers/action-controller.js';
 import { renderFragmentLens } from './overlays/fragment-lens.js';
 import { renderOriginalViewer } from './overlays/original-viewer.js';
 import { renderSharePreview } from './overlays/share-preview.js';
+import { renderElseSheet } from './overlays/else-sheet.js';
 import { matchRoute } from './router.js';
 import { getFragmentContext } from './selectors.js';
 import { createInitialState, createStore } from './store.js';
 import { MemorySceneManager } from './visual/scene-manager.js';
 import { renderRoute as renderPageRoute } from './pages/render-route.js';
+import { gsap } from 'gsap';
+import { Flip } from 'gsap/Flip';
 
 const root = document.querySelector('#app-root');
 const initialHash = window.location.hash || '#/onboarding';
@@ -23,6 +26,18 @@ const store = createStore(createInitialState({ route: initialHash }));
 const sceneManager = new MemorySceneManager();
 let sceneKey = '';
 let pageCleanup = null;
+gsap.registerPlugin(Flip);
+
+function syncElseOrbPlacement(state) {
+  const orb = root.querySelector('[data-else-orb]');
+  const target = state.else.open
+    ? root.querySelector('[data-else-orb-slot]')
+    : root.querySelector('#else-orb-host');
+  if (!orb || !target || orb.parentElement === target) return;
+  const snapshot = Flip.getState(orb);
+  target.append(orb);
+  Flip.from(snapshot, { duration: 0.58, ease: 'power3.inOut', absolute: true });
+}
 
 function renderOverlays(state) {
   return state.overlays.map((overlay) => {
@@ -39,12 +54,13 @@ function updateShell() {
   const view = renderPageRoute(route, state);
   const pageHtml = view.html;
   const overlayHtml = renderOverlays(state);
+  const elseHtml = renderElseSheet(state, route.path);
   const viewport = root.querySelector('.app-viewport');
   pageCleanup?.();
   pageCleanup = null;
 
   if (!viewport) {
-    root.innerHTML = renderAppShell({ pageHtml, route, state, overlayHtml });
+    root.innerHTML = renderAppShell({ pageHtml, route, state, overlayHtml, elseHtml });
     try {
       sceneManager.mount(root.querySelector('#memory-canvas'));
     } catch (error) {
@@ -57,6 +73,7 @@ function updateShell() {
     root.querySelector('#page-content-layer').innerHTML = pageHtml;
     root.querySelector('#app-navigation-host').innerHTML = renderNavigation(route);
     root.querySelector('#else-orb-host').innerHTML = renderElseOrb(state, route);
+    root.querySelector('#else-drawer-host').innerHTML = elseHtml;
     root.querySelector('#overlay-root').innerHTML = overlayHtml;
   }
 
@@ -89,6 +106,7 @@ function updateShell() {
     route,
   });
   if (typeof cleanup === 'function') pageCleanup = cleanup;
+  syncElseOrbPlacement(state);
 }
 
 store.subscribe(updateShell);
@@ -101,4 +119,8 @@ window.addEventListener('hashchange', () => {
 
 updateShell();
 
-window.addEventListener('pagehide', () => { pageCleanup?.(); sceneManager.dispose(); }, { once: true });
+const syncVisualViewport = () => document.documentElement.style.setProperty('--visual-viewport-height', `${window.visualViewport?.height || window.innerHeight}px`);
+syncVisualViewport();
+window.visualViewport?.addEventListener('resize', syncVisualViewport);
+
+window.addEventListener('pagehide', () => { pageCleanup?.(); window.visualViewport?.removeEventListener('resize', syncVisualViewport); sceneManager.dispose(); }, { once: true });

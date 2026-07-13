@@ -494,7 +494,7 @@ git commit -m "feat: rebuild city reading and exploration surfaces"
 - Discovery composition maps relation type to `repeat | cross-journey | cross-media | unresolved`.
 - Else response: `{ answer, sources, uncertainty, nextAction }`.
 
-- [ ] **Step 1: Write failing evidence-order and scope tests**
+- [x] **Step 1: Write failing evidence-order and scope tests**
 
 ```js
 test('discovery detail emits evidence before its title', () => {
@@ -511,21 +511,21 @@ test('Else inherits route scope and uses human-readable source names', () => {
 });
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: `npm test -- tests/unit/discover.test.js tests/unit/else.test.js`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement evidence-first Discover and single-instance Else**
+- [x] **Step 3: Implement evidence-first Discover and single-instance Else**
 
 Render one featured discovery at a time, relation-type-specific compositions, save/name actions and World authority links. Discovery Detail brings three dated fragments from distinct depths, forms time nodes, draws relation particles, condenses the shared place, and only then reveals the title. Build 40%/72% Else sheets, scope suggestions, answer/source/uncertainty/one-next-step structure, VisualViewport positioning, and idle/reading/found/uncertain/conflict particle states. `found` is an S-level resurgence with controlled warm source flows. Move the one Orb with Flip; never duplicate it.
 
-- [ ] **Step 4: Run GREEN and build**
+- [x] **Step 4: Run GREEN and build**
 
 Run: `npm test && npm run build`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add design-lab/prototypes-vanilla/src/pages/discover.js design-lab/prototypes-vanilla/src/overlays/else-sheet.js design-lab/prototypes-vanilla/src/store.js design-lab/prototypes-vanilla/src/components design-lab/prototypes-vanilla/src/styles design-lab/prototypes-vanilla/src/visual design-lab/prototypes-vanilla/tests/unit/discover.test.js design-lab/prototypes-vanilla/tests/unit/else.test.js
@@ -590,6 +590,7 @@ git commit -m "feat: rebuild me and settings surfaces"
 - Create: `playwright.config.js`, `tests/e2e/routes.spec.js`, `tests/e2e/interactions.spec.js`, `tests/e2e/visual.spec.js`
 - Create: `docs/visual/particle-pass-1.md`
 - Create: `artifacts/screenshots/pass-1/`, `artifacts/diffs/pass-1/`
+- Read/compare: `docs/visual/reference-bar-2026-07-14.md` and the four user reference images named there
 
 **Interfaces:**
 - `ROUTE_CASES` enumerates every manifest route plus explore query states and overlay states.
@@ -617,7 +618,7 @@ Expected: suite identifies any remaining route, overflow, console, image, overla
 
 - [ ] **Step 3: Fix only demonstrated failures and perform semantic particle pass one**
 
-For each required page capture before/after, record particle count, noise, depth, point size, colors, target, GSAP duration, and the specific semantic reason for the change. Review the six signature moments in screenshots plus video frames: first globe formation, World→City, 3D Field search, Discovery growth, Lens extraction/return, and Else state changes. Reject any fade-only, generic point-globe, background-dot, 2D card-wall or dashboard result. Remove particles from C-level tools where they do not explain state while preserving S/A ambition.
+For each required page capture before/after, record particle count, noise, depth, point size, colors, target, GSAP duration, and the specific semantic reason for the change. Review the six signature moments in screenshots plus video frames: first globe formation, World→City, 3D Field search, Discovery growth, Lens extraction/return, and Else state changes. Reject any fade-only, generic point-globe, background-dot, 2D card-wall or dashboard result. Remove particles from C-level tools where they do not explain state while preserving S/A ambition. Build a 390/430px reference contact sheet against the four 2026-07-14 user images and score every representative page on space density, original integration, composition, material detail and relationship legibility. S/A pages require at least 9/10 and B/C pages at least 8/10; continue editing every page below the threshold.
 
 - [ ] **Step 4: Run GREEN across four viewports and reduced motion**
 

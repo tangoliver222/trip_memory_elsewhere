@@ -140,8 +140,15 @@ function elseOrb(count, payload = {}) {
   const result = quiet(count);
   const closure = payload.state === 'uncertain' ? 0.72 : 1;
   const split = payload.state === 'conflict';
-  const activeCount = Math.min(count, Math.floor(count * 0.17));
+  const found = payload.state === 'found';
+  const activeCount = Math.min(count, Math.floor(count * (found ? 0.58 : 0.17)));
   for (let i = 0; i < activeCount; i += 1) {
+    if (found && i % 3 !== 0) {
+      const source = [[-24, 13, -18], [-5, -16, 4], [19, 8, -7]][i % 3];
+      const t = seeded(i, 30);
+      write(result, i, source[0] + (17 - source[0]) * t, source[1] + (-12 - source[1]) * t + Math.sin(t * Math.PI) * 5, source[2] + (7 - source[2]) * t);
+      continue;
+    }
     const theta = seeded(i, 21) * TAU * closure;
     const phi = Math.acos(1 - 2 * seeded(i, 22));
     const radius = 3.2 + seeded(i, 23) * 1.4;
