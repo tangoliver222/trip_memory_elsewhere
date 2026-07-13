@@ -174,7 +174,7 @@ git commit -m "chore: consolidate canonical vanilla application"
 - Produces: `data`, `indexes`, `validateDataGraph()`, `getFragmentContext(id)`, `getCityFragments(id)`, `getElseContext(route, state)`.
 - Index names match the total prompt exactly.
 
-- [ ] **Step 1: Write failing graph-integrity tests**
+- [x] **Step 1: Write failing graph-integrity tests**
 
 ```js
 test('canonical totals and representative records stay distinct', () => {
@@ -195,21 +195,21 @@ test('no production asset is remote and missing originals are explicit', () => {
 });
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: `npm test -- tests/unit/data.test.js`
 Expected: FAIL on counts, remote assets, absent indexes, and invalid references.
 
-- [ ] **Step 3: Implement normalized data and selectors**
+- [x] **Step 3: Implement normalized data and selectors**
 
 Build frozen arrays from the reference fixtures, add journey/city IDs explicitly, localize only confirmed assets, and return human-readable labels separately from internal IDs. `validateDataGraph()` returns `{ collection, id, field, missing }` records and tests require an empty list.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 Run: `npm test`
 Expected: all router/data tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add design-lab/prototypes-vanilla/src/fixtures design-lab/prototypes-vanilla/src/selectors.js design-lab/prototypes-vanilla/public design-lab/prototypes-vanilla/tests/unit/data.test.js
