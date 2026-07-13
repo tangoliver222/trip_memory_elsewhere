@@ -5,6 +5,7 @@ import { renderCityHome, renderWorldCities, renderWorldHome } from './world.js';
 import { renderFragmentField, renderImportPage, renderInboxPage, renderReceiptPage } from './fragments.js';
 import { renderCapsule, renderConnectionDetail, renderExplore, renderPlaceDetail, renderSceneDetail } from './explore.js';
 import { renderDiscoverHome, renderDiscoveryDetail } from './discover.js';
+import { renderExportPage, renderMeHome, renderPreferences, renderPrivacy, renderStorage, renderWritingDetail, renderWritingList } from './me.js';
 
 const generic = (route) => ({
   sceneMode: route.contract.sceneMode,
@@ -30,5 +31,12 @@ export function renderRoute(pathOrRoute, state = {}) {
   if (route.pageId === 'world-connection-detail') return renderConnectionDetail(route.params.id, state);
   if (route.pageId === 'discover-home') return renderDiscoverHome(state);
   if (route.pageId === 'discover-detail') return renderDiscoveryDetail(route.params.id, state);
+  if (route.pageId === 'me-home') return renderMeHome(state);
+  if (route.pageId === 'me-writing') return renderWritingList(state);
+  if (route.pageId === 'me-writing-detail') return renderWritingDetail(route.params.id, state);
+  if (route.pageId === 'me-privacy') return renderPrivacy(state);
+  if (route.pageId === 'me-preferences') return renderPreferences(state);
+  if (route.pageId === 'me-storage') return renderStorage(state);
+  if (route.pageId === 'me-export') return renderExportPage(state);
   return generic(route);
 }

@@ -37,6 +37,8 @@ export function createInitialState(overrides = {}) {
     reviewDecisions: {},
     connectionDecisions: {},
     settings: { ...fixtureSettings },
+    cacheCleared: false,
+    deletedTargets: [],
   };
 
   return {
@@ -142,6 +144,15 @@ function reduce(state, action) {
         },
         result: {},
       };
+    case 'OPEN_DELETE':
+      return {
+        state: {
+          ...state,
+          overlays: [...state.overlays, { name: 'deleteImpact', payload: { targetId: action.targetId } }],
+          else: { ...state.else, hidden: true },
+        },
+        result: {},
+      };
     case 'CLOSE_OVERLAY':
       return closeOverlay(state);
     case 'CLOSE_ALL_OVERLAYS':
@@ -186,6 +197,10 @@ function reduce(state, action) {
       return { state: { ...state, connectionDecisions: { ...state.connectionDecisions, [action.connectionId || 'current']: action.value } }, result: {} };
     case 'SET_SETTING':
       return { state: { ...state, settings: { ...state.settings, [action.key]: action.value } }, result: {} };
+    case 'CLEAR_CACHE':
+      return { state: { ...state, cacheCleared: true }, result: {} };
+    case 'CONFIRM_DELETE':
+      return { state: { ...state, deletedTargets: [...state.deletedTargets, action.targetId], overlays: [], else: { ...state.else, hidden: false } }, result: {} };
     default:
       return { state, result: {} };
   }

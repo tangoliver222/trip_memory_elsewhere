@@ -41,6 +41,19 @@ export function createActionController({ root, store }) {
     if (action === 'save-discovery') store.dispatch({ type: 'SAVE_DISCOVERY', discoveryId: target.dataset.discoveryId });
     if (action === 'ask-else') askElse(target.dataset.question);
     if (action === 'submit-else') askElse(store.getState().else.query);
+    if (action === 'open-delete') store.dispatch({ type: 'OPEN_DELETE', targetId: target.dataset.targetId });
+    if (action === 'confirm-delete') store.dispatch({ type: 'CONFIRM_DELETE', targetId: target.dataset.targetId });
+    if (action === 'clear-cache') store.dispatch({ type: 'CLEAR_CACHE' });
+    if (action === 'save-note') navigate('#/me/writing');
+    if (action === 'export-data' && typeof document !== 'undefined') {
+      const blob = new Blob([JSON.stringify({ product: 'Elsewhere', exportedAt: new Date().toISOString(), note: 'Prototype export contains fixture-derived metadata only.' }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'elsewhere-export.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    }
     if (action === 'open-lens') {
       const layer = document.querySelector('#page-content-layer');
       store.dispatch({
@@ -65,6 +78,7 @@ export function createActionController({ root, store }) {
     if (target.dataset.storeAction === 'field-type') store.dispatch({ type: 'SET_FIELD_FILTERS', filters: { type: valueFor(target) } });
     if (target.dataset.storeAction === 'setting') store.dispatch({ type: 'SET_SETTING', key: target.dataset.key, value: target.type === 'checkbox' ? target.checked : valueFor(target) });
     if (target.dataset.storeAction === 'else-query') store.dispatch({ type: 'SET_ELSE', value: { query: target.value } });
+    if (target.dataset.storeAction === 'note-editor') store.dispatch({ type: 'SET_NOTE', noteId: target.dataset.noteId, text: target.value });
   };
 
   root.addEventListener('click', onClick);

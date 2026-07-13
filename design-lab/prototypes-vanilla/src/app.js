@@ -12,6 +12,7 @@ import { renderFragmentLens } from './overlays/fragment-lens.js';
 import { renderOriginalViewer } from './overlays/original-viewer.js';
 import { renderSharePreview } from './overlays/share-preview.js';
 import { renderElseSheet } from './overlays/else-sheet.js';
+import { renderDeleteConfirmation } from './overlays/delete-confirmation.js';
 import { matchRoute } from './router.js';
 import { getFragmentContext } from './selectors.js';
 import { createInitialState, createStore } from './store.js';
@@ -44,6 +45,7 @@ function renderOverlays(state) {
     if (overlay.name === 'fragmentLens') return renderFragmentLens(getFragmentContext(overlay.payload.fragmentId));
     if (overlay.name === 'originalViewer') return renderOriginalViewer(getFragmentContext(overlay.payload.fragmentId));
     if (overlay.name === 'sharePreview') return renderSharePreview(overlay.payload);
+    if (overlay.name === 'deleteImpact') return renderDeleteConfirmation(overlay.payload.targetId);
     return '';
   }).join('');
 }

@@ -543,7 +543,7 @@ git commit -m "feat: rebuild discovery and else surfaces"
 - `getDeleteImpact(target)` returns affected scenes/connections/discoveries/Capsule/notes.
 - `getShareModel(target, options)` defaults to `hideAmount`, `hidePreciseAddress`, `hidePrivateNotes`.
 
-- [ ] **Step 1: Write failing privacy/tool tests**
+- [x] **Step 1: Write failing privacy/tool tests**
 
 ```js
 test('share defaults hide all sensitive fields', () => {
@@ -563,21 +563,21 @@ test('deleting a city lists every affected authority object before confirmation'
 });
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: `npm test -- tests/unit/me.test.js tests/unit/privacy.test.js`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement all Me and tool surfaces**
+- [x] **Step 3: Implement all Me and tool surfaces**
 
 Use stable lists and warm authored blocks, related original thumbnails, edit/privacy/Capsule toggles, truthful local/demo-cloud explanation, live fact/balanced/narrative examples, storage categories, cache effects, export choices, explicit delete impact, and static/disabled particle mode for privacy/delete/share tools.
 
-- [ ] **Step 4: Run GREEN and build**
+- [x] **Step 4: Run GREEN and build**
 
 Run: `npm test && npm run build`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add design-lab/prototypes-vanilla/src/pages/me.js design-lab/prototypes-vanilla/src/overlays/share-preview.js design-lab/prototypes-vanilla/src/store.js design-lab/prototypes-vanilla/src/selectors.js design-lab/prototypes-vanilla/src/components design-lab/prototypes-vanilla/src/styles design-lab/prototypes-vanilla/tests/unit
