@@ -34,6 +34,7 @@ export function createInitialState(overrides = {}) {
     discoveryFilter: 'all',
     savedDiscoveryIds: [],
     notes: {},
+    reviewDecisions: {},
     settings: { ...fixtureSettings },
   };
 
@@ -178,6 +179,8 @@ function reduce(state, action) {
       };
     case 'SET_NOTE':
       return { state: { ...state, notes: { ...state.notes, [action.noteId]: action.text } }, result: {} };
+    case 'SET_REVIEW_DECISION':
+      return { state: { ...state, reviewDecisions: { ...state.reviewDecisions, [action.reviewId]: action.value } }, result: {} };
     case 'SET_SETTING':
       return { state: { ...state, settings: { ...state.settings, [action.key]: action.value } }, result: {} };
     default:

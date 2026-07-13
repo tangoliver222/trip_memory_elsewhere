@@ -393,7 +393,7 @@ git commit -m "feat: rebuild onboarding and world surfaces"
 - `createFieldController({ viewport, store, sceneManager })` exposes `panBy`, `zoomAt`, `focus`, `search`, `filter`, `snapshot`, `restore`, `destroy`.
 - Camera bounds: scale 0.62–2.4; inertia stops below 0.02 px/ms.
 
-- [ ] **Step 1: Write failing behavior tests**
+- [x] **Step 1: Write failing behavior tests**
 
 ```js
 test('Common Grounds search focuses relevant nodes and preserves reset state', () => {
@@ -413,21 +413,21 @@ test('receipt counts come only from the import batch', () => {
 });
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: `npm test -- tests/unit/field.test.js tests/unit/intake.test.js`
 Expected: FAIL because the controller and new pages are missing.
 
-- [ ] **Step 3: Implement real field/intake interactions**
+- [x] **Step 3: Implement real field/intake interactions**
 
 Use z-depth LOD clusters, pointer capture, two-touch distance zoom, wheel zoom, velocity decay, semantic re-layout, debounced search, filter restoration, mixed-media import state, batch particle convergence, receipt distribution, one-question inbox decisions, processing stages, and explicit exception states. Search pulls distant relevant nodes toward center, emits relation flow, sends unrelated nodes deeper, and selection lowers spatial noise. Flip Lens transitions also move the camera back and attract nearby particles so Lens feels extracted from space rather than opened as a normal sheet.
 
-- [ ] **Step 4: Run GREEN and build**
+- [x] **Step 4: Run GREEN and build**
 
 Run: `npm test && npm run build`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add design-lab/prototypes-vanilla/src design-lab/prototypes-vanilla/tests/unit/field.test.js design-lab/prototypes-vanilla/tests/unit/intake.test.js

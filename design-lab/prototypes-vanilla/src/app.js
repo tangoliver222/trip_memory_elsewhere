@@ -22,6 +22,7 @@ const initialHash = window.location.hash || '#/onboarding';
 const store = createStore(createInitialState({ route: initialHash }));
 const sceneManager = new MemorySceneManager();
 let sceneKey = '';
+let pageCleanup = null;
 
 function renderOverlays(state) {
   return state.overlays.map((overlay) => {
@@ -39,6 +40,8 @@ function updateShell() {
   const pageHtml = view.html;
   const overlayHtml = renderOverlays(state);
   const viewport = root.querySelector('.app-viewport');
+  pageCleanup?.();
+  pageCleanup = null;
 
   if (!viewport) {
     root.innerHTML = renderAppShell({ pageHtml, route, state, overlayHtml });
@@ -79,6 +82,13 @@ function updateShell() {
     sceneKey = nextSceneKey;
     window.sessionStorage.setItem('elsewhere:previous-page', route.pageId);
   }
+  const cleanup = view.afterRender?.({
+    pageRoot: root.querySelector('#page-content-layer'),
+    store,
+    sceneManager,
+    route,
+  });
+  if (typeof cleanup === 'function') pageCleanup = cleanup;
 }
 
 store.subscribe(updateShell);
@@ -91,4 +101,4 @@ window.addEventListener('hashchange', () => {
 
 updateShell();
 
-window.addEventListener('pagehide', () => sceneManager.dispose(), { once: true });
+window.addEventListener('pagehide', () => { pageCleanup?.(); sceneManager.dispose(); }, { once: true });
