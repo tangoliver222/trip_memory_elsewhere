@@ -1,0 +1,22 @@
+:root {
+  --ink-0: #030405;
+  --ink-1: #07090a;
+  --ink-2: #0d1112;
+  --ink-3: #151a1b;
+  --paper-0: #f1eee7;
+  --paper-1: #c9c5bc;
+  --paper-2: #8e928e;
+  --memory-warm: #d8b16c;
+  --memory-warm-bright: #f2cc83;
+  --memory-cool: #8ca8ae;
+  --memory-uncertain: #84959b;
+  --memory-conflict: #b47d68;
+  --line: rgba(242, 238, 231, .11);
+  --line-warm: rgba(216, 177, 108, .34);
+  --blur-panel: blur(24px) saturate(1.1);
+  --ease-flow: cubic-bezier(.22, .8, .22, 1);
+  --ease-settle: cubic-bezier(.2, .7, .3, 1);
+  --space-page: clamp(20px, 4vw, 56px);
+  --read-width: 720px;
+  --panel-radius: 28px;
+}

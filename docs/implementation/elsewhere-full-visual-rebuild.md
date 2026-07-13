@@ -284,7 +284,7 @@ git commit -m "refactor: establish visual tokens and page primitives"
 - `createParticleSystem(profile)` returns `{ points, uniforms, setTarget, dispose }`.
 - `createFlowController()` returns named timeline methods plus `killAll()`.
 
-- [ ] **Step 1: Write failing lifecycle/profile tests**
+- [x] **Step 1: Write failing lifecycle/profile tests**
 
 ```js
 test('scene manager creates one renderer and changes mode without remounting', () => {
@@ -311,21 +311,21 @@ test('profiles enforce particle and DPR ceilings', () => {
 });
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: `npm test -- tests/unit/visual.test.js tests/unit/performance.test.js`
 Expected: FAIL because the visual modules are missing.
 
-- [ ] **Step 3: Implement shader, targets, profiles and lifecycle**
+- [x] **Step 3: Implement shader, targets, profiles and lifecycle**
 
 Create all required attributes/uniforms, embed simplex noise in the vertex shader, use soft alpha falloff in the fragment shader, generate semantic targets per mode, cap DPR, pause for `document.hidden`/offscreen, handle resize/context loss, and never allocate arrays in the render loop. Reuse one particle pool for `deep-scatter → globe → city-burst → city-field → field/discovery/else`; `gsap.context`/timeline handles are killed before route teardown.
 
-- [ ] **Step 4: Run GREEN, build, and source assertions**
+- [x] **Step 4: Run GREEN, build, and source assertions**
 
 Run: `npm test && npm run build && rg 'aRandom|aScale|aPhase|aAmplitude|aColorMix|aTargetIndex' src/visual/particle-system.js && rg 'uPositionRandom|uDepth|uNoiseStrength|uReducedMotion' src/visual`
 Expected: tests/build PASS and both attribute/uniform scans find the required symbols.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add design-lab/prototypes-vanilla/src/visual design-lab/prototypes-vanilla/src/styles design-lab/prototypes-vanilla/tests/unit

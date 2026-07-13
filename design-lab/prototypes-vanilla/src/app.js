@@ -1,5 +1,8 @@
+import './styles/tokens.css';
+import './styles/base.css';
 import './styles/layout.css';
 import './styles/shell.css';
+import './styles/motion.css';
 import { renderAppShell, renderElseOrb } from './components/app-shell.js';
 import { renderNavigation } from './components/navigation.js';
 import { escapeHtml } from './components/primitives.js';
@@ -10,10 +13,13 @@ import { renderSharePreview } from './overlays/share-preview.js';
 import { matchRoute } from './router.js';
 import { getFragmentContext } from './selectors.js';
 import { createInitialState, createStore } from './store.js';
+import { MemorySceneManager } from './visual/scene-manager.js';
 
 const root = document.querySelector('#app-root');
 const initialHash = window.location.hash || '#/onboarding';
 const store = createStore(createInitialState({ route: initialHash }));
+const sceneManager = new MemorySceneManager();
+let sceneKey = '';
 
 function renderPlaceholderPage(route) {
   const contract = route.contract;
@@ -45,15 +51,42 @@ function updateShell() {
 
   if (!viewport) {
     root.innerHTML = renderAppShell({ pageHtml, route, state, overlayHtml });
-    return;
+    try {
+      sceneManager.mount(root.querySelector('#memory-canvas'));
+    } catch (error) {
+      root.querySelector('.app-viewport')?.classList.add('is-static-visual');
+      console.warn('Memory Scene unavailable; using static depth fallback.', error);
+    }
+  } else {
+    viewport.dataset.intensity = route.contract.intensity;
+    viewport.dataset.sceneMode = route.contract.sceneMode;
+    root.querySelector('#page-content-layer').innerHTML = pageHtml;
+    root.querySelector('#app-navigation-host').innerHTML = renderNavigation(route);
+    root.querySelector('#else-orb-host').innerHTML = renderElseOrb(state, route);
+    root.querySelector('#overlay-root').innerHTML = overlayHtml;
   }
 
-  viewport.dataset.intensity = route.contract.intensity;
-  viewport.dataset.sceneMode = route.contract.sceneMode;
-  root.querySelector('#page-content-layer').innerHTML = pageHtml;
-  root.querySelector('#app-navigation-host').innerHTML = renderNavigation(route);
-  root.querySelector('#else-orb-host').innerHTML = renderElseOrb(state, route);
-  root.querySelector('#overlay-root').innerHTML = overlayHtml;
+  const topOverlay = state.overlays.at(-1)?.name || '';
+  const desiredMode = topOverlay === 'fragmentLens' ? 'lens'
+    : (state.else.open ? 'else' : route.contract.sceneMode);
+  const nextSceneKey = `${route.path}|${desiredMode}|${topOverlay}|${state.else.state}|${state.field.filters.query}`;
+  if (sceneKey !== nextSceneKey && sceneManager.debug().particlePoolId) {
+    const isFirstWorld = route.pageId === 'world-home' && !window.sessionStorage.getItem('elsewhere:world-formed');
+    const mode = isFirstWorld ? 'world-intro' : desiredMode;
+    const transition = route.pageId === 'world-city-home' && window.sessionStorage.getItem('elsewhere:previous-page') === 'world-home'
+      ? 'globeToCity'
+      : undefined;
+    sceneManager.setMode(mode, {
+      ...route.params,
+      transition,
+      query: state.field.filters.query,
+      fragmentId: state.selectedFragmentId,
+      state: state.else.state,
+      onComplete: () => window.sessionStorage.setItem('elsewhere:world-formed', 'true'),
+    });
+    sceneKey = nextSceneKey;
+    window.sessionStorage.setItem('elsewhere:previous-page', route.pageId);
+  }
 }
 
 store.subscribe(updateShell);
@@ -65,3 +98,5 @@ window.addEventListener('hashchange', () => {
 });
 
 updateShell();
+
+window.addEventListener('pagehide', () => sceneManager.dispose(), { once: true });

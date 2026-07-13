@@ -1,0 +1,15 @@
+@keyframes memory-breathe {
+  0%, 100% { opacity: .48; transform: scale(.98); }
+  50% { opacity: .82; transform: scale(1.02); }
+}
+
+@keyframes fragment-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--fragment-rotation, 0deg)); }
+  50% { transform: translate3d(0, -8px, 12px) rotate(calc(var(--fragment-rotation, 0deg) + .6deg)); }
+}
+
+.will-flow { will-change: transform, opacity; }
+
+@media (prefers-reduced-motion: reduce) {
+  .will-flow { will-change: auto; }
+}

@@ -1,0 +1,20 @@
+::selection { color: var(--ink-0); background: var(--memory-warm-bright); }
+
+:focus-visible {
+  outline: 2px solid var(--memory-warm-bright);
+  outline-offset: 4px;
+}
+
+a { color: inherit; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
