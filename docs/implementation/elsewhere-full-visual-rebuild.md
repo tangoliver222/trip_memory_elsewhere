@@ -229,7 +229,7 @@ git commit -m "fix: stabilize routes data and overlays"
 - `dispatch({ type, ...payload })` is the only mutation path.
 - Overlay snapshot: `{ route, scrollY, focusId, fieldCamera, filters, selectedFragmentId }`.
 
-- [ ] **Step 1: Write failing state/overlay tests**
+- [x] **Step 1: Write failing state/overlay tests**
 
 ```js
 test('Lens close restores field camera, filters, selection and scroll', () => {
@@ -251,21 +251,21 @@ test('opening Original Viewer hides Else and returns to Lens', () => {
 });
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: `npm test -- tests/unit/store.test.js tests/unit/overlays.test.js`
 Expected: FAIL because the immutable action API and stack do not exist.
 
-- [ ] **Step 3: Implement shell and actions**
+- [x] **Step 3: Implement shell and actions**
 
 Render exactly one `#memory-canvas`, `#page-content-layer`, `#overlay-root`, and `[data-else-orb]`. Register one click/change/submit listener on `#app-viewport`; map `data-action` values to controller functions; restore focus and scroll after overlay close. No inline handler is emitted.
 
-- [ ] **Step 4: Run GREEN and static scans**
+- [x] **Step 4: Run GREEN and static scans**
 
 Run: `npm test && ! rg 'onclick=|onchange=|window\\.store' src`
 Expected: tests PASS and scan returns no production matches.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add design-lab/prototypes-vanilla/src design-lab/prototypes-vanilla/tests/unit

@@ -1,305 +1,208 @@
-/**
- * Elsewhere Global Reactive State Store
- */
-import {
-  cities,
-  fragments,
-  importBatches,
-  places,
-  scenes,
-  connections,
-  discoveries,
-  userNotes,
-  settings
-} from "./fixtures/data.js";
+import { settings as fixtureSettings } from './fixtures/data.js';
 
-class GlobalStore {
-  constructor() {
-    this.state = {
-      // Mock databases
-      cities: [...cities],
-      fragments: [...fragments],
-      importBatches: [...importBatches],
-      places: [...places],
-      scenes: [...scenes],
-      connections: [...connections],
-      discoveries: [...discoveries],
-      userNotes: [...userNotes],
-      settings: { ...settings },
+const DEFAULT_CAMERA = Object.freeze({ x: 0, y: 0, scale: 1, depth: 1 });
+const DEFAULT_FILTERS = Object.freeze({ type: 'all', status: 'all', query: '' });
 
-      // Navigation & Routing State
-      currentRoute: window.location.hash || "#/world",
-      historyStack: [],
+const clone = (value) => {
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+};
 
-      // UI Active Entity States
-      selectedCity: "bangkok",
-      selectedFragment: null,
-      selectedScene: "scene-common-grounds-morning",
-      selectedPlace: "place-common-grounds",
-      selectedConnection: "rel-river-ticket-photo",
-      selectedDiscovery: "disc-ari-mornings",
-      selectedWriting: "writing-city-reflection",
+export function createInitialState(overrides = {}) {
+  const defaults = {
+    route: '#/onboarding',
+    selectedCityId: 'bangkok',
+    selectedFragmentId: null,
+    selectedSceneId: 'scene-river-evening',
+    selectedPlaceId: 'place-common-grounds',
+    selectedConnectionId: 'rel-river-ticket-photo',
+    selectedDiscoveryId: 'disc-ari-mornings',
+    selectedWritingId: 'writing-city-reflection',
+    field: {
+      camera: { ...DEFAULT_CAMERA },
+      filters: { ...DEFAULT_FILTERS },
+    },
+    overlays: [],
+    else: {
+      state: 'idle',
+      hidden: false,
+      open: false,
+      query: '',
+      answer: null,
+      sources: [],
+    },
+    discoveryFilter: 'all',
+    savedDiscoveryIds: [],
+    notes: {},
+    settings: { ...fixtureSettings },
+  };
 
-      // Overlays Open States
-      overlays: {
-        fragmentLens: false,
-        originalViewer: false,
-        elseSheet: false,
-        filters: false,
-        editMetadata: false,
-        mergeSplit: false,
-        conflict: false,
-        deleteImpact: false,
-        duplicate: false,
-        sharePreview: false,
-        permission: false
+  return {
+    ...defaults,
+    ...clone(overrides),
+    field: {
+      ...defaults.field,
+      ...(overrides.field || {}),
+      camera: { ...DEFAULT_CAMERA, ...(overrides.field?.camera || {}) },
+      filters: { ...DEFAULT_FILTERS, ...(overrides.field?.filters || {}) },
+    },
+    else: { ...defaults.else, ...(overrides.else || {}) },
+    settings: { ...defaults.settings, ...(overrides.settings || {}) },
+    overlays: clone(overrides.overlays || []),
+  };
+}
+
+function closeOverlay(state) {
+  if (!state.overlays.length) return { state, result: {} };
+
+  const overlays = state.overlays.slice(0, -1);
+  const closed = state.overlays.at(-1);
+  const lensStillOpen = overlays.some((overlay) => overlay.name === 'fragmentLens');
+  let next = {
+    ...state,
+    overlays,
+    else: { ...state.else, hidden: lensStillOpen },
+  };
+  let result = {};
+
+  if (closed.name === 'fragmentLens' && closed.snapshot) {
+    const snapshot = closed.snapshot;
+    next = {
+      ...next,
+      selectedFragmentId: snapshot.selectedFragmentId ?? null,
+      field: {
+        ...state.field,
+        camera: { ...snapshot.fieldCamera },
+        filters: { ...snapshot.filters },
       },
-
-      // Filter settings
-      filterType: "all", // 'all' | 'photo' | 'receipt' | 'ticket' | 'unplaced'
-      searchQuery: "",
-      elseState: "idle", // 'idle' | 'quick-sheet' | 'answer' | 'uncertain' | 'source'
-      elseAnswerText: "",
-      elseQuery: "",
-      elseAnswerSources: []
+      else: { ...state.else, hidden: false },
     };
-
-    this.listeners = [];
-
-    // Sync browser back/forward buttons with router state
-    window.addEventListener("hashchange", () => {
-      this.setRoute(window.location.hash);
-    });
+    result = { restore: { scrollY: snapshot.scrollY, focusId: snapshot.focusId } };
   }
 
-  // State Management Actions
-  setRoute(route) {
-    if (!route || route === "") route = "#/world";
-    
-    // Add to history
-    if (this.state.currentRoute !== route) {
-      this.state.historyStack.push(this.state.currentRoute);
-      this.state.currentRoute = route;
-      this.notify();
-    }
-  }
+  return { state: next, result };
+}
 
-  goBack() {
-    const prev = this.state.historyStack.pop();
-    if (prev) {
-      window.location.hash = prev;
-    } else {
-      window.location.hash = "#/world";
-    }
-  }
-
-  // Entities
-  selectCity(id) {
-    this.state.selectedCity = id;
-    this.notify();
-  }
-
-  selectFragment(id) {
-    this.state.selectedFragment = id;
-    this.notify();
-  }
-
-  selectScene(id) {
-    this.state.selectedScene = id;
-    this.notify();
-  }
-
-  selectPlace(id) {
-    this.state.selectedPlace = id;
-    this.notify();
-  }
-
-  selectConnection(id) {
-    this.state.selectedConnection = id;
-    this.notify();
-  }
-
-  selectDiscovery(id) {
-    this.state.selectedDiscovery = id;
-    this.notify();
-  }
-
-  selectWriting(id) {
-    this.state.selectedWriting = id;
-    this.notify();
-  }
-
-  // Overlays
-  setOverlay(overlayName, isOpen) {
-    this.state.overlays[overlayName] = isOpen;
-    this.notify();
-  }
-
-  closeAllOverlays() {
-    for (let key in this.state.overlays) {
-      this.state.overlays[key] = false;
-    }
-    this.state.elseState = "idle";
-    this.notify();
-  }
-
-  // Else Orb Interactions
-  triggerElse(state = "quick-sheet", query = "") {
-    this.state.elseState = state;
-    if (state === "quick-sheet") {
-      this.state.overlays.elseSheet = true;
-    } else if (state === "answer") {
-      this.state.elseQuery = query;
-      this.generateElseAnswer(query);
-    }
-    this.notify();
-  }
-
-  generateElseAnswer(query) {
-    this.state.elseState = "answer";
-    if (query.includes("Ari") || query.includes("早晨")) {
-      this.state.elseAnswerText = "你在 Ari 区一共有 3 个早晨被记录在 Common Grounds 咖啡馆。通过 10 月 12 日、16 日及 19 日的账单，可确定你当时是在早晨 08:42 至 09:15 间到访。你在日记中写过，那是一系列「等雨停的早晨」。";
-      this.state.elseAnswerSources = ["frag-ari-1012-photo", "frag-ari-1016-receipt", "frag-ari-1019-visit"];
-    } else if (query.includes("渡船") || query.includes("河") || query.includes("船")) {
-      this.state.elseAnswerText = "在 10 月 18 日傍晚 17:42，你购买了一张 5 THB 的昭披耶河渡轮船票。17 分钟后（17:59），在 Chao Phraya Ferry 渡口，你拍下了波光粼粼的河面照片。这段 17 分钟的间隔是你的候船痕迹。";
-      this.state.elseAnswerSources = ["frag-river-1018-ticket", "frag-river-1018-photo"];
-    } else {
-      this.state.elseAnswerText = `关于 \"${query}\"，我在你的旅行中找到了一些可能的线索，但缺少确凿的时空小票等直接证据来闭合。你可以看看老城区那些没有 GPS 的未决碎片。`;
-      this.state.elseAnswerSources = ["frag-old-town-1017-photo", "frag-old-town-1017-menu"];
-      this.state.elseState = "uncertain";
-    }
-    this.notify();
-  }
-
-  // Settings
-  updateSetting(key, val) {
-    this.state.settings[key] = val;
-    this.notify();
-  }
-
-  // Import Action Simulator
-  addNote(text, relatedIds = []) {
-    const newNote = {
-      id: "writing-" + Date.now(),
-      type: "scene_note",
-      createdAt: new Date().toISOString().split("T")[0],
-      text: text,
-      related: relatedIds,
-      status: "private"
-    };
-    this.state.userNotes.unshift(newNote);
-    this.notify();
-  }
-
-  updateDiscovery(id, title, observation, noteText) {
-    const d = this.state.discoveries.find(x => x.id === id);
-    if (d) {
-      if (title) d.title = title;
-      if (observation) d.observation = observation;
-      if (noteText !== undefined && noteText !== null) {
-        let note = this.state.userNotes.find(n => (n.related || []).includes(id));
-        if (note) {
-          note.text = noteText;
-        } else {
-          const newNote = {
-            id: "note-" + Date.now(),
-            type: "discovery_reflection",
-            createdAt: new Date().toISOString().split("T")[0],
-            text: noteText,
-            related: [id],
-            status: "private"
-          };
-          this.state.userNotes.unshift(newNote);
-        }
-      }
-      this.notify();
-    }
-  }
-
-  updateNote(id, text) {
-    const note = this.state.userNotes.find(n => n.id === id);
-    if (note) {
-      note.text = text;
-      this.notify();
-    }
-  }
-
-  resetLocalData() {
-    this.state.userNotes = [];
-    this.state.discoveries = this.state.discoveries.map(d => {
+function reduce(state, action) {
+  switch (action.type) {
+    case 'NAVIGATE':
+      return { state: { ...state, route: action.route }, result: {} };
+    case 'SELECT_CITY':
+      return { state: { ...state, selectedCityId: action.cityId }, result: {} };
+    case 'SELECT_SCENE':
+      return { state: { ...state, selectedSceneId: action.sceneId }, result: {} };
+    case 'SELECT_PLACE':
+      return { state: { ...state, selectedPlaceId: action.placeId }, result: {} };
+    case 'SELECT_CONNECTION':
+      return { state: { ...state, selectedConnectionId: action.connectionId }, result: {} };
+    case 'SELECT_DISCOVERY':
+      return { state: { ...state, selectedDiscoveryId: action.discoveryId }, result: {} };
+    case 'SELECT_WRITING':
+      return { state: { ...state, selectedWritingId: action.writingId }, result: {} };
+    case 'SET_FIELD_CAMERA':
       return {
-        ...d,
-        title: d.id === "disc-ari-mornings" ? "未命名线索 #01" : (d.id === "disc-river-evidence" ? "未命名线索 #02" : "未决时空缺口"),
-        status: d.id === "disc-ari-mornings" ? "new" : (d.id === "disc-river-evidence" ? "supported" : "unresolved"),
-        observation: "时空元数据已自动聚敛，等待您补充私人心境完成回忆闭合。"
+        state: { ...state, field: { ...state.field, camera: { ...state.field.camera, ...action.camera } } },
+        result: {},
       };
-    });
-    this.state.settings = {
-      sensitiveBlur: true,
-      ocrProcessing: true,
-      highAccuracyGPS: true,
-      aiTone: "balanced"
-    };
-    this.notify();
-  }
-
-  restoreDefaultData() {
-    this.state.cities = [...cities];
-    this.state.fragments = [...fragments];
-    this.state.importBatches = [...importBatches];
-    this.state.places = [...places];
-    this.state.scenes = [...scenes];
-    this.state.connections = [...connections];
-    this.state.discoveries = [...discoveries];
-    this.state.userNotes = [...userNotes];
-    this.state.settings = { ...settings };
-    this.notify();
-  }
-
-  // Publish/Subscribe
-  subscribe(listener) {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter(l => l !== listener);
-    };
-  }
-
-  notify() {
-    this.listeners.forEach(listener => listener(this.state));
+    case 'SET_FIELD_FILTERS':
+      return {
+        state: { ...state, field: { ...state.field, filters: { ...state.field.filters, ...action.filters } } },
+        result: {},
+      };
+    case 'OPEN_LENS':
+      return {
+        state: {
+          ...state,
+          selectedFragmentId: action.fragmentId,
+          overlays: [
+            ...state.overlays,
+            { name: 'fragmentLens', payload: { fragmentId: action.fragmentId }, snapshot: clone(action.snapshot || {}) },
+          ],
+          else: { ...state.else, hidden: true },
+        },
+        result: {},
+      };
+    case 'OPEN_ORIGINAL':
+      return {
+        state: {
+          ...state,
+          overlays: [...state.overlays, { name: 'originalViewer', payload: { fragmentId: state.selectedFragmentId } }],
+          else: { ...state.else, hidden: true },
+        },
+        result: {},
+      };
+    case 'OPEN_SHARE':
+      return {
+        state: {
+          ...state,
+          overlays: [...state.overlays, { name: 'sharePreview', payload: action.payload || {} }],
+          else: { ...state.else, hidden: true },
+        },
+        result: {},
+      };
+    case 'CLOSE_OVERLAY':
+      return closeOverlay(state);
+    case 'CLOSE_ALL_OVERLAYS':
+      return {
+        state: { ...state, overlays: [], else: { ...state.else, hidden: false, open: false, state: 'idle' } },
+        result: {},
+      };
+    case 'TOGGLE_ELSE':
+      return {
+        state: { ...state, else: { ...state.else, open: !state.else.open, state: state.else.open ? 'idle' : 'reading' } },
+        result: {},
+      };
+    case 'SET_ELSE':
+      return {
+        state: {
+          ...state,
+          else: {
+            ...state.else,
+            ...action.value,
+            sources: action.value?.sources ? [...action.value.sources] : state.else.sources,
+          },
+        },
+        result: {},
+      };
+    case 'SET_DISCOVERY_FILTER':
+      return { state: { ...state, discoveryFilter: action.filter }, result: {} };
+    case 'SAVE_DISCOVERY':
+      return {
+        state: {
+          ...state,
+          savedDiscoveryIds: state.savedDiscoveryIds.includes(action.discoveryId)
+            ? state.savedDiscoveryIds.filter((id) => id !== action.discoveryId)
+            : [...state.savedDiscoveryIds, action.discoveryId],
+        },
+        result: {},
+      };
+    case 'SET_NOTE':
+      return { state: { ...state, notes: { ...state.notes, [action.noteId]: action.text } }, result: {} };
+    case 'SET_SETTING':
+      return { state: { ...state, settings: { ...state.settings, [action.key]: action.value } }, result: {} };
+    default:
+      return { state, result: {} };
   }
 }
 
-export const store = new GlobalStore();
-window.store = store;
+export function createStore(initialState = createInitialState()) {
+  let state = initialState;
+  const listeners = new Set();
 
-// Register global helper actions for inline HTML events
-window.selectCity = (id) => {
-  store.selectCity(id);
-};
-window.setOverlay = (name, isOpen) => {
-  store.setOverlay(name, isOpen);
-};
-window.closeAllOverlays = () => {
-  store.closeAllOverlays();
-};
-window.triggerElse = (state, query) => {
-  store.triggerElse(state, query);
-};
-window.focusFragmentAction = (id) => {
-  store.selectFragment(id);
-  store.setOverlay("fragmentLens", true);
-};
-window.openFragmentLens = (id) => {
-  store.selectFragment(id);
-  store.setOverlay("fragmentLens", true);
-};
-window.goBack = () => {
-  store.goBack();
-};
-window.resetLocalData = () => {
-  store.resetLocalData();
-};
-window.restoreDefaultData = () => {
-  store.restoreDefaultData();
-};
+  return {
+    getState: () => state,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    dispatch(action) {
+      const previous = state;
+      const reduced = reduce(state, action);
+      state = reduced.state;
+      if (state !== previous) listeners.forEach((listener) => listener(state, action));
+      return reduced.result;
+    },
+  };
+}
 
+export const store = createStore();
