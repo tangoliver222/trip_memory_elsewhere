@@ -47,8 +47,8 @@ export class MemorySceneManager {
     this.intersectionObserver = null;
     this._boundFrame = (time) => this.renderFrame(time);
     this._boundVisibility = () => (this.environment.document?.hidden ? this.pause() : this.resume());
-    this._boundContextLost = (event) => { event.preventDefault?.(); this.pause(); };
-    this._boundContextRestored = () => this.resume();
+    this._boundContextLost = (event) => { event.preventDefault?.(); this.pause(); this.setStaticFallback(true); };
+    this._boundContextRestored = () => { this.setStaticFallback(false); this.resume(); };
   }
 
   mount(canvas) {
@@ -113,6 +113,22 @@ export class MemorySceneManager {
   target(mode, payload) {
     const array = createSemanticTarget(mode, this.particles.count, payload);
     this.particles.setTarget(array);
+  }
+
+  setStaticFallback(visible) {
+    const fallback = this.canvas?.parentElement?.querySelector?.('[data-visual-fallback]');
+    if (fallback) fallback.hidden = !visible;
+    this.canvas?.parentElement?.classList?.toggle?.('is-static-visual', visible);
+  }
+
+  loseContext() {
+    const extension = this.renderer?.getContext?.()?.getExtension?.('WEBGL_lose_context');
+    if (extension?.loseContext) {
+      extension.loseContext();
+      return true;
+    }
+    this._boundContextLost({ preventDefault() {} });
+    return false;
   }
 
   setMode(mode, payload = {}) {
@@ -190,14 +206,17 @@ export class MemorySceneManager {
   }
 
   debug() {
+    const flowDebug = this.flows.debug?.() || { tracked: 0, active: 0 };
     return {
       rendererCount: this.rendererCount,
       particlePoolId: this.particles?.poolId || null,
       particleCount: this.particles?.count || 0,
       mode: this.mode,
       phases: [...this.phases],
-      profile: { ...this.profile },
+      profile: { name: this.profileName, reducedMotion: this.reducedMotion, ...this.profile },
       paused: this.paused,
+      trackedTimelines: flowDebug.tracked,
+      activeTimelines: flowDebug.active,
     };
   }
 

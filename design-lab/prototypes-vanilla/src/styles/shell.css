@@ -34,6 +34,10 @@ button { color: inherit; }
 
 #memory-canvas { z-index: -2; pointer-events: auto; touch-action: none; }
 .memory-vignette { z-index: -1; pointer-events: none; background: radial-gradient(circle, transparent 45%, rgba(0, 0, 0, .58) 100%); }
+.static-visual-fallback { position: absolute; z-index: -1; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 45%, rgba(217,225,222,.1), transparent 28%), radial-gradient(circle at 50% 45%, #101719, #030405 66%); pointer-events: none; }
+.static-visual-fallback[hidden] { display: none; }
+.static-visual-fallback i { width: min(58vw, 520px); aspect-ratio: 1; border: 1px solid rgba(220,230,227,.1); border-radius: 50%; background: url('/assets/earth-topology.png') center / 150% 100% no-repeat; opacity: .17; filter: grayscale(1); }
+.static-visual-fallback span { position: absolute; bottom: 16%; color: rgba(220,230,227,.35); font: .56rem monospace; letter-spacing: .18em; }
 
 .page-content-layer {
   position: absolute;

@@ -88,3 +88,18 @@ test('flow controller exposes every signature state and kills prior timelines', 
   assert.deepEqual(calls.filter((value) => value !== 'kill'), ['world-intro', 'globe-to-city', 'discovery-reveal', 'lens-extract', 'else-conflict']);
   assert.equal(calls.filter((value) => value === 'kill').length, 5);
 });
+
+test('starting a new spatial flow kills every previously tracked flow', () => {
+  const states = [];
+  const controller = createFlowController({
+    timelineFactory: ({ id }) => {
+      const state = { id, killed: false };
+      states.push(state);
+      return { to() { return this; }, fromTo() { return this; }, add() { return this; }, kill() { state.killed = true; }, isActive() { return !state.killed; } };
+    },
+  });
+  controller.worldIntro({}, {});
+  controller.discoveryReveal({}, {});
+  assert.equal(states[0].killed, true);
+  assert.deepEqual(controller.debug(), { tracked: 1, active: 1 });
+});

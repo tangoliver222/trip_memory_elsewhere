@@ -16,7 +16,8 @@ const captures = [
 
 test('capture pass-one visual contact sheet sources', async ({ page }, testInfo) => {
   test.skip(!['mobile-390', 'mobile-430'].includes(testInfo.project.name), 'Reference contact sheets are phone-specific; route health covers larger projects.');
-  const output = resolve(process.cwd(), 'artifacts/screenshots/pass-1', testInfo.project.name);
+  const visualPass = process.env.VISUAL_PASS || 'pass-1';
+  const output = resolve(process.cwd(), `artifacts/screenshots/${visualPass}`, testInfo.project.name);
   await mkdir(output, { recursive: true });
 
   for (const [name, path, wait] of captures) {

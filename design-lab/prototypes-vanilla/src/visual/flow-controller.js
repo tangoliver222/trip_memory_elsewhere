@@ -4,7 +4,8 @@ export function createFlowController({ timelineFactory = (options) => gsap.timel
   const timelines = new Map();
 
   const create = (id) => {
-    timelines.get(id)?.kill?.();
+    timelines.forEach((timeline) => timeline.kill?.());
+    timelines.clear();
     const timeline = timelineFactory({ id, defaults: { ease: 'power3.inOut' } });
     timelines.set(id, timeline);
     return timeline;
@@ -64,6 +65,13 @@ export function createFlowController({ timelineFactory = (options) => gsap.timel
           .to(uniforms.uNoiseStrength || {}, { value: options.noiseStrength ?? 0.7, duration: 0.7 }, 0)
           .to(uniforms.uOpacity || {}, { value: options.opacity ?? 0.9, duration: 0.6 }, 0);
       });
+    },
+    debug() {
+      const values = [...timelines.values()];
+      return {
+        tracked: values.length,
+        active: values.filter((timeline) => timeline.isActive?.() ?? true).length,
+      };
     },
     killAll() {
       timelines.forEach((timeline) => timeline.kill?.());

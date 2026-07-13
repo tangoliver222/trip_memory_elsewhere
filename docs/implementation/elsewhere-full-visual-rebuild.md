@@ -644,7 +644,7 @@ git commit -m "perf: optimize particle system pass one"
 **Interfaces:**
 - Performance report records profile, viewport, load time, first meaningful render, average/min FPS, JS heap when available, particle count, DPR, canvas count, timeline count, and context-loss result.
 
-- [ ] **Step 1: Write failing performance/resource assertions**
+- [x] **Step 1: Write failing performance/resource assertions**
 
 ```js
 test('route churn keeps one canvas and clears inactive timelines', async ({ page }) => {
@@ -662,16 +662,16 @@ test('context loss exposes the static visual without losing page actions', async
 });
 ```
 
-- [ ] **Step 2: Run RED and capture measurements**
+- [x] **Step 2: Run RED and capture measurements**
 
 Run: `npm run test:e2e -- --grep 'route churn|context loss'` and `node scripts/profile-performance.mjs`
 Expected: any leaked timeline/listener/resource or profile violation fails with measured evidence.
 
-- [ ] **Step 3: Implement measured optimizations and capture final artifacts**
+- [x] **Step 3: Implement measured optimizations and capture final artifacts**
 
 Adjust profile counts/DPR, render throttling, visibility pause, resize batching, lazy images, disposal, pointer heat, point-size curves, edge falloff, globe outline, city brightness, Lens noise reduction, Else states and transition speed. Record videos for globe interaction, Field search/focus/Lens restore, discovery reveal, Else answer, and explore view reformation.
 
-- [ ] **Step 4: Run the complete fresh verification gate**
+- [x] **Step 4: Run the complete fresh verification gate**
 
 Run in `design-lab/prototypes-vanilla`:
 
@@ -691,7 +691,7 @@ git diff --check
 
 Expected: every command exits 0, all test projects pass, scans find no forbidden production patterns, and report values fall within documented profiles.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add design-lab/prototypes-vanilla docs/visual artifacts performance-report.json scripts/profile-performance.mjs

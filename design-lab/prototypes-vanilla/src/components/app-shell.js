@@ -16,6 +16,7 @@ export function renderAppShell({ pageHtml = '', route, state, overlayHtml = '', 
   return `<div class="app-viewport" data-intensity="${intensity}" data-scene-mode="${scene}" data-shell-page="${route?.pageId || 'unknown'}">
     <canvas id="memory-canvas" aria-hidden="true"></canvas>
     <div class="memory-vignette" aria-hidden="true"></div>
+    <div class="static-visual-fallback" data-visual-fallback hidden aria-hidden="true"><i></i><span>MEMORY SCENE · STATIC</span></div>
     <div id="page-content-layer" class="page-content-layer">${pageHtml}</div>
     <div id="app-navigation-host">${renderNavigation(route)}</div>
     <div id="else-orb-host">${renderElseOrb(state, route)}</div>

@@ -30,6 +30,21 @@ let pageCleanup = null;
 let renderedRoute = null;
 gsap.registerPlugin(Flip);
 
+const debugApi = {};
+Object.defineProperties(debugApi, {
+  rendererCreations: { enumerable: true, get: () => sceneManager.debug().rendererCount },
+  activeTimelines: { enumerable: true, get: () => sceneManager.debug().activeTimelines },
+  trackedTimelines: { enumerable: true, get: () => sceneManager.debug().trackedTimelines },
+  particleCount: { enumerable: true, get: () => sceneManager.debug().particleCount },
+  profile: { enumerable: true, get: () => sceneManager.debug().profile },
+  paused: { enumerable: true, get: () => sceneManager.debug().paused },
+  mode: { enumerable: true, get: () => sceneManager.debug().mode },
+});
+debugApi.snapshot = () => sceneManager.debug();
+debugApi.loseContext = () => sceneManager.loseContext();
+Object.freeze(debugApi);
+window.__ELSEWHERE_DEBUG__ = debugApi;
+
 function syncElseOrbPlacement(state) {
   const orb = root.querySelector('[data-else-orb]');
   const target = state.else.open

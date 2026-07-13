@@ -1,0 +1,133 @@
+{
+  "generatedAt": "2026-07-13T19:26:06.226Z",
+  "source": "scripts/profile-performance.mjs",
+  "profiles": [
+    {
+      "name": "low-mobile-390",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "firstMeaningfulRenderMs": 347,
+      "averageFps": 60.4,
+      "minFps": 53.5,
+      "fpsSamples": 85,
+      "loadTimeMs": 272.60000014305115,
+      "jsHeapBytes": 10230835,
+      "particleCount": 3000,
+      "profile": {
+        "name": "low",
+        "reducedMotion": false,
+        "particleCount": 3000,
+        "maxDpr": 1,
+        "antialias": false,
+        "fps": 30
+      },
+      "rendererCreations": 1,
+      "canvasCount": 1,
+      "activeTimelines": 0,
+      "trackedTimelines": 1,
+      "devicePixelRatio": 3,
+      "effectiveDpr": 1,
+      "contextLoss": {
+        "fallbackVisible": true,
+        "primaryActionEnabled": true
+      },
+      "budgets": {
+        "firstMeaningfulRender": true,
+        "fps": true,
+        "particleCeiling": true,
+        "dprCeiling": true,
+        "singletonResources": true,
+        "noActiveStaleTimeline": true,
+        "contextFallback": true
+      },
+      "pass": true
+    },
+    {
+      "name": "high-desktop-1440",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "firstMeaningfulRenderMs": 237,
+      "averageFps": 60,
+      "minFps": 53.2,
+      "fpsSamples": 85,
+      "loadTimeMs": 198.09999990463257,
+      "jsHeapBytes": 9744763,
+      "particleCount": 9800,
+      "profile": {
+        "name": "high",
+        "reducedMotion": false,
+        "particleCount": 9800,
+        "maxDpr": 1.5,
+        "antialias": true,
+        "fps": 60
+      },
+      "rendererCreations": 1,
+      "canvasCount": 1,
+      "activeTimelines": 0,
+      "trackedTimelines": 1,
+      "devicePixelRatio": 1,
+      "effectiveDpr": 1,
+      "contextLoss": {
+        "fallbackVisible": true,
+        "primaryActionEnabled": true
+      },
+      "budgets": {
+        "firstMeaningfulRender": true,
+        "fps": true,
+        "particleCeiling": true,
+        "dprCeiling": true,
+        "singletonResources": true,
+        "noActiveStaleTimeline": true,
+        "contextFallback": true
+      },
+      "pass": true
+    },
+    {
+      "name": "reduced-motion-390",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "firstMeaningfulRenderMs": 374,
+      "averageFps": 60.1,
+      "minFps": 53.5,
+      "fpsSamples": 85,
+      "loadTimeMs": 282.5,
+      "jsHeapBytes": 10506599,
+      "particleCount": 3000,
+      "profile": {
+        "name": "low",
+        "reducedMotion": true,
+        "particleCount": 3000,
+        "maxDpr": 1,
+        "antialias": false,
+        "fps": 30
+      },
+      "rendererCreations": 1,
+      "canvasCount": 1,
+      "activeTimelines": 0,
+      "trackedTimelines": 1,
+      "devicePixelRatio": 3,
+      "effectiveDpr": 1,
+      "contextLoss": {
+        "fallbackVisible": true,
+        "primaryActionEnabled": true
+      },
+      "budgets": {
+        "firstMeaningfulRender": true,
+        "fps": true,
+        "particleCeiling": true,
+        "dprCeiling": true,
+        "singletonResources": true,
+        "noActiveStaleTimeline": true,
+        "contextFallback": true
+      },
+      "pass": true
+    }
+  ],
+  "pass": true
+}
