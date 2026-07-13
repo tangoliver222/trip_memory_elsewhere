@@ -22,6 +22,7 @@ export function createActionController({ root, store }) {
     if (action === 'open-share') store.dispatch({ type: 'OPEN_SHARE', payload: { title: target.dataset.title, text: target.dataset.text } });
     if (action === 'set-field-type') store.dispatch({ type: 'SET_FIELD_FILTERS', filters: { type: target.dataset.value } });
     if (action === 'review-choice') store.dispatch({ type: 'SET_REVIEW_DECISION', reviewId: 'review-river-1022-place', value: target.dataset.value });
+    if (action === 'connection-decision') store.dispatch({ type: 'SET_CONNECTION_DECISION', value: target.dataset.value });
     if (action === 'open-lens') {
       const layer = document.querySelector('#page-content-layer');
       store.dispatch({

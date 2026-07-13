@@ -445,7 +445,7 @@ git commit -m "feat: rebuild fragment field and intake surfaces"
 - `renderExplore(view)` accepts only `time | place | connection`.
 - `getAuthorityLink(objectType, id)` returns the World-owned detail route.
 
-- [ ] **Step 1: Write failing view/detail tests**
+- [x] **Step 1: Write failing view/detail tests**
 
 ```js
 test('explore views use different scene targets and authority links', () => {
@@ -462,21 +462,21 @@ test('connection detail states evidence and gaps without confidence percentages'
 });
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run: `npm test -- tests/unit/explore.test.js`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement all reading/explore/detail surfaces**
+- [x] **Step 3: Implement all reading/explore/detail surfaces**
 
 Build photography-book Capsule chapters with ScrollTrigger, draggable date rail, low-contrast place map, typed relation paths, scene original timeline, repeated place visits, evidence/gap connection detail, merge/split and confirm/reject state actions. Use `cityToCapsule` and target reformation instead of uniform fades.
 
-- [ ] **Step 4: Run GREEN and build**
+- [x] **Step 4: Run GREEN and build**
 
 Run: `npm test && npm run build`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add design-lab/prototypes-vanilla/src/pages design-lab/prototypes-vanilla/src/components design-lab/prototypes-vanilla/src/styles design-lab/prototypes-vanilla/tests/unit/explore.test.js

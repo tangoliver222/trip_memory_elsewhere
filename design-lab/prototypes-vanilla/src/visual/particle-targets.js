@@ -99,6 +99,43 @@ function quiet(count) {
   return result;
 }
 
+function timeline(count) {
+  const result = new Float32Array(count * 3);
+  for (let i = 0; i < count; i += 1) {
+    const date = i % 5;
+    const t = seeded(i, 24);
+    const x = -28 + date * 14 + (t - 0.5) * 5;
+    const y = Math.sin(t * Math.PI * 2) * (2 + date * 0.7);
+    write(result, i, x, y, -24 + date * 9 + (seeded(i, 25) - 0.5) * 6);
+  }
+  return result;
+}
+
+function mapTarget(count) {
+  const result = new Float32Array(count * 3);
+  const anchors = [[-18,-8],[6,-15],[20,8],[-4,14]];
+  for (let i = 0; i < count; i += 1) {
+    const anchor = anchors[i % anchors.length];
+    const angle = seeded(i, 26) * TAU;
+    const radius = seeded(i, 27) * 10;
+    write(result, i, anchor[0] + Math.cos(angle) * radius, anchor[1] + Math.sin(angle) * radius, -12 + (seeded(i, 28) - 0.5) * 7);
+  }
+  return result;
+}
+
+function relations(count) {
+  const result = new Float32Array(count * 3);
+  const nodes = [[-22,9,-20],[-7,-8,2],[8,12,-8],[23,-5,9]];
+  for (let i = 0; i < count; i += 1) {
+    const from = nodes[i % nodes.length];
+    const to = nodes[(i + 1) % nodes.length];
+    const t = seeded(i, 29);
+    const curve = Math.sin(t * Math.PI) * 8;
+    write(result, i, from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t + curve, from[2] + (to[2] - from[2]) * t);
+  }
+  return result;
+}
+
 function elseOrb(count, payload = {}) {
   const result = quiet(count);
   const closure = payload.state === 'uncertain' ? 0.72 : 1;
@@ -121,6 +158,9 @@ export function createSemanticTarget(mode, count, payload = {}) {
   if (mode === 'city' || mode === 'city-field' || mode === 'capsule') return cityField(count);
   if (mode === 'fragment-field' || mode === 'field') return fragmentField(count, payload);
   if (mode === 'discovery') return discovery(count);
+  if (mode === 'timeline') return timeline(count);
+  if (mode === 'map') return mapTarget(count);
+  if (mode === 'relations' || mode === 'connection') return relations(count);
   if (mode === 'else') return elseOrb(count, payload);
   return quiet(count);
 }

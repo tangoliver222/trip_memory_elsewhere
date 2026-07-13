@@ -141,7 +141,7 @@ export class MemorySceneManager {
     }
 
     this.phases.push(mode);
-    this.target(mode, payload);
+    this.target(payload.target || mode, payload);
     this.flows.morph(this.particles, { ...options, duration: mode === 'quiet-tool' ? 0.8 : 1.3 });
     return this;
   }

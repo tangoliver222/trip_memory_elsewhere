@@ -35,6 +35,7 @@ export function createInitialState(overrides = {}) {
     savedDiscoveryIds: [],
     notes: {},
     reviewDecisions: {},
+    connectionDecisions: {},
     settings: { ...fixtureSettings },
   };
 
@@ -181,6 +182,8 @@ function reduce(state, action) {
       return { state: { ...state, notes: { ...state.notes, [action.noteId]: action.text } }, result: {} };
     case 'SET_REVIEW_DECISION':
       return { state: { ...state, reviewDecisions: { ...state.reviewDecisions, [action.reviewId]: action.value } }, result: {} };
+    case 'SET_CONNECTION_DECISION':
+      return { state: { ...state, connectionDecisions: { ...state.connectionDecisions, [action.connectionId || 'current']: action.value } }, result: {} };
     case 'SET_SETTING':
       return { state: { ...state, settings: { ...state.settings, [action.key]: action.value } }, result: {} };
     default:

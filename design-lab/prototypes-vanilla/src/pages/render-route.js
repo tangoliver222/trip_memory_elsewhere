@@ -3,6 +3,7 @@ import { escapeHtml } from '../components/primitives.js';
 import { renderOnboarding } from './onboarding.js';
 import { renderCityHome, renderWorldCities, renderWorldHome } from './world.js';
 import { renderFragmentField, renderImportPage, renderInboxPage, renderReceiptPage } from './fragments.js';
+import { renderCapsule, renderConnectionDetail, renderExplore, renderPlaceDetail, renderSceneDetail } from './explore.js';
 
 const generic = (route) => ({
   sceneMode: route.contract.sceneMode,
@@ -21,5 +22,10 @@ export function renderRoute(pathOrRoute, state = {}) {
   if (route.pageId === 'world-import') return renderImportPage(state);
   if (route.pageId === 'world-receipt') return renderReceiptPage(route.params.id, state);
   if (route.pageId === 'world-inbox') return renderInboxPage(state);
+  if (route.pageId === 'world-capsule') return renderCapsule(route.params.id, state);
+  if (route.pageId === 'world-explore') return renderExplore(route.params.id, route.query.view, state);
+  if (route.pageId === 'world-scene-detail') return renderSceneDetail(route.params.id, state);
+  if (route.pageId === 'world-place-detail') return renderPlaceDetail(route.params.id, state);
+  if (route.pageId === 'world-connection-detail') return renderConnectionDetail(route.params.id, state);
   return generic(route);
 }
