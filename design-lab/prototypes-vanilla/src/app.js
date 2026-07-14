@@ -39,6 +39,9 @@ Object.defineProperties(debugApi, {
   activeTimelines: { enumerable: true, get: () => sceneManager.debug().activeTimelines },
   trackedTimelines: { enumerable: true, get: () => sceneManager.debug().trackedTimelines },
   particleCount: { enumerable: true, get: () => sceneManager.debug().particleCount },
+  activeParticleCount: { enumerable: true, get: () => sceneManager.debug().activeCount },
+  anchorCount: { enumerable: true, get: () => sceneManager.debug().anchorCount },
+  sceneDefinition: { enumerable: true, get: () => sceneManager.debug().definition },
   profile: { enumerable: true, get: () => sceneManager.debug().profile },
   paused: { enumerable: true, get: () => sceneManager.debug().paused },
   mode: { enumerable: true, get: () => sceneManager.debug().mode },
@@ -132,6 +135,7 @@ function updateShell() {
       ? 'globeToCity'
       : undefined;
     lastScenePromise = sceneManager.transitionTo(mode, {
+      root: root.querySelector('#page-content-layer'),
       ...route.params,
       ...view.scenePayload,
       transition,

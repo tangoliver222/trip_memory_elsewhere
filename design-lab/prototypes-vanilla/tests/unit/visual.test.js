@@ -152,3 +152,22 @@ test('an interrupted transition settles its promise so stale routes do not leak 
   await promise;
   manager.dispose();
 });
+
+test('scene definitions control active particle count and expose measured DOM anchors', () => {
+  const manager = new MemorySceneManager({ rendererFactory: createRendererFactory(), profile: 'low' });
+  manager.mount(createCanvas());
+  const anchor = {
+    dataset: { particleAnchor: 'frag-a', fragmentId: 'frag-a', particleDepth: '-10' },
+    getBoundingClientRect: () => ({ left: 100, top: 120, width: 80, height: 100, right: 180, bottom: 220 }),
+  };
+  const root = { querySelectorAll: () => [anchor] };
+
+  manager.transitionTo('city', { root });
+  assert.equal(manager.debug().definition.generator, 'city-clusters');
+  assert.equal(manager.debug().anchorCount, 1);
+  assert.ok(manager.debug().activeCount > 0);
+  manager.transitionTo('quiet-tool', { root });
+  assert.equal(manager.debug().definition.generator, 'empty');
+  assert.equal(manager.debug().activeCount, 0);
+  manager.dispose();
+});

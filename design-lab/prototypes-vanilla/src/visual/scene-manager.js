@@ -4,10 +4,12 @@ import {
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createAnchorRegistry } from './anchor-registry.js';
 import { createFlowController } from './flow-controller.js';
 import { createParticleSystem } from './particle-system.js';
 import { createSemanticTarget } from './particle-targets.js';
 import { detectPerformanceProfile, getPerformanceProfile } from './performance-profile.js';
+import { getSceneDefinition } from './scene-definitions.js';
 
 const DEFAULT_CAMERA_Z = 44;
 const createBrowserControls = (camera, element) => (
@@ -39,6 +41,9 @@ export class MemorySceneManager {
     this.particles = null;
     this.controls = null;
     this.mode = 'quiet-tool';
+    this.definition = getSceneDefinition('quiet-tool', { particleCount: this.profile.particleCount });
+    this.anchorRegistry = createAnchorRegistry();
+    this.targetMetadata = {};
     this.phases = [];
     this.rendererCount = 0;
     this.paused = true;
@@ -110,9 +115,42 @@ export class MemorySceneManager {
     this.renderer.setSize?.(width, height, false);
   }
 
-  target(mode, payload) {
-    const array = createSemanticTarget(mode, this.particles.count, payload);
-    this.particles.setTarget(array);
+  resolveDefinitionMode(mode, payload = {}) {
+    const viewTargets = new Set(['timeline', 'map', 'relations']);
+    return viewTargets.has(payload.target) ? payload.target : mode;
+  }
+
+  measureAnchors(root) {
+    if (!root || !this.camera) {
+      this.anchorRegistry.clear();
+      return new Map();
+    }
+    const rect = this.canvas?.getBoundingClientRect?.();
+    return this.anchorRegistry.measure(root, this.camera, {
+      left: rect?.left || 0,
+      top: rect?.top || 0,
+      width: rect?.width || this.canvas?.clientWidth || this.environment.innerWidth || 1,
+      height: rect?.height || this.canvas?.clientHeight || this.environment.innerHeight || 1,
+    });
+  }
+
+  configureScene(mode, payload = {}) {
+    const resolvedMode = this.resolveDefinitionMode(mode, payload);
+    this.definition = getSceneDefinition(resolvedMode, { ...payload, particleCount: this.particles.count });
+    this.camera.fov = this.definition.camera.fov;
+    this.camera.position.z = this.definition.camera.z;
+    this.camera.updateProjectionMatrix();
+    if (this.controls) this.controls.enabled = this.definition.interaction === 'orbit';
+    this.particles.uniforms.uCoolColor.value.set(this.definition.palette.primary);
+    this.particles.uniforms.uWarmColor.value.set(this.definition.palette.accent);
+    return this.definition;
+  }
+
+  target(mode, payload, activeCount = this.definition.activeCount) {
+    const target = createSemanticTarget(mode, this.particles.count, payload);
+    this.targetMetadata = target.metadata || {};
+    this.particles.setTarget(target, { activeCount });
+    return target;
   }
 
   setStaticFallback(visible) {
@@ -148,15 +186,17 @@ export class MemorySceneManager {
   transitionTo(mode, payload = {}) {
     this.mode = mode;
     if (!this.particles) return Promise.resolve();
-    if (this.controls) this.controls.enabled = mode === 'world' || mode === 'world-intro';
-    const options = { ...payload, reducedMotion: this.reducedMotion };
+    const definition = this.configureScene(mode, payload);
+    const anchors = this.measureAnchors(payload.root);
+    const scenePayload = { ...payload, anchors };
+    const options = { ...scenePayload, reducedMotion: this.reducedMotion };
 
     if (mode === 'world-intro') {
       this.phases.push('deep-scatter', 'globe');
-      this.target('deep-scatter', payload);
+      this.target('deep-scatter', scenePayload, this.particles.count);
       const timeline = this.flows.worldIntro(this.particles, {
         ...options,
-        onGlobe: () => this.target('globe', payload),
+        onGlobe: () => this.target(definition.generator, scenePayload, definition.activeCount),
         onCities: payload.onCities,
         onComplete: payload.onComplete,
       });
@@ -165,31 +205,40 @@ export class MemorySceneManager {
 
     if (mode === 'city' && payload.transition === 'globeToCity') {
       this.phases.push('city-burst', 'city-field');
-      this.target('city-burst', payload);
-      const timeline = this.flows.globeToCity(this.particles, { ...options, onField: () => this.target('city-field', payload) });
+      this.target('city-burst', scenePayload, definition.activeCount);
+      const timeline = this.flows.globeToCity(this.particles, {
+        ...options,
+        onField: () => this.target(definition.generator, scenePayload, definition.activeCount),
+      });
       return this.waitForTimeline(timeline);
     }
 
     if (mode === 'discovery') {
       this.phases.push('time-nodes', 'relation-flow', 'shared-entity');
-      this.target('discovery', payload);
+      this.target(definition.generator, scenePayload, definition.activeCount);
       return this.waitForTimeline(this.flows.discoveryReveal(this.particles, options));
     }
 
     if (mode === 'lens') {
       this.phases.push('lens-extract');
+      this.target(definition.generator, scenePayload, definition.activeCount);
       return this.waitForTimeline(this.flows.lensExtract(this.particles, options));
     }
 
     if (mode === 'else') {
       this.phases.push(`else-${payload.state || 'idle'}`);
-      this.target('else', payload);
+      this.target(definition.generator, scenePayload, definition.activeCount);
       return this.waitForTimeline(this.flows.elseState(this.particles, options));
     }
 
     this.phases.push(mode);
-    this.target(payload.target || mode, payload);
-    return this.waitForTimeline(this.flows.morph(this.particles, { ...options, duration: mode === 'quiet-tool' ? 0.8 : 1.3 }));
+    this.target(definition.generator, scenePayload, definition.activeCount);
+    return this.waitForTimeline(this.flows.morph(this.particles, {
+      ...options,
+      duration: this.reducedMotion ? definition.reducedMotion.duration : definition.duration,
+      noiseStrength: definition.activeCount ? 0.42 : 0,
+      opacity: definition.activeCount ? 0.9 : 0,
+    }));
   }
 
   setMode(mode, payload = {}) {
@@ -226,7 +275,11 @@ export class MemorySceneManager {
       rendererCount: this.rendererCount,
       particlePoolId: this.particles?.poolId || null,
       particleCount: this.particles?.count || 0,
+      activeCount: this.particles?.activeCount || 0,
       mode: this.mode,
+      definition: this.definition,
+      anchorCount: this.anchorRegistry.debug().count,
+      targetMetadata: this.targetMetadata,
       phases: [...this.phases],
       profile: { name: this.profileName, reducedMotion: this.reducedMotion, ...this.profile },
       paused: this.paused,
@@ -250,6 +303,8 @@ export class MemorySceneManager {
     this.scene = null;
     this.camera = null;
     this.particles = null;
+    this.anchorRegistry.clear();
+    this.targetMetadata = {};
     this.controls = null;
     this.canvas = null;
   }

@@ -14,8 +14,12 @@ let particlePoolSequence = 0;
 export function createParticleSystem(profile, { reducedMotion = false } = {}) {
   const count = profile.particleCount;
   const geometry = new BufferGeometry();
-  const positions = createSemanticTarget('deep-scatter', count);
+  const initial = createSemanticTarget('deep-scatter', count);
+  const positions = initial.positions;
   const targets = new Float32Array(positions);
+  const visibility = new Float32Array(initial.visibility);
+  const targetVisibility = new Float32Array(initial.visibility);
+  const groups = new Float32Array(initial.groups);
   const aRandom = new Float32Array(count);
   const aScale = new Float32Array(count);
   const aPhase = new Float32Array(count);
@@ -36,6 +40,9 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
 
   geometry.setAttribute('position', new BufferAttribute(positions, 3));
   geometry.setAttribute('aTarget', new BufferAttribute(targets, 3));
+  geometry.setAttribute('aVisibility', new BufferAttribute(visibility, 1));
+  geometry.setAttribute('aTargetVisibility', new BufferAttribute(targetVisibility, 1));
+  geometry.setAttribute('aGroup', new BufferAttribute(groups, 1));
   geometry.setAttribute('aRandom', new BufferAttribute(aRandom, 1));
   geometry.setAttribute('aScale', new BufferAttribute(aScale, 1));
   geometry.setAttribute('aPhase', new BufferAttribute(aPhase, 1));
@@ -54,8 +61,8 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
     uReducedMotion: { value: reducedMotion ? 1 : 0 },
     uPulse: { value: 0 },
     uOpacity: { value: 0.84 },
-    uCoolColor: { value: new Color('#d8e0de') },
-    uWarmColor: { value: new Color('#f0d29b') },
+    uCoolColor: { value: new Color('#e3e5e3') },
+    uWarmColor: { value: new Color('#b9ad99') },
   };
 
   const material = new ShaderMaterial({
@@ -69,22 +76,38 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
   const points = new Points(geometry, material);
   points.frustumCulled = false;
   const poolId = `memory-pool-${particlePoolSequence += 1}`;
+  let activeCount = count;
 
-  const setTarget = (target, { resetProgress = true } = {}) => {
-    const targetArray = typeof target === 'string' ? createSemanticTarget(target, count) : target;
+  const setTarget = (target, { resetProgress = true, activeCount: requestedActiveCount = count } = {}) => {
+    const resolved = typeof target === 'string' ? createSemanticTarget(target, count) : target;
+    const targetArray = resolved instanceof Float32Array ? resolved : resolved?.positions;
     if (!(targetArray instanceof Float32Array) || targetArray.length !== targets.length) {
       throw new TypeError(`Particle target must contain ${targets.length} float values.`);
     }
+    const nextVisibility = resolved?.visibility instanceof Float32Array ? resolved.visibility : new Float32Array(count).fill(1);
+    const nextGroups = resolved?.groups instanceof Float32Array ? resolved.groups : new Float32Array(count);
+    activeCount = Math.max(0, Math.min(count, requestedActiveCount));
 
     const positionAttribute = geometry.getAttribute('position');
     const targetAttribute = geometry.getAttribute('aTarget');
+    const visibilityAttribute = geometry.getAttribute('aVisibility');
+    const targetVisibilityAttribute = geometry.getAttribute('aTargetVisibility');
+    const groupAttribute = geometry.getAttribute('aGroup');
     const progress = uniforms.uProgress.value;
     for (let index = 0; index < targets.length; index += 1) {
       positions[index] += (targets[index] - positions[index]) * progress;
       targets[index] = targetArray[index];
     }
+    for (let index = 0; index < count; index += 1) {
+      visibility[index] += (targetVisibility[index] - visibility[index]) * progress;
+      targetVisibility[index] = index < activeCount ? nextVisibility[index] : 0;
+      groups[index] = nextGroups[index];
+    }
     positionAttribute.needsUpdate = true;
     targetAttribute.needsUpdate = true;
+    visibilityAttribute.needsUpdate = true;
+    targetVisibilityAttribute.needsUpdate = true;
+    groupAttribute.needsUpdate = true;
     if (resetProgress) uniforms.uProgress.value = 0;
   };
 
@@ -94,6 +117,7 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
     points,
     uniforms,
     setTarget,
+    get activeCount() { return activeCount; },
     dispose() {
       geometry.dispose();
       material.dispose();

@@ -5,6 +5,9 @@ export const vertexShader = /* glsl */`
   attribute float aAmplitude;
   attribute float aColorMix;
   attribute float aTargetIndex;
+  attribute float aVisibility;
+  attribute float aTargetVisibility;
+  attribute float aGroup;
   attribute vec3 aTarget;
 
   uniform float uTime;
@@ -69,6 +72,7 @@ export const vertexShader = /* glsl */`
 
   void main() {
     float eased = uProgress * uProgress * (3.0 - 2.0 * uProgress);
+    float particleVisibility = mix(aVisibility, aTargetVisibility, eased);
     vec3 transformed = mix(position, aTarget, eased);
     float time = uTime * mix(0.04, 0.24, 1.0 - uReducedMotion);
     float noise = snoise(transformed * 0.09 + vec3(time + aPhase));
@@ -79,8 +83,8 @@ export const vertexShader = /* glsl */`
     vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     float perspective = clamp(110.0 / max(1.0, -mvPosition.z), 0.38, 1.85);
-    gl_PointSize = min(5.0, uPointSize * aScale * uPixelRatio * perspective * (1.0 + uPulse * 0.35));
-    vAlpha = mix(0.24, 0.92, aScale) * smoothstep(100.0, 3.0, -mvPosition.z);
+    gl_PointSize = min(5.0, uPointSize * aScale * uPixelRatio * perspective * (1.0 + uPulse * 0.35)) * particleVisibility;
+    vAlpha = mix(0.24, 0.92, aScale) * smoothstep(100.0, 3.0, -mvPosition.z) * particleVisibility;
     vColorMix = aColorMix;
     vDepth = perspective;
   }
