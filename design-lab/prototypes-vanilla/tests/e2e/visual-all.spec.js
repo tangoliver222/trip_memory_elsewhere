@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { test, expect } from '@playwright/test';
-import { ROUTE_CASES } from './helpers.js';
+import { ROUTE_CASES, waitForVisualReady } from './helpers.js';
 
 test('capture every routed surface at the shared reference bar', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-390', 'The exhaustive visual audit is captured once at the strictest phone width.');
@@ -13,8 +13,7 @@ test('capture every routed surface at the shared reference bar', async ({ page }
     await page.goto(route.path);
     await expect(page.locator(`[data-page-id="${route.pageId}"]`)).toBeVisible();
     await expect(page.locator('#overlay-root > *')).toHaveCount(0);
-    const intensity = await page.locator('.app-viewport').getAttribute('data-intensity');
-    await page.waitForTimeout(intensity === 'S' ? 3200 : intensity === 'A' ? 1500 : 700);
+    await waitForVisualReady(page);
     const prefix = `${String(index + 1).padStart(2, '0')}-${route.name}`;
     await page.screenshot({ path: resolve(output, `${prefix}--top.png`) });
 

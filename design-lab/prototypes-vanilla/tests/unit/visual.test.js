@@ -103,3 +103,52 @@ test('starting a new spatial flow kills every previously tracked flow', () => {
   assert.equal(states[0].killed, true);
   assert.deepEqual(controller.debug(), { tracked: 1, active: 1 });
 });
+
+test('transitionTo resolves only after the active GSAP timeline completes', async () => {
+  const callbacks = {};
+  const timeline = {
+    eventCallback(name, callback) {
+      callbacks[name] = callback;
+      return this;
+    },
+  };
+  const flowController = {
+    morph() { return timeline; },
+    debug() { return { tracked: 1, active: 1 }; },
+    killAll() {},
+  };
+  const manager = new MemorySceneManager({
+    rendererFactory: createRendererFactory(),
+    flowController,
+    profile: 'low',
+  });
+  manager.mount(createCanvas());
+
+  let settled = false;
+  const promise = manager.transitionTo('city', {}).then(() => { settled = true; });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  callbacks.onComplete();
+  await promise;
+  assert.equal(settled, true);
+  manager.dispose();
+});
+
+test('an interrupted transition settles its promise so stale routes do not leak waits', async () => {
+  const callbacks = {};
+  const timeline = {
+    eventCallback(name, callback) { callbacks[name] = callback; return this; },
+  };
+  const manager = new MemorySceneManager({
+    rendererFactory: createRendererFactory(),
+    flowController: { morph: () => timeline, debug: () => ({ tracked: 1, active: 1 }), killAll() {} },
+    profile: 'low',
+  });
+  manager.mount(createCanvas());
+
+  const promise = manager.transitionTo('city', {});
+  assert.equal(typeof callbacks.onInterrupt, 'function');
+  callbacks.onInterrupt();
+  await promise;
+  manager.dispose();
+});

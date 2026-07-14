@@ -21,7 +21,13 @@ export const collectPageErrors = (page) => {
   return errors;
 };
 
+export async function waitForVisualReady(page) {
+  await page.waitForFunction(() => window.__ELSEWHERE_VISUAL_READY__ === true);
+  await page.waitForTimeout(150);
+}
+
 export async function expectHealthyPage(page, route) {
+  await waitForVisualReady(page);
   await expect(page.locator('[data-page-id]')).toHaveAttribute('data-page-id', route.pageId);
   await expect(page.locator('#memory-canvas')).toHaveCount(1);
   await expect(page.locator('[data-else-orb]')).toHaveCount(route.hidesElse ? 0 : 1);

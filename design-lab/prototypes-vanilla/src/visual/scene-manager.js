@@ -131,54 +131,69 @@ export class MemorySceneManager {
     return false;
   }
 
-  setMode(mode, payload = {}) {
+  waitForTimeline(timeline) {
+    if (!timeline?.eventCallback) return Promise.resolve();
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      timeline.eventCallback('onComplete', finish);
+      timeline.eventCallback('onInterrupt', finish);
+    });
+  }
+
+  transitionTo(mode, payload = {}) {
     this.mode = mode;
-    if (!this.particles) return this;
+    if (!this.particles) return Promise.resolve();
     if (this.controls) this.controls.enabled = mode === 'world' || mode === 'world-intro';
     const options = { ...payload, reducedMotion: this.reducedMotion };
 
     if (mode === 'world-intro') {
       this.phases.push('deep-scatter', 'globe');
       this.target('deep-scatter', payload);
-      this.flows.worldIntro(this.particles, {
+      const timeline = this.flows.worldIntro(this.particles, {
         ...options,
         onGlobe: () => this.target('globe', payload),
         onCities: payload.onCities,
         onComplete: payload.onComplete,
       });
-      return this;
+      return this.waitForTimeline(timeline);
     }
 
     if (mode === 'city' && payload.transition === 'globeToCity') {
       this.phases.push('city-burst', 'city-field');
       this.target('city-burst', payload);
-      this.flows.globeToCity(this.particles, { ...options, onField: () => this.target('city-field', payload) });
-      return this;
+      const timeline = this.flows.globeToCity(this.particles, { ...options, onField: () => this.target('city-field', payload) });
+      return this.waitForTimeline(timeline);
     }
 
     if (mode === 'discovery') {
       this.phases.push('time-nodes', 'relation-flow', 'shared-entity');
       this.target('discovery', payload);
-      this.flows.discoveryReveal(this.particles, options);
-      return this;
+      return this.waitForTimeline(this.flows.discoveryReveal(this.particles, options));
     }
 
     if (mode === 'lens') {
       this.phases.push('lens-extract');
-      this.flows.lensExtract(this.particles, options);
-      return this;
+      return this.waitForTimeline(this.flows.lensExtract(this.particles, options));
     }
 
     if (mode === 'else') {
       this.phases.push(`else-${payload.state || 'idle'}`);
       this.target('else', payload);
-      this.flows.elseState(this.particles, options);
-      return this;
+      return this.waitForTimeline(this.flows.elseState(this.particles, options));
     }
 
     this.phases.push(mode);
     this.target(payload.target || mode, payload);
-    this.flows.morph(this.particles, { ...options, duration: mode === 'quiet-tool' ? 0.8 : 1.3 });
+    return this.waitForTimeline(this.flows.morph(this.particles, { ...options, duration: mode === 'quiet-tool' ? 0.8 : 1.3 }));
+  }
+
+  setMode(mode, payload = {}) {
+    this.transitionTo(mode, payload);
     return this;
   }
 

@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { test, expect } from '@playwright/test';
+import { waitForVisualReady } from './helpers.js';
 
 const captures = [
   ['world', '/#/world', 4300],
@@ -24,11 +25,11 @@ test('capture pass-one visual contact sheet sources', async ({ page }, testInfo)
     await page.goto(path);
     await expect(page.locator('[data-page-id]')).toBeVisible();
     await expect(page.locator('#overlay-root > *')).toHaveCount(0);
-    await page.waitForTimeout(wait);
+    await waitForVisualReady(page);
     if (name === 'fragment-lens') {
       await page.locator('[data-field-node]').first().click();
       await expect(page.locator('.fragment-lens__panel')).toBeVisible();
-      await page.waitForTimeout(850);
+      await waitForVisualReady(page);
     }
     await page.screenshot({ path: resolve(output, `${name}.png`), fullPage: true });
   }

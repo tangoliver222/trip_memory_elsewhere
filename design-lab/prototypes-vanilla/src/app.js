@@ -17,6 +17,7 @@ import { matchRoute } from './router.js';
 import { getFragmentContext } from './selectors.js';
 import { createInitialState, createStore } from './store.js';
 import { MemorySceneManager } from './visual/scene-manager.js';
+import { createVisualReadyController } from './visual/visual-ready.js';
 import { renderRoute as renderPageRoute } from './pages/render-route.js';
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';
@@ -25,7 +26,9 @@ const root = document.querySelector('#app-root');
 const initialHash = window.location.hash || '#/onboarding';
 const store = createStore(createInitialState({ route: initialHash }));
 const sceneManager = new MemorySceneManager();
+const visualReady = createVisualReadyController({ window, document });
 let sceneKey = '';
+let lastScenePromise = Promise.resolve();
 let pageCleanup = null;
 let renderedRoute = null;
 gsap.registerPlugin(Flip);
@@ -39,6 +42,7 @@ Object.defineProperties(debugApi, {
   profile: { enumerable: true, get: () => sceneManager.debug().profile },
   paused: { enumerable: true, get: () => sceneManager.debug().paused },
   mode: { enumerable: true, get: () => sceneManager.debug().mode },
+  visualReady: { enumerable: true, get: () => visualReady.debug().ready },
 });
 debugApi.snapshot = () => sceneManager.debug();
 debugApi.loseContext = () => sceneManager.loseContext();
@@ -85,6 +89,7 @@ function renderOverlays(state) {
 
 function updateShell() {
   const state = store.getState();
+  const visualToken = visualReady.begin(`${state.route}|${state.overlays.map((overlay) => overlay.name).join(',')}|${state.else.state}`);
   const routeChanged = renderedRoute !== state.route;
   const route = matchRoute(state.route);
   const view = renderPageRoute(route, state);
@@ -126,7 +131,7 @@ function updateShell() {
     const transition = route.pageId === 'world-city-home' && window.sessionStorage.getItem('elsewhere:previous-page') === 'world-home'
       ? 'globeToCity'
       : undefined;
-    sceneManager.setMode(mode, {
+    lastScenePromise = sceneManager.transitionTo(mode, {
       ...route.params,
       ...view.scenePayload,
       transition,
@@ -148,6 +153,13 @@ function updateShell() {
   if (routeChanged) root.querySelector('#page-content-layer')?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   renderedRoute = state.route;
   syncElseOrbPlacement(state);
+  void visualReady.settle({
+    token: visualToken,
+    root: root.querySelector('#page-content-layer'),
+    scenePromise: lastScenePromise.catch((error) => {
+      console.warn('Memory Scene transition did not settle cleanly.', error);
+    }),
+  });
 }
 
 store.subscribe((_state, action) => {
