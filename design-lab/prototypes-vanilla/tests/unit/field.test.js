@@ -41,3 +41,19 @@ test('compact field layout keeps a useful ring of originals inside a phone-scale
   assert.ok(layout.every((node) => Math.abs(node.y) <= 150));
   assert.ok(new Set(layout.map((node) => node.z)).size > 2);
 });
+
+test('search and focus remeasure the live field anchors before particle reflow', () => {
+  const calls = [];
+  const store = createStore(createInitialState());
+  const field = createFieldController({
+    viewport,
+    store,
+    sceneManager: { setMode(mode, payload) { calls.push({ mode, payload }); } },
+  });
+  field.search('Common Grounds');
+  field.focus('frag-ari-1012-photo');
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].payload.root, viewport);
+  assert.equal(calls[1].payload.root, viewport);
+  field.destroy();
+});

@@ -150,7 +150,7 @@
   text-align: left;
 }
 .memory-original--missing::before {
-  content: 'SOURCE / PENDING';
+  content: 'SOURCE RECORD';
   position: absolute;
   top: 12px;
   left: 12px;

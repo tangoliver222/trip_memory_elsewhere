@@ -250,13 +250,16 @@ export function createElseOrbTargets(count, payload = {}) {
   return target;
 }
 
-export function createImportBatchTargets(count) {
-  const target = bundle(count, { structure: 'batch-orbits' });
+export function createImportBatchTargets(count, payload = {}) {
+  const measured = anchorsFrom(payload);
+  const anchors = measured.length ? measured : [{ world: { x: 0, y: 0, z: -8 } }];
+  const target = bundle(count, { structure: 'batch-orbits', anchorCount: measured.length });
   for (let index = 0; index < count; index += 1) {
     const group = index % 4;
+    const anchor = anchors[index % anchors.length].world;
     const theta = seeded(index, 27) * TAU;
     const radius = 3 + group * 2.1 + seeded(index, 28) * 0.8;
-    point(target, index, Math.cos(theta) * radius, Math.sin(theta) * radius * 0.62, -8 - group * 2, 0.72, group);
+    point(target, index, anchor.x + Math.cos(theta) * radius, anchor.y + Math.sin(theta) * radius * 0.62, anchor.z - group * 1.2, 0.72, group);
   }
   return target;
 }
@@ -294,6 +297,7 @@ export function createSemanticTarget(mode, count, payload = {}) {
     'else-orb': createElseOrbTargets,
     import: createImportBatchTargets,
     'import-batch': createImportBatchTargets,
+    processing: createImportBatchTargets,
     lens: createLensTargets,
     'lens-focus': createLensTargets,
     capsule: createCityClusterTargets,

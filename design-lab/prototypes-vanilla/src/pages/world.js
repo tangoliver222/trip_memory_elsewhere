@@ -54,7 +54,7 @@ export function renderWorldCities() {
       </header>
       <div class="year-rail" role="tablist" aria-label="年份"><button class="is-active" type="button">全部</button><button type="button">2024</button><button type="button">2023</button></div>
       <section class="city-index">
-        ${cities.map((city, index) => `<article class="city-index__item" style="--city-order:${index}">
+        ${cities.map((city, index) => `<article class="city-index__item" style="--city-order:${index}" data-particle-anchor="city-index-${city.slug}" data-particle-kind="scene" data-particle-depth="${[-5, -14, -24][index]}">
           <div class="city-index__image">${city.representativeAsset ? `<img src="${city.representativeAsset}" alt="${escapeHtml(city.localizedName)} 代表原件">` : renderMissingOriginal(city.localizedName)}</div>
           <div class="city-index__copy"><p>${escapeHtml(city.period)}</p><h2>${escapeHtml(city.name)} <small>${escapeHtml(city.localizedName)}</small></h2><p>${escapeHtml(city.fact)}</p><button type="button" data-action="navigate" data-route="#/world/city/${city.slug}">进入城市群 →</button></div>
         </article>`).join('')}

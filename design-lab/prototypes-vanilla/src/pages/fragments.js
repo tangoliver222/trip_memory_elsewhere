@@ -64,7 +64,7 @@ export function renderImportPage() {
     sceneMode: 'import', scenePayload: { target: 'quiet', itemCount: batch.itemCount }, afterRender: null,
     html: `<main class="page import-page" data-page-id="world-import">
       <header><p class="eyebrow">导入一批混合媒介</p><h1>把原件放进同一个入口</h1><p>不需要先把照片、小票和截图分开。整理结束后，原件、待判断项和异常会分别回到它们该在的位置。</p></header>
-      <section class="drop-field"><div class="drop-field__orbit" aria-hidden="true"><i></i><i></i><i></i></div><strong>选择照片、文件或文件夹</strong><span>当前批次：18 张照片 · 5 张截图 · 3 张小票 · 2 张票根</span><small>共 28 个原件</small></section>
+      <section class="drop-field" data-particle-anchor="import-batch-core" data-particle-kind="entity" data-particle-depth="-8"><div class="drop-field__orbit" aria-hidden="true"><i></i><i></i><i></i></div><strong>选择照片、文件或文件夹</strong><span>当前批次：18 张照片 · 5 张截图 · 3 张小票 · 2 张票根</span><small>共 28 个原件</small></section>
       <section class="import-boundary"><h2>整理时会发生什么</h2><ol><li><span>01</span>先保存原件和来源</li><li><span>02</span>再读取时间、地点与票据文字</li><li><span>03</span>不确定项留给你判断</li></ol></section>
       ${primary('开始整理这 28 个原件', '#/world/inbox/receipt/batch-bangkok-backfill')}
     </main>`,
@@ -78,11 +78,11 @@ export function renderReceiptPage(batchId) {
     html: `<main class="page receipt-page" data-page-id="world-receipt">
       <header><p class="eyebrow">这批碎片已经改变了世界</p><h1>整理回执</h1><p>${batch.itemCount} 个原件已保存，并分流到城市、地点、连接与待判断项。</p></header>
       <section class="receipt-distribution" aria-label="导入结果">
-        <div class="receipt-core" aria-label="${batch.result.saved} 个原件"><strong>${batch.result.saved}</strong><span>个原件</span></div>
-        <div class="receipt-stream receipt-stream--city" aria-label="${batch.result.cities} 座城市"><i></i><strong>${batch.result.cities}</strong><span>座城市</span></div>
-        <div class="receipt-stream receipt-stream--place" aria-label="${batch.result.places} 个地点"><i></i><strong>${batch.result.places}</strong><span>个地点</span></div>
-        <div class="receipt-stream receipt-stream--relation" aria-label="${batch.result.connections} 条新连接"><i></i><strong>${batch.result.connections}</strong><span>条新连接</span></div>
-        <div class="receipt-stream receipt-stream--review" aria-label="${batch.result.needsReview} 项待判断"><i></i><strong>${batch.result.needsReview}</strong><span>项待判断</span></div>
+        <div class="receipt-core" aria-label="${batch.result.saved} 个原件" data-particle-anchor="receipt-core" data-particle-kind="entity" data-particle-depth="-7"><strong>${batch.result.saved}</strong><span>个原件</span></div>
+        <div class="receipt-stream receipt-stream--city" aria-label="${batch.result.cities} 座城市" data-particle-anchor="receipt-city" data-particle-kind="scene" data-particle-depth="-13"><i></i><strong>${batch.result.cities}</strong><span>座城市</span></div>
+        <div class="receipt-stream receipt-stream--place" aria-label="${batch.result.places} 个地点" data-particle-anchor="receipt-place" data-particle-kind="place" data-particle-depth="-17"><i></i><strong>${batch.result.places}</strong><span>个地点</span></div>
+        <div class="receipt-stream receipt-stream--relation" aria-label="${batch.result.connections} 条新连接" data-particle-anchor="receipt-relation" data-particle-kind="connection" data-particle-depth="-10"><i></i><strong>${batch.result.connections}</strong><span>条新连接</span></div>
+        <div class="receipt-stream receipt-stream--review" aria-label="${batch.result.needsReview} 项待判断" data-particle-anchor="receipt-review" data-particle-kind="connection" data-particle-depth="-21"><i></i><strong>${batch.result.needsReview}</strong><span>项待判断</span></div>
       </section>
       <p class="receipt-truth">没有失败项，也没有重复原件。待判断内容不会被当作已确认事实。</p>
       ${primary('进入 Bangkok 看变化', '#/world/city/bangkok')}

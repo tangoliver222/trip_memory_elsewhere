@@ -23,10 +23,9 @@ export function renderMedia(fragment, { className = 'memory-original', decorativ
   if (fragment?.asset) {
     return `<img class="${escapeHtml(className)}" src="${escapeHtml(fragment.asset)}" alt="${decorative ? '' : escapeHtml(fragment.evidencePreview)}">`;
   }
-  const label = fragment?.requiredAsset
-    ? '原件尚未加入演示包'
-    : '原件待整理';
-  return `<div class="${escapeHtml(className)} memory-original--missing" role="img" aria-label="${label}"><span>${label}</span></div>`;
+  const sourceState = fragment?.requiredAsset ? '原件未随演示包提供' : '来源记录待整理';
+  const label = fragment?.evidencePreview ? `${fragment.evidencePreview} · ${sourceState}` : sourceState;
+  return `<div class="${escapeHtml(className)} memory-original--missing" role="img" aria-label="${escapeHtml(label)}" data-source-unavailable><span>${escapeHtml(label)}</span></div>`;
 }
 
 export const renderStatus = (status) => {

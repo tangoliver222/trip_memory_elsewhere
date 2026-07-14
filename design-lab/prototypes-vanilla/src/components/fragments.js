@@ -19,8 +19,11 @@ export function renderOriginalTile(fragment, {
   return `<button id="fragment-focus-${index}" class="original-tile ${className}" style="--tile-index:${index}" type="button" data-action="open-lens" data-fragment-id="${escapeHtml(fragment.id)}"${anchorAttributes}>${content}</button>`;
 }
 
-export function renderEvidenceCard(fragment, { title, detail } = {}) {
-  return `<article class="evidence-card">
+export function renderEvidenceCard(fragment, { title, detail, anchorId = '', particleDepth = -8 } = {}) {
+  const anchorAttributes = anchorId
+    ? ` data-particle-anchor="${escapeHtml(anchorId)}" data-particle-kind="fragment" data-particle-depth="${particleDepth}"`
+    : '';
+  return `<article class="evidence-card"${anchorAttributes}>
     <div class="evidence-card__original">${renderMedia(fragment, { className: 'evidence-card__media' })}</div>
     <div class="evidence-card__copy">
       ${renderStatus(fragment.status)}

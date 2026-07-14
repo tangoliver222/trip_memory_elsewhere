@@ -19,7 +19,7 @@ export function renderElseSheet(state, route = state.route) {
     ${answer ? `<div class="else-answer">
       <p class="else-answer__question">“${escapeHtml(state.else.query)}”</p>
       <p class="else-answer__text">${escapeHtml(answer.answer)}</p>
-      <section class="else-sources"><span>支持这个回答的来源</span>${answer.sources.map((source) => `<button type="button" data-action="open-lens" data-fragment-id="${source.fragmentId}"><i></i><strong>${escapeHtml(source.label)}</strong><small>${escapeHtml(source.kind)}</small></button>`).join('')}</section>
+      <section class="else-sources"><span>支持这个回答的来源</span>${answer.sources.map((source, index) => `<button type="button" data-action="open-lens" data-fragment-id="${source.fragmentId}" data-particle-anchor="else-source-${index + 1}" data-particle-kind="fragment" data-particle-depth="${-8 - index * 4}"><i></i><strong>${escapeHtml(source.label)}</strong><small>${escapeHtml(source.kind)}</small></button>`).join('')}</section>
       <section class="else-uncertainty"><span>${currentState === 'conflict' ? '两组来源为何没有合并' : '仍需要保留的边界'}</span><p>${escapeHtml(answer.uncertainty)}</p></section>
       <button class="else-next-action" type="button" data-else-next-action data-action="navigate" data-route="${escapeHtml(answer.nextAction.href)}">${escapeHtml(answer.nextAction.label)} →</button>
     </div>` : `<div class="else-quick">

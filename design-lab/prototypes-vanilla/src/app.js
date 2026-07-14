@@ -136,7 +136,7 @@ function updateShell() {
       ? 'globeToCity'
       : undefined;
     lastScenePromise = sceneManager.transitionTo(mode, {
-      root: root.querySelector('#page-content-layer'),
+      root: root.querySelector('.app-viewport'),
       ...route.params,
       ...view.scenePayload,
       transition,

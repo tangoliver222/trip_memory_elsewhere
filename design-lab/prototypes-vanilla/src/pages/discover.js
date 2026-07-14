@@ -31,9 +31,9 @@ export function renderDiscoverHome(state) {
       <header class="discover-header"><div><p class="eyebrow">少量值得重新看的联系</p><h1>发现不是结论，<br>而是来源之间新长出的关系</h1></div><div class="discover-filters">${[['all','此刻'],['saved','已保存'],['unresolved','待确认']].map(([value,label]) => `<button class="${requested === value ? 'is-active' : ''}" type="button" data-action="set-discovery-filter" data-value="${value}">${label}</button>`).join('')}</div></header>
       <article class="discovery-feature discovery-feature--${composition}">
         <div class="featured-space">
-          ${context.fragments.slice(0, 4).map((fragment, index) => `<div class="feature-source feature-source--${index + 1}">${renderMedia(fragment, { className: 'feature-source__media' })}<span>${escapeHtml(fragment.evidencePreview)}</span></div>`).join('')}
+          ${context.fragments.slice(0, 4).map((fragment, index) => `<div class="feature-source feature-source--${index + 1}" data-particle-anchor="discover-source-${index + 1}" data-particle-kind="fragment" data-particle-depth="${[-18, -9, -2, -25][index]}">${renderMedia(fragment, { className: 'feature-source__media' })}<span>${escapeHtml(fragment.evidencePreview)}</span></div>`).join('')}
           <svg aria-hidden="true" viewBox="0 0 900 520"><path d="M150 110 C 270 250, 300 90, 440 250 S 650 440, 770 180"/><circle cx="450" cy="255" r="60"/></svg>
-          <div class="feature-entity"><i></i><span>${escapeHtml(context.entity?.name || '地点仍待确认')}</span></div>
+          <div class="feature-entity" data-particle-anchor="discover-feature-entity" data-particle-kind="entity" data-particle-depth="-6"><i></i><span>${escapeHtml(context.entity?.name || '地点仍待确认')}</span></div>
         </div>
         <div class="featured-copy"><span>${statusLabel[discovery.status]} · ${escapeHtml(discovery.timeRange)}</span><h2>${escapeHtml(discovery.title)}</h2><p>${escapeHtml(discovery.observation)}</p><button type="button" data-action="navigate" data-route="#/discover/${discovery.id}">打开这次显影 →</button></div>
       </article>

@@ -105,7 +105,7 @@ export function createFieldController({ viewport, store, sceneManager, environme
     if (!normalized) state.camera = clone(resetCamera);
     store.dispatch({ type: 'SET_FIELD_FILTERS', filters: { query: normalized } });
     if (!normalized) publishCamera();
-    sceneManager?.setMode?.('fragment-field', { query: normalized, focusedIds: [...state.focusedIds] });
+    sceneManager?.setMode?.('fragment-field', { root: viewport, query: normalized, focusedIds: [...state.focusedIds] });
     render();
     return [...state.focusedIds];
   };
@@ -122,7 +122,7 @@ export function createFieldController({ viewport, store, sceneManager, environme
     state.camera.x = -node.x;
     state.camera.y = -node.y;
     state.camera.scale = Math.max(1.35, state.camera.scale);
-    sceneManager?.setMode?.('fragment-field', { fragmentId, focusedIds: [fragmentId] });
+    sceneManager?.setMode?.('fragment-field', { root: viewport, fragmentId, focusedIds: [fragmentId] });
     render();
     publishCamera();
     return true;

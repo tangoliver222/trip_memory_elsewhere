@@ -18,7 +18,7 @@ export function renderFragmentLens(context) {
         <button class="icon-button" type="button" data-action="close-overlay" aria-label="关闭">×</button>
       </header>
       <div class="fragment-lens__body">
-        <button class="fragment-lens__original" type="button" data-action="open-original" aria-label="查看原件">
+        <button class="fragment-lens__original" type="button" data-action="open-original" aria-label="查看原件" data-particle-anchor="lens-original" data-particle-kind="fragment" data-particle-depth="-5">
           ${renderMedia(fragment, { className: 'fragment-lens__image' })}
           <span>查看原件</span>
         </button>

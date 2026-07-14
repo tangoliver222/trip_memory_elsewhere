@@ -4,7 +4,7 @@ export function renderElseOrb(state, route) {
   if (state?.else?.hidden || route?.contract?.elseScope === 'none') return '';
   const orbState = state?.else?.state || 'idle';
   const label = state?.else?.open ? '收起 Else' : '询问 Else';
-  return `<button class="else-orb else-orb--${orbState}" type="button" data-else-orb data-action="toggle-else" aria-label="${label}" aria-expanded="${Boolean(state?.else?.open)}">
+  return `<button class="else-orb else-orb--${orbState}" type="button" data-else-orb data-action="toggle-else" aria-label="${label}" aria-expanded="${Boolean(state?.else?.open)}" data-particle-anchor="else-orb" data-particle-kind="entity" data-particle-depth="-3">
     <span class="else-orb__dust" aria-hidden="true"></span>
     <span class="else-orb__mark">E</span>
   </button>`;
