@@ -6,6 +6,10 @@ const primary = (label, route) => `<button class="primary-action" type="button" 
 
 const typeLabel = { photo: '照片', receipt: '小票', ticket: '票根', menu: '菜单', screenshot: '截图' };
 
+const renderFieldSource = (fragment) => fragment.asset
+  ? renderMedia(fragment, { className: 'field-node__media' })
+  : `<div class="field-node__media field-source-record" aria-label="${escapeHtml(fragment.evidencePreview)}"><span>${escapeHtml(typeLabel[fragment.type] || '来源记录')}</span><strong>${escapeHtml(fragment.evidencePreview.split(' · ')[0])}</strong><small>${escapeHtml(fragment.evidencePreview.split(' · ').slice(1).join(' · '))}</small></div>`;
+
 export function renderFragmentField(state) {
   const query = state.field?.filters?.query || '';
   const layout = createFieldLayout(query, { compact: Boolean(globalThis.innerWidth && globalThis.innerWidth <= 700) });
@@ -23,7 +27,7 @@ export function renderFragmentField(state) {
       search?.addEventListener('search', onSearch);
       return () => { search?.removeEventListener('input', onSearch); search?.removeEventListener('search', onSearch); controller.destroy(); };
     },
-    html: `<main class="page fragment-field" data-page-id="world-fragments">
+    html: `<main class="page fragment-field" data-page-id="world-fragments" data-visual-grade="S">
       <header class="field-header">
         <div><p class="eyebrow">全部碎片 · 三维私人数据库</p><h1>Fragment Field</h1></div>
         <label class="field-search"><span class="visually-hidden">搜索碎片</span><input data-field-search data-store-action="field-query" type="search" value="${escapeHtml(query)}" placeholder="搜索地点、商户或原件"><kbd>⌘ K</kbd></label>
@@ -33,11 +37,15 @@ export function renderFragmentField(state) {
       </header>
       <section class="field-viewport" data-field-viewport aria-label="可拖拽和缩放的碎片空间">
         <div class="field-depth-grid" aria-hidden="true"><span>NEAR</span><span>MID</span><span>DEEP</span></div>
+        <div class="field-city-label field-city-label--bangkok" data-city-depth-group="near" data-particle-anchor="field-city-bangkok" data-particle-kind="scene" data-particle-depth="-5"><strong>BANGKOK</strong><span>9 份代表原件</span></div>
+        <div class="field-city-label field-city-label--tokyo" data-city-depth-group="mid" data-particle-anchor="field-city-tokyo" data-particle-kind="scene" data-particle-depth="-18"><strong>TOKYO</strong><span>索引存在 · 演示原件未提供</span></div>
+        <div class="field-city-label field-city-label--chiang-mai" data-city-depth-group="deep" data-particle-anchor="field-city-chiang-mai" data-particle-kind="scene" data-particle-depth="-32"><strong>CHIANG MAI</strong><span>索引存在 · 演示原件未提供</span></div>
         ${fragments.map((fragment, index) => {
           const node = positions[fragment.id];
           const relevant = !query || node.relevance === 1;
-          return `<button id="fragment-focus-${index}" class="field-node field-node--${fragment.type}" style="--field-x:${node.x + (state.field?.camera?.x || 0)}px;--field-y:${node.y + (state.field?.camera?.y || 0)}px;--field-z:${node.z}px;--field-scale:${state.field?.camera?.scale || 1};--node-index:${index};opacity:${node.relevance}" type="button" data-field-node data-relevance="${relevant ? 'focused' : 'background'}" data-action="open-lens" data-fragment-id="${fragment.id}">
-            ${renderMedia(fragment, { className: 'field-node__media' })}
+          const particleDepth = Math.max(-32, Math.min(4, Math.round(node.z / 5 - 12)));
+          return `<button id="fragment-focus-${index}" class="field-node field-node--${fragment.type}" style="--field-x:${node.x + (state.field?.camera?.x || 0)}px;--field-y:${node.y + (state.field?.camera?.y || 0)}px;--field-z:${node.z}px;--field-scale:${state.field?.camera?.scale || 1};--node-index:${index};opacity:${node.relevance}" type="button" data-field-node data-relevance="${relevant ? 'focused' : 'background'}" data-action="open-lens" data-fragment-id="${fragment.id}" data-particle-anchor="field-original-${index + 1}" data-particle-kind="fragment" data-particle-depth="${particleDepth}">
+            ${renderFieldSource(fragment)}
             <span class="field-node__type">${typeLabel[fragment.type] || fragment.type}</span>
             <span class="field-node__label">${escapeHtml(fragment.evidencePreview)}</span>
           </button>`;
@@ -85,11 +93,20 @@ export function renderReceiptPage(batchId) {
 export function renderInboxPage() {
   const review = reviewQueue[0];
   return {
-    sceneMode: 'quiet-tool', scenePayload: { target: 'quiet' }, afterRender: null,
-    html: `<main class="page inbox-page" data-page-id="world-inbox">
-      <header><p class="eyebrow">收件箱 · 一次只做一个判断</p><h1>这张交通截图是否也靠近 Chao Phraya Ferry？</h1><p>截图文字包含 ferry，但缺少可确认的具体码头。你的选择会改变地点连接，不会修改原件。</p></header>
-      <section class="review-comparison"><div class="review-source review-source--pending"><span>22 OCT · 18:04</span><strong>交通截图</strong><small>具体码头待确认</small></div><div class="review-link" aria-hidden="true"><i></i><span>?</span><i></i></div><div class="review-source"><img src="/assets/bangkok-photo-02-riverside.jpg" alt="已确认的河岸原件"><span>18 OCT · 17:59</span><strong>Chao Phraya Ferry</strong></div></section>
-      <div class="review-choices">${review.choices.map((choice, index) => `<button type="button" data-review-choice data-action="review-choice" data-value="${index}">${escapeHtml(choice)}</button>`).join('')}</div>
+    sceneMode: 'inbox', scenePayload: { target: 'inbox', state: 'uncertain' }, afterRender: null,
+    html: `<main class="page inbox-page" data-page-id="world-inbox" data-visual-grade="S">
+      <header><p class="inbox-wordmark">Elsewhere</p><p class="eyebrow">Fragment Inbox · 1 / 3</p><h1>这张交通截图是否也靠近 Chao Phraya Ferry？</h1><p>截图文字包含 ferry，但缺少可确认的具体码头。你的选择只会改变连接，不会修改原件。</p></header>
+      <section class="review-comparison" aria-label="待比较的两份来源">
+        <div class="review-source review-source--record" data-particle-anchor="inbox-source-record" data-particle-kind="fragment" data-particle-depth="-7"><span>SCREENSHOT · 22 OCT · 18:04</span><div class="review-source__document"><small>TRANSIT SEARCH</small><strong>ferry · riverside</strong><em>具体码头待确认</em></div></div>
+        <div class="review-link" aria-hidden="true" data-particle-anchor="inbox-gap" data-particle-kind="connection" data-particle-depth="-5"><i></i><span>?</span><i></i></div>
+        <div class="review-source review-source--photo" data-particle-anchor="inbox-source-photo" data-particle-kind="fragment" data-particle-depth="-9"><img src="/assets/bangkok-photo-02-riverside.jpg" alt="已确认的河岸原件"><span>PHOTO · 18 OCT · 17:59</span><strong>Chao Phraya Ferry</strong></div>
+      </section>
+      <section class="review-evidence" aria-label="支持与缺口">
+        <div data-review-evidence><span>时间接近</span><strong>两份来源相隔 4 天</strong><small>中等支持</small></div>
+        <div data-review-evidence><span>内容匹配</span><strong>都出现 ferry / riverside</strong><small>较强支持</small></div>
+        <div data-review-evidence><span>仍有缺口</span><strong>截图没有具体码头</strong><small>需要你的判断</small></div>
+      </section>
+      <div class="review-choices">${review.choices.map((choice, index) => `<button type="button" data-review-choice data-action="review-choice" data-value="${index}"><span>${['✓', '×', '?'][index]}</span>${escapeHtml(choice)}</button>`).join('')}</div>
       <section class="inbox-queues"><div><span>正在整理</span><strong>${escapeHtml(processingItems[0].label)}</strong></div><div><span>需要原件</span><strong>${escapeHtml(exceptions[0].label)}</strong></div></section>
       ${primary('回到全部碎片', '#/world/fragments')}
     </main>`,

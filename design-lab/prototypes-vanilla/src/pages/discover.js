@@ -15,6 +15,10 @@ const primary = (label, route, extra = '') => `<button class="primary-action" ty
 
 const statusLabel = { new: '新显影', supported: '来源支持', unresolved: '仍有缺口' };
 
+const renderDiscoverySource = (fragment) => fragment.asset
+  ? renderMedia(fragment, { className: 'discovery-time-node__media' })
+  : `<div class="discovery-time-node__media discovery-source-record" role="img" aria-label="${escapeHtml(fragment.evidencePreview)}"><span>${escapeHtml(fragment.type.toUpperCase())}</span><strong>${escapeHtml(fragment.evidencePreview.split(' · ')[0])}</strong><small>${escapeHtml(fragment.evidencePreview.split(' · ').slice(1).join(' · '))}</small></div>`;
+
 export function renderDiscoverHome(state) {
   const requested = state.discoveryFilter;
   const activeIndex = requested === 'saved' ? 1 : requested === 'unresolved' ? 2 : 0;
@@ -64,13 +68,13 @@ export function renderDiscoveryDetail(discoveryId, state) {
     sceneMode: 'discovery',
     scenePayload: { target: 'discovery', composition, discoveryId: discovery.id, sourceCount: fragments.length },
     afterRender: null,
-    html: `<main class="page discovery-detail discovery-detail--${composition}" data-page-id="discover-detail">
+    html: `<main class="page discovery-detail discovery-detail--${composition}" data-page-id="discover-detail" data-visual-grade="S">
       <section class="discovery-growth" data-discovery-evidence aria-label="发现证据先于标题出现">
         <div class="discovery-time-nodes">
-          ${groups.map(([date, originals], groupIndex) => `<article class="discovery-time-node discovery-time-node--${groupIndex + 1}" style="--date-index:${groupIndex}"><time>${dateLabel(date)}</time><div>${originals.map((fragment, index) => `<button type="button" data-action="open-lens" data-fragment-id="${fragment.id}" id="discovery-source-${groupIndex}-${index}">${renderMedia(fragment, { className: 'discovery-time-node__media' })}<span>${escapeHtml(fragment.evidencePreview)}</span></button>`).join('')}</div></article>`).join('')}
+          ${groups.map(([date, originals], groupIndex) => `<article class="discovery-time-node discovery-time-node--${groupIndex + 1}" style="--date-index:${groupIndex}"><time>${dateLabel(date)}</time><div>${originals.map((fragment, index) => `<button type="button" data-action="open-lens" data-fragment-id="${fragment.id}" id="discovery-source-${groupIndex}-${index}" data-particle-anchor="discovery-source-${groupIndex}-${index}" data-particle-kind="fragment" data-particle-depth="${[-22, -10, 2][groupIndex] || -8}">${renderDiscoverySource(fragment)}<span>${escapeHtml(fragment.evidencePreview)}</span></button>`).join('')}</div></article>`).join('')}
         </div>
         <div class="discovery-relation-forming"><span>关系正在成立</span><svg viewBox="0 0 1000 220" preserveAspectRatio="none" aria-hidden="true"><path d="M80 105 C 250 10, 320 210, 500 105 S 760 10, 920 105"/></svg><div class="relation-particles"><i></i><i></i><i></i><i></i></div></div>
-        <div class="discovery-entity-forming"><i aria-hidden="true"></i><span>共同地点</span><strong>${escapeHtml(entity?.name || '地点仍待确认')}</strong></div>
+        <div class="discovery-entity-forming" data-particle-anchor="discovery-shared-entity" data-particle-kind="entity" data-particle-depth="-5"><i aria-hidden="true"></i><span>共同地点</span><strong>${escapeHtml(entity?.name || '地点仍待确认')}</strong></div>
       </section>
       <header class="discovery-title-reveal"><p class="eyebrow">${statusLabel[discovery.status]} · ${escapeHtml(discovery.timeRange)}</p><h1>${escapeHtml(discovery.title)}</h1><p>${escapeHtml(discovery.observation)}</p></header>
       <section class="discovery-explanation"><div><span>关系类型</span><strong>${{ repeat: '同一地点反复出现', 'cross-media': '不同媒介靠近同一次到访', unresolved: '仍未完成的线索', 'cross-journey': '跨旅程联系' }[composition]}</strong></div><div><span>来源如何支持</span><ul>${connections.flatMap((connection) => connection.evidence).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>${discovery.uncertainty ? `<div class="is-uncertain"><span>仍缺少</span><p>${escapeHtml(discovery.uncertainty)}</p></div>` : ''}</section>

@@ -1,0 +1,290 @@
+/* Visual reset: one black/silver memory world, with intensity supplied by semantic scene targets. */
+:root {
+  --display-serif: Georgia, "Times New Roman", serif;
+  --ui-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --silver-strong: #eef1ef;
+  --silver: #c6cdca;
+  --silver-muted: #7f8785;
+  --silver-faint: rgba(222, 229, 226, .12);
+  --glass: rgba(5, 7, 8, .72);
+}
+
+html, body, #app-root { background: #010202; }
+.app-viewport { background: #010202; }
+.memory-vignette { background: radial-gradient(circle at 50% 45%, transparent 30%, rgba(0,0,0,.32) 72%, rgba(0,0,0,.78) 100%); }
+.app-viewport[data-intensity="C"] .memory-vignette { background: rgba(0,0,0,.22); }
+.page { color: var(--paper-0); }
+.page h1, .page h2, .page h3 { text-wrap: balance; }
+.eyebrow { color: var(--silver-muted); font-family: var(--ui-sans); font-weight: 500; }
+.primary-action { color: var(--silver-strong); border-color: rgba(226,232,229,.3); background: rgba(224,230,227,.055); }
+.primary-action:hover { border-color: rgba(235,240,238,.62); background: rgba(224,230,227,.1); }
+.text-action { color: var(--silver); }
+
+.app-navigation {
+  border-color: rgba(225,231,228,.14);
+  background: rgba(3,5,6,.82);
+  box-shadow: 0 18px 60px rgba(0,0,0,.45);
+}
+.nav-item { color: #747b79; }
+.nav-item.is-active { color: var(--silver-strong); background: rgba(226,232,229,.075); }
+
+/* World — a legible point-cloud globe followed by the four core entrances. */
+.world-home {
+  display: block;
+  width: min(100%, 980px);
+  min-height: 1560px;
+  margin: auto;
+  padding: 0 22px 132px;
+  overflow: visible;
+  text-align: left;
+}
+.world-title {
+  position: absolute;
+  z-index: 4;
+  top: max(24px, env(safe-area-inset-top));
+  left: 22px;
+  right: 22px;
+  margin: 0;
+  pointer-events: none;
+}
+.world-wordmark {
+  margin: 0;
+  color: var(--silver-strong);
+  font: 400 clamp(1.8rem, 5vw, 3.1rem)/1 var(--display-serif);
+  letter-spacing: .18em;
+  text-align: center;
+}
+.world-title > .eyebrow { margin-top: 8px; text-align: center; font-size: .56rem; }
+.world-title__statement { width: min(245px, 58vw); margin-top: 62px; }
+.world-title__statement > span { color: var(--silver); font-size: .58rem; letter-spacing: .17em; }
+.world-title__statement h1 {
+  margin: 9px 0 14px;
+  color: var(--silver-strong);
+  font: 400 clamp(2rem, 6vw, 3.7rem)/.98 var(--display-serif);
+  letter-spacing: -.035em;
+}
+.world-title__statement p { margin: 0; color: var(--silver-muted); font-size: .63rem; line-height: 1.65; }
+.world-home__space { position: absolute; z-index: 2; top: 112px; left: 0; right: 0; height: 650px; pointer-events: none; }
+.world-home__space button { pointer-events: auto; }
+.globe-atmosphere {
+  top: 51%;
+  width: min(76vw, 620px);
+  border-color: rgba(226,233,230,.09);
+  background: radial-gradient(circle at 38% 30%, rgba(235,240,238,.035), transparent 45%);
+  box-shadow: inset -34px -20px 90px rgba(0,0,0,.55), 0 0 90px rgba(195,207,203,.04);
+}
+.globe-atmosphere::before { opacity: .09; }
+.world-city-pin { color: var(--silver); animation-name: city-pin-arrives; }
+.world-city-pin i { background: var(--silver-strong); border-color: #fff; box-shadow: 0 0 5px #fff, 0 0 18px rgba(220,230,227,.5); }
+.world-city-pin span { font: 400 .74rem var(--ui-sans); }
+.world-city-pin small { font-family: var(--ui-sans); letter-spacing: .08em; }
+.world-drag-hint { right: 17px; color: rgba(225,231,228,.32); }
+.world-entry-list { position: relative; z-index: 5; display: grid; gap: 7px; padding-top: 760px; }
+.world-entry {
+  display: grid;
+  grid-template-columns: 30px 94px 1fr 34px;
+  min-height: 118px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(224,231,228,.14);
+  border-radius: 18px;
+  background: linear-gradient(105deg, rgba(223,230,227,.035), rgba(3,5,6,.76) 58%);
+  box-shadow: inset 0 1px rgba(255,255,255,.025), 0 18px 50px rgba(0,0,0,.18);
+  text-align: left;
+}
+.world-entry:hover { border-color: rgba(230,236,233,.34); background-color: rgba(220,228,225,.04); }
+.world-entry__number { align-self: start; padding-top: 7px; color: #737977; font: .72rem var(--display-serif); }
+.world-entry__glyph { position: relative; display: block; width: 84px; aspect-ratio: 1; border: 1px solid rgba(223,230,227,.1); border-radius: 50%; }
+.world-entry__glyph::before, .world-entry__glyph::after { content: ''; position: absolute; inset: 18%; border: 1px dotted rgba(226,233,230,.28); border-radius: 50%; }
+.world-entry__glyph::after { inset: 42%; background: #dfe5e2; box-shadow: 0 0 16px rgba(224,232,228,.55); }
+.world-entry--recommended .world-entry__glyph { border-radius: 12px; background: url('/assets/bangkok-photo-02-riverside.jpg') center/cover; filter: grayscale(1); }
+.world-entry--recommended .world-entry__glyph::before { inset: 0; border: 0; border-radius: 12px; background: linear-gradient(transparent, rgba(0,0,0,.62)); }
+.world-entry--recommended .world-entry__glyph::after { inset: auto 8px 8px auto; width: 7px; height: 7px; }
+.world-entry--inbox .world-entry__glyph { border-radius: 12px 12px 24px 24px; }
+.world-entry--archive .world-entry__glyph::before { inset: 25% 18%; border-radius: 2px; box-shadow: 0 -8px rgba(220,228,225,.06), 0 8px rgba(220,228,225,.05); }
+.world-entry__copy { display: grid; gap: 3px; }
+.world-entry__copy small { color: var(--silver-muted); font-size: .51rem; font-style: normal; letter-spacing: .16em; text-transform: uppercase; }
+.world-entry__copy strong { font: 400 1.22rem var(--display-serif); }
+.world-entry__copy em { color: var(--silver-muted); font-size: .62rem; font-style: normal; line-height: 1.4; }
+.world-entry__arrow { display: grid; width: 32px; aspect-ratio: 1; place-items: center; border: 1px solid rgba(225,232,228,.12); border-radius: 50%; color: var(--silver); }
+
+/* City — real originals sit at different depths; record cards are explicitly records. */
+.city-world { min-height: 1160px; padding: 22px 22px 130px; overflow: hidden; }
+.city-world__header { width: min(560px, 88vw); min-height: 0; align-content: start; padding-top: 28px; }
+.city-wordmark { margin: 0 0 54px; color: var(--silver-strong); font: 400 1.5rem var(--display-serif); }
+.city-world__header h1 { margin: 8px 0 15px; font: 400 clamp(3.6rem, 13vw, 7.4rem)/.86 var(--display-serif); letter-spacing: -.055em; }
+.city-world__header > p:not(.eyebrow):not(.city-wordmark):not(.city-coordinate) { width: min(360px, 88%); color: var(--silver); }
+.city-coordinate { color: var(--silver-muted); font: .6rem/1.5 monospace; letter-spacing: .08em; }
+.city-fragment-stage { top: 120px; bottom: 210px; }
+.city-tile { width: clamp(92px, 22vw, 170px); height: clamp(128px, 31vw, 235px); border-color: rgba(230,236,233,.2); animation: none; filter: grayscale(.2) saturate(.68); }
+.city-tile .original-tile__meta { color: var(--silver); font-size: .52rem; }
+.city-tile--1 { --x:62vw;--y:7vh;--z:-4px;--r:5deg }
+.city-tile--2 { --x:7vw;--y:29vh;--z:-16px;--r:-5deg }
+.city-tile--3 { --x:57vw;--y:38vh;--z:-8px;--r:3deg }
+.city-tile--4 { --x:12vw;--y:57vh;--z:-24px;--r:-4deg }
+.city-semantic-card {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  width: 126px;
+  min-height: 84px;
+  align-content: center;
+  gap: 7px;
+  padding: 13px;
+  border: 1px solid rgba(225,231,228,.18);
+  border-radius: 5px;
+  background: rgba(8,10,11,.88);
+  box-shadow: 0 22px 70px rgba(0,0,0,.6);
+  transform: perspective(700px) rotate(var(--record-rotation));
+}
+.city-semantic-card span { color: var(--silver-muted); font-size: .48rem; letter-spacing: .16em; }
+.city-semantic-card strong { font: .7rem/1.3 monospace; }
+.city-semantic-card small { color: var(--silver-muted); font-size: .5rem; }
+.city-semantic-card--receipt { top: 47vh; left: 47vw; --record-rotation: 5deg; }
+.city-semantic-card--map { top: 65vh; right: 7vw; --record-rotation: -4deg; }
+.city-world__paths { position: absolute; z-index: 6; top: 865px; left: 22px; width: min(520px, calc(100vw - 44px)); margin: 0; }
+.city-world__paths button { min-height: 92px; border-color: rgba(225,231,228,.14); border-radius: 16px; background: rgba(4,6,7,.86); }
+.city-field-caption { top: 745px; right: 22px; width: 54%; border-color: rgba(225,231,228,.18); font-size: .65rem; }
+.city-world > .primary-action { display: none; }
+
+/* Field — the canvas owns depth; DOM originals are sparse anchors, not a card wall. */
+.fragment-field { background: transparent; }
+.field-header { grid-template-columns: 1fr minmax(240px, 390px); }
+.field-header h1 { margin: 5px 0 0; font: 400 clamp(2rem, 4vw, 3.4rem)/.95 var(--display-serif); letter-spacing: -.03em; }
+.field-search { border-color: rgba(225,232,229,.14); background: rgba(2,4,5,.76); }
+.field-filters button { background: rgba(2,4,5,.5); }
+.field-filters button.is-active { border-color: rgba(226,232,229,.25); }
+.field-depth-grid { border-color: rgba(228,234,231,.025); }
+.field-node { border-color: rgba(229,235,232,.18); background: #080a0b; box-shadow: 0 22px 70px rgba(0,0,0,.6); animation: none; }
+.field-node[data-relevance="background"] { filter: grayscale(1); opacity: .13 !important; }
+.field-node:hover { border-color: rgba(239,243,241,.55); }
+.field-node__media { filter: saturate(.62) contrast(1.02); }
+.field-source-record { display: grid; align-content: center; gap: 8px; padding: 11px; background: linear-gradient(155deg, #d3d3ce, #858985); color: #111; text-align: left; }
+.field-source-record span { font-size: .48rem; letter-spacing: .13em; }
+.field-source-record strong { font: 600 .7rem/1.2 monospace; }
+.field-source-record small { font: .5rem/1.5 monospace; }
+.field-city-label { position: absolute; z-index: 1; display: grid; gap: 3px; color: var(--silver); pointer-events: none; }
+.field-city-label strong { font-size: .58rem; letter-spacing: .1em; }
+.field-city-label span { color: #676e6c; font-size: .48rem; }
+.field-city-label--bangkok { left: 9%; top: 36%; }
+.field-city-label--tokyo { right: 11%; top: 27%; opacity: .58; }
+.field-city-label--chiang-mai { right: 6%; bottom: 22%; opacity: .34; }
+.field-legend { color: #6f7775; }
+
+/* Discovery — sources enter from depth, then the relation and entity, then a sharp title. */
+.discovery-detail { max-width: 960px; padding-top: 0; }
+.discovery-growth { min-height: 780px; }
+.discovery-time-node button { border-color: rgba(227,233,230,.2); background: #080a0b; }
+.discovery-time-node__media { filter: saturate(.62); }
+.discovery-source-record { display: grid; align-content: center; gap: 7px; padding: 10px; background: linear-gradient(150deg, #d5d5d0, #7b807d); color: #111; text-align: left; }
+.discovery-source-record > span { position: static !important; padding: 0 !important; background: none !important; font-size: .45rem !important; letter-spacing: .14em; }
+.discovery-source-record strong { font: 600 .64rem/1.25 monospace; }
+.discovery-source-record small { font: .48rem/1.45 monospace; }
+.discovery-relation-forming path { stroke: rgba(224,231,228,.6); }
+.discovery-entity-forming i { background: var(--silver-strong); box-shadow: 0 0 34px rgba(226,233,230,.7); }
+.discovery-title-reveal h1 { color: var(--silver-strong); font-style: normal; }
+.discovery-explanation { border-color: rgba(225,231,228,.13); }
+
+/* Inbox — comparison, evidence and decision remain simultaneously visible. */
+.inbox-page { max-width: 920px; padding-top: 22px; }
+.inbox-page header { max-width: 680px; }
+.inbox-wordmark { margin: 0 0 48px; color: var(--silver-strong); font: 400 1.75rem var(--display-serif); }
+.inbox-page h1 { margin: 9px 0 12px; font: 400 clamp(2rem, 5vw, 3.5rem)/1.05 var(--display-serif); letter-spacing: -.03em; }
+.review-comparison { grid-template-columns: 1fr minmax(46px, .18fr) 1fr; gap: 8px; margin: 26px 0 18px; }
+.review-source { min-height: 330px; padding: 14px; border-color: rgba(228,234,231,.16); border-radius: 18px; background: rgba(6,8,9,.76); }
+.review-source--photo img { opacity: .74; filter: grayscale(.28) saturate(.55); }
+.review-source > span { font-size: .52rem; letter-spacing: .08em; }
+.review-source > strong { font: 400 .82rem var(--display-serif); }
+.review-source__document { position: absolute; inset: 54px 12px 14px; display: grid; align-content: center; gap: 15px; padding: 14px; background: linear-gradient(155deg,#d8d7d1,#8e928e); color: #111; box-shadow: 0 14px 32px rgba(0,0,0,.4); transform: rotate(-1.5deg); }
+.review-source__document small { color: #333; font: .48rem monospace; letter-spacing: .13em; }
+.review-source__document strong { font: 600 .72rem/1.5 monospace; text-transform: uppercase; }
+.review-source__document em { font: .58rem/1.5 monospace; }
+.review-link span { color: var(--silver); }
+.review-link i { background: linear-gradient(90deg, transparent, rgba(225,232,229,.5)); }
+.review-evidence { display: grid; margin: 0 0 20px; border: 1px solid rgba(227,233,230,.13); border-radius: 18px; background: rgba(7,9,10,.68); }
+.review-evidence > div { display: grid; grid-template-columns: 88px 1fr auto; gap: 12px; padding: 13px 15px; border-bottom: 1px solid rgba(227,233,230,.08); }
+.review-evidence > div:last-child { border-bottom: 0; }
+.review-evidence span, .review-evidence small { color: var(--silver-muted); font-size: .58rem; }
+.review-evidence strong { font-size: .7rem; font-weight: 450; }
+.review-choices { display: grid; grid-template-columns: repeat(3, 1fr); }
+.review-choices button { display: grid; min-width: 0; min-height: 58px; place-items: center; align-content: center; gap: 2px; padding: 7px; border-color: rgba(226,232,229,.16); background: rgba(225,231,228,.035); font: .78rem var(--display-serif); }
+.review-choices button span { font: .9rem var(--ui-sans); }
+.review-choices button:first-child { color: #111; border-color: #eff2f0; background: #e4e7e5; }
+.inbox-queues { margin-top: 22px; }
+.inbox-page > .primary-action { margin-bottom: 42px; }
+
+/* Quiet surfaces use the same craft without running a particle wallpaper. */
+.tool-header h1, .me-identity h1, .import-page h1, .receipt-page h1 { font-style: normal; color: var(--silver-strong); }
+.private-world-status, .tone-examples label, .export-options > div, .privacy-boundary, .storage-impact { border-color: rgba(225,231,228,.12); background: rgba(225,231,228,.02); }
+.memory-original--missing::before { content: 'SOURCE RECORD'; }
+
+@media (max-width: 760px) {
+  .world-home { min-height: 1470px; padding-left: 16px; padding-right: 16px; }
+  .world-title { left: 18px; right: 18px; top: max(22px, env(safe-area-inset-top)); }
+  .world-wordmark { font-size: 1.72rem; letter-spacing: .16em; }
+  .world-title__statement { width: 155px; margin-top: 49px; }
+  .world-title__statement h1 { font-size: 1.75rem; line-height: 1.02; }
+  .world-title__statement p { font-size: .54rem; }
+  .world-home__space { top: 122px; height: 580px; }
+  .globe-atmosphere { top: 50%; width: min(91vw, 410px); }
+  .world-city-pin--bangkok { left: 60%; top: 56%; }
+  .world-city-pin--chiang-mai { left: 52%; top: 42%; }
+  .world-city-pin--tokyo { left: 73%; top: 35%; }
+  .world-city-pin small { display: block; font-size: .46rem; }
+  .world-entry-list { padding-top: 705px; }
+  .world-entry { grid-template-columns: 23px 78px 1fr 30px; min-height: 105px; gap: 8px; padding: 9px; border-radius: 14px; }
+  .world-entry__glyph { width: 72px; }
+  .world-entry__copy strong { font-size: 1rem; }
+  .world-entry__copy em { font-size: .55rem; }
+
+  .city-world { min-height: 1040px; padding: 18px 18px 118px; }
+  .city-world__header { padding-top: 10px; }
+  .city-wordmark { margin-bottom: 42px; font-size: 1.25rem; }
+  .city-world__header h1 { font-size: 3.55rem; }
+  .city-world__header > p:not(.eyebrow):not(.city-wordmark):not(.city-coordinate) { width: 56%; margin-top: 7px; }
+  .city-fragment-stage { top: 130px; bottom: 220px; }
+  .city-tile { width: 100px; height: 137px; }
+  .city-tile--1 { --x:61vw;--y:4vh;--z:-4px;--r:5deg }
+  .city-tile--2 { --x:5vw;--y:27vh;--z:-16px;--r:-5deg }
+  .city-tile--3 { --x:55vw;--y:35vh;--z:-8px;--r:3deg }
+  .city-tile--4 { --x:9vw;--y:52vh;--z:-24px;--r:-4deg }
+  .city-semantic-card { width: 112px; min-height: 76px; }
+  .city-semantic-card--receipt { top: 43vh; left: 35vw; }
+  .city-semantic-card--map { top: 59vh; right: 5vw; }
+  .city-field-caption { top: 705px; bottom: auto; right: 18px; width: 58%; }
+  .city-world__paths { top: 810px; left: 18px; width: calc(100vw - 36px); }
+  .city-world__paths button { min-height: 74px; }
+
+  .fragment-field .field-header { top: 15px; left: 15px; right: 15px; }
+  .field-header h1 { font-size: 1.72rem; }
+  .field-search { height: 40px; }
+  .field-node { width: 91px; height: 121px; }
+  .field-city-label--bangkok { left: 5%; top: 34%; }
+  .field-city-label--tokyo { right: 4%; top: 28%; }
+  .field-city-label--chiang-mai { right: 3%; bottom: 19%; }
+
+  .discovery-detail { padding-left: 18px; padding-right: 18px; }
+  .discovery-growth { min-height: 790px; padding-top: 188px; }
+  .discovery-title-reveal { top: 30px; }
+  .discovery-title-reveal h1 { font-size: 2.28rem; line-height: 1.02; }
+  .discovery-time-node button { min-height: 124px; }
+  .discovery-source-record strong { font-size: .56rem; }
+  .discovery-explanation { grid-template-columns: 1fr; }
+
+  .inbox-page { padding: 18px 16px 118px; }
+  .inbox-wordmark { margin-bottom: 34px; font-size: 1.5rem; }
+  .inbox-page h1 { font-size: 1.95rem; }
+  .inbox-page header > p:last-child { font-size: .7rem; line-height: 1.5; }
+  .review-comparison { grid-template-columns: 1fr 32px 1fr; gap: 5px; margin-top: 21px; }
+  .review-source { min-height: 285px; padding: 10px; border-radius: 14px; }
+  .review-source__document { inset: 46px 8px 10px; padding: 10px; }
+  .review-source > span { font-size: .43rem; }
+  .review-source > strong { font-size: .68rem; }
+  .review-link { min-height: 0; }
+  .review-evidence > div { grid-template-columns: 72px 1fr; gap: 6px 10px; padding: 11px 12px; }
+  .review-evidence small { grid-column: 2; }
+  .review-choices button { min-height: 58px; font-size: .72rem; }
+  .inbox-queues { grid-template-columns: 1fr 1fr; }
+  .inbox-queues div { padding: 12px 4px; font-size: .62rem; }
+}

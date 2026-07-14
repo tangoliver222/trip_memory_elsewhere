@@ -5,6 +5,7 @@ import './styles/shell.css';
 import './styles/motion.css';
 import './styles/components.css';
 import './styles/pages.css';
+import './styles/visual-reset.css';
 import { renderAppShell, renderElseOrb } from './components/app-shell.js';
 import { renderNavigation } from './components/navigation.js';
 import { createActionController } from './controllers/action-controller.js';

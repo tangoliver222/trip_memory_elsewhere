@@ -287,6 +287,7 @@ export function createSemanticTarget(mode, count, payload = {}) {
     relations: createConnectionTargets,
     connection: createConnectionTargets,
     connections: createConnectionTargets,
+    inbox: createConnectionTargets,
     discovery: createDiscoveryTargets,
     'discovery-growth': createDiscoveryTargets,
     else: createElseOrbTargets,
