@@ -1,5 +1,7 @@
 # Elsewhere 全量重构交付说明
 
+> **已废止 · visual-pass-failed（2026-07-14）**：本文件记录冻结版本 `b634e62` 的旧交付判断，不再代表当前视觉验收结论。新的纠偏基线见 `docs/visual/visual-reset-baseline.md`。
+
 ## 交付结果
 
 主实现位于：
