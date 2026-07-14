@@ -6,11 +6,17 @@ import {
   Points,
   ShaderMaterial,
 } from 'three';
-import { createSemanticTarget } from './particle-targets.js';
+import { POOL_HALO, POOL_MAIN, createSemanticTarget } from './particle-targets.js';
 import { fragmentShader, vertexShader } from './shaders.js';
 
 let particlePoolSequence = 0;
 
+/**
+ * 单一粒子池。池按索引分层（与 particle-targets 对齐）：
+ *   主结构  —— 常规银灰
+ *   环境层  —— 更小更暗（景深尘埃）
+ *   强调层  —— 更大更亮，允许极少量暖灰（用户确认 / 锚点语义）
+ */
 export function createParticleSystem(profile, { reducedMotion = false } = {}) {
   const count = profile.particleCount;
   const geometry = new BufferGeometry();
@@ -21,17 +27,33 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
   const aPhase = new Float32Array(count);
   const aAmplitude = new Float32Array(count);
   const aColorMix = new Float32Array(count);
-  const aTargetIndex = new Float32Array(count);
+  const aLayer = new Float32Array(count);
+
+  const mainEnd = Math.floor(count * POOL_MAIN);
+  const haloEnd = Math.floor(count * POOL_HALO);
 
   for (let i = 0; i < count; i += 1) {
-    const random = (Math.sin((i + 1) * 91.913) * 43758.5453) % 1;
-    const normalized = Math.abs(random);
-    aRandom[i] = normalized;
-    aScale[i] = 0.24 + normalized * 0.72;
-    aPhase[i] = normalized * Math.PI * 2;
-    aAmplitude[i] = 0.18 + normalized * 0.8;
-    aColorMix[i] = i % 71 === 0 ? 0.72 : 0.018 + normalized * 0.075;
-    aTargetIndex[i] = i;
+    const random = Math.abs((Math.sin((i + 1) * 91.913) * 43758.5453) % 1);
+    aRandom[i] = random;
+    aPhase[i] = random * Math.PI * 2;
+    if (i >= haloEnd) {
+      // 强调层：锚点与确认语义
+      aScale[i] = 1.05 + random * 0.9;
+      aAmplitude[i] = 0.08 + random * 0.2;
+      aColorMix[i] = 0.34 + random * 0.3;
+      aLayer[i] = 2;
+    } else if (i >= mainEnd) {
+      // 环境层：极弱远尘
+      aScale[i] = 0.16 + random * 0.3;
+      aAmplitude[i] = 0.3 + random * 0.9;
+      aColorMix[i] = 0.01 + random * 0.04;
+      aLayer[i] = 1;
+    } else {
+      aScale[i] = 0.3 + random * 0.62;
+      aAmplitude[i] = 0.16 + random * 0.6;
+      aColorMix[i] = i % 97 === 0 ? 0.5 : 0.015 + random * 0.06;
+      aLayer[i] = 0;
+    }
   }
 
   geometry.setAttribute('position', new BufferAttribute(positions, 3));
@@ -41,21 +63,23 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
   geometry.setAttribute('aPhase', new BufferAttribute(aPhase, 1));
   geometry.setAttribute('aAmplitude', new BufferAttribute(aAmplitude, 1));
   geometry.setAttribute('aColorMix', new BufferAttribute(aColorMix, 1));
-  geometry.setAttribute('aTargetIndex', new BufferAttribute(aTargetIndex, 1));
+  geometry.setAttribute('aLayer', new BufferAttribute(aLayer, 1));
 
   const uniforms = {
     uTime: { value: 0 },
     uProgress: { value: 0 },
     uPositionRandom: { value: 0.16 },
     uDepth: { value: 1 },
-    uNoiseStrength: { value: 0.7 },
+    uNoiseStrength: { value: 0.55 },
     uPointSize: { value: 1.35 },
     uPixelRatio: { value: 1 },
     uReducedMotion: { value: reducedMotion ? 1 : 0 },
     uPulse: { value: 0 },
-    uOpacity: { value: 0.84 },
-    uCoolColor: { value: new Color('#d8e0de') },
-    uWarmColor: { value: new Color('#f0d29b') },
+    uOpacity: { value: 0.85 },
+    uFocus: { value: 0 },
+    uPointer: { value: { x: 0, y: 0 } },
+    uCoolColor: { value: new Color('#ccd3d0') },
+    uWarmColor: { value: new Color('#b8ad9b') },
   };
 
   const material = new ShaderMaterial({

@@ -4,7 +4,7 @@ export const vertexShader = /* glsl */`
   attribute float aPhase;
   attribute float aAmplitude;
   attribute float aColorMix;
-  attribute float aTargetIndex;
+  attribute float aLayer;
   attribute vec3 aTarget;
 
   uniform float uTime;
@@ -16,10 +16,13 @@ export const vertexShader = /* glsl */`
   uniform float uPixelRatio;
   uniform float uReducedMotion;
   uniform float uPulse;
+  uniform float uFocus;
+  uniform vec2 uPointer;
 
   varying float vAlpha;
   varying float vColorMix;
   varying float vDepth;
+  varying float vLayer;
 
   vec4 permute(vec4 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
   vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
@@ -70,19 +73,28 @@ export const vertexShader = /* glsl */`
   void main() {
     float eased = uProgress * uProgress * (3.0 - 2.0 * uProgress);
     vec3 transformed = mix(position, aTarget, eased);
-    float time = uTime * mix(0.04, 0.24, 1.0 - uReducedMotion);
+
+    // 进入 / 重组阶段的空间散布：simplex noise + 每粒子随机
+    float time = uTime * mix(0.05, 0.22, 1.0 - uReducedMotion);
     float noise = snoise(transformed * 0.09 + vec3(time + aPhase));
     float drift = (noise * aAmplitude * uNoiseStrength) + (aRandom - 0.5) * uPositionRandom;
     transformed += normalize(transformed + vec3(0.001)) * drift * (1.0 - uReducedMotion * 0.85);
     transformed.z *= uDepth;
 
     vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
+
+    // 指针视差：近景粒子被极轻微推开（空间回应交互）
+    vec2 pointerPush = uPointer * (1.0 - uReducedMotion) * 0.4;
+    mvPosition.xy += pointerPush * clamp((mvPosition.z + 46.0) / 46.0, 0.0, 1.0) * (aLayer == 1.0 ? 0.3 : 1.0);
+
     gl_Position = projectionMatrix * mvPosition;
-    float perspective = clamp(110.0 / max(1.0, -mvPosition.z), 0.38, 1.85);
-    gl_PointSize = min(5.0, uPointSize * aScale * uPixelRatio * perspective * (1.0 + uPulse * 0.35));
-    vAlpha = mix(0.24, 0.92, aScale) * smoothstep(100.0, 3.0, -mvPosition.z);
+    float perspective = clamp(110.0 / max(1.0, -mvPosition.z), 0.3, 2.0);
+    float focusBoost = 1.0 + uFocus * (aLayer == 2.0 ? 0.75 : 0.0);
+    gl_PointSize = min(5.5, uPointSize * aScale * uPixelRatio * perspective * focusBoost * (1.0 + uPulse * 0.35));
+    vAlpha = mix(0.2, 0.95, clamp(aScale, 0.0, 1.0)) * smoothstep(110.0, 4.0, -mvPosition.z);
     vColorMix = aColorMix;
     vDepth = perspective;
+    vLayer = aLayer;
   }
 `;
 
@@ -90,16 +102,20 @@ export const fragmentShader = /* glsl */`
   uniform vec3 uCoolColor;
   uniform vec3 uWarmColor;
   uniform float uOpacity;
+  uniform float uFocus;
   varying float vAlpha;
   varying float vColorMix;
   varying float vDepth;
+  varying float vLayer;
 
   void main() {
     vec2 centered = gl_PointCoord - vec2(0.5);
     float distanceToCenter = length(centered);
     float softAlpha = 1.0 - smoothstep(0.04, 0.5, distanceToCenter);
     float core = 1.0 - smoothstep(0.0, 0.11, distanceToCenter);
-    vec3 color = mix(uCoolColor, uWarmColor, clamp(vColorMix + core * 0.04, 0.0, 1.0));
-    gl_FragColor = vec4(color, softAlpha * vAlpha * uOpacity * clamp(vDepth, 0.45, 1.25));
+    vec3 color = mix(uCoolColor, uWarmColor, clamp(vColorMix, 0.0, 1.0));
+    color += core * 0.18; // 微弱高光核
+    float emphasis = vLayer == 2.0 ? (1.0 + uFocus * 0.6) : 1.0;
+    gl_FragColor = vec4(color, softAlpha * vAlpha * uOpacity * emphasis * clamp(vDepth, 0.4, 1.3));
   }
 `;

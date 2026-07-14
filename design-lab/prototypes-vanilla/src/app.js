@@ -28,7 +28,27 @@ const sceneManager = new MemorySceneManager();
 let sceneKey = '';
 let pageCleanup = null;
 let renderedRoute = null;
+let visualReadyTimer = null;
 gsap.registerPlugin(Flip);
+
+/**
+ * 截图就绪态：字体与关键入场动画稳定后才允许视觉回归截图。
+ * Playwright 等待 window.__ELSEWHERE_VISUAL_READY__ === true。
+ */
+window.__ELSEWHERE_VISUAL_READY__ = false;
+function scheduleVisualReady(route) {
+  window.__ELSEWHERE_VISUAL_READY__ = false;
+  delete document.documentElement.dataset.visualReady;
+  clearTimeout(visualReadyTimer);
+  const reduced = sceneManager.reducedMotion;
+  const firstWorld = route?.pageId === 'world-home' && !window.sessionStorage.getItem('elsewhere:world-formed');
+  const wait = reduced ? 160 : (firstWorld ? 3400 : 1900);
+  visualReadyTimer = setTimeout(async () => {
+    try { await document.fonts?.ready; } catch { /* noop */ }
+    window.__ELSEWHERE_VISUAL_READY__ = true;
+    document.documentElement.dataset.visualReady = 'true';
+  }, wait);
+}
 
 const debugApi = {};
 Object.defineProperties(debugApi, {
@@ -146,6 +166,7 @@ function updateShell() {
   });
   if (typeof cleanup === 'function') pageCleanup = cleanup;
   if (routeChanged) root.querySelector('#page-content-layer')?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  if (routeChanged || renderedRoute === null) scheduleVisualReady(route);
   renderedRoute = state.route;
   syncElseOrbPlacement(state);
 }

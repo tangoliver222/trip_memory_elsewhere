@@ -1,7 +1,7 @@
-::selection { color: var(--ink-0); background: var(--memory-warm-bright); }
+::selection { color: var(--bg-0); background: var(--text-1); }
 
 :focus-visible {
-  outline: 2px solid var(--memory-warm-bright);
+  outline: 2px solid var(--line-2);
   outline-offset: 4px;
 }
 
