@@ -192,7 +192,7 @@ function globe(count) {
       : Math.floor((count - haloEnd) * (city.weight / totalWeight));
     for (let k = 0; k < share; k += 1) {
       const i = cursor + k;
-      const spread = 0.035 + seeded(i, 14) * 0.05;
+      const spread = 0.016 + seeded(i, 14) * 0.02;
       const x = city.dir[0] + gaussian(i, 15) * spread;
       const y = city.dir[1] + gaussian(i, 16) * spread;
       const z = city.dir[2] + gaussian(i, 17) * spread;
@@ -227,7 +227,7 @@ function cityCluster(count, payload = {}) {
   const result = new Float32Array(count * 3);
   const mainEnd = Math.floor(count * POOL_MAIN);
   const haloEnd = Math.floor(count * POOL_HALO);
-  const streamShare = Math.floor(mainEnd * 0.34);
+  const streamShare = Math.floor(mainEnd * 0.42);
 
   // 主结构 A：S 形心流串联聚类（记忆在同一段旅行里流动）
   for (let i = 0; i < streamShare; i += 1) {

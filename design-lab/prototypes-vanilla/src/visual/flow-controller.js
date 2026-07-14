@@ -33,6 +33,8 @@ export function createFlowController({ timelineFactory = (options) => gsap.timel
         timeline
           .fromTo(uniforms.uPositionRandom || {}, { value: first ? 1.4 : 0.4 }, { value: 0.16, duration: gather }, 0)
           .fromTo(uniforms.uNoiseStrength || {}, { value: first ? 2.2 : 0.9 }, { value: 0.55, duration: gather }, 0)
+          .to(uniforms.uPointSize || {}, { value: 1.7, duration: gather }, 0)
+          .to(uniforms.uOpacity || {}, { value: 0.95, duration: gather }, 0)
           .to(uniforms.uProgress || {}, { value: 1, duration: gather }, 0)
           .add(() => options.onGlobe?.())
           .to(uniforms.uProgress || {}, { value: 1, duration: settle })
@@ -102,6 +104,7 @@ export function createFlowController({ timelineFactory = (options) => gsap.timel
           .to(uniforms.uDepth || {}, { value: options.depth || 1, duration: 0.7 }, 0)
           .to(uniforms.uNoiseStrength || {}, { value: options.noiseStrength ?? 0.55, duration: 0.7 }, 0)
           .to(uniforms.uOpacity || {}, { value: options.opacity ?? 0.88, duration: 0.6 }, 0)
+          .to(uniforms.uPointSize || {}, { value: options.pointSize ?? 1.35, duration: 0.6 }, 0)
           .to(uniforms.uFocus || {}, { value: options.focus ?? 0, duration: 0.6 }, 0);
       });
     },

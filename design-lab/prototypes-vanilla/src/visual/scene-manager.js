@@ -190,8 +190,30 @@ export class MemorySceneManager {
     });
   }
 
+  /** 把点云地球对齐到页面内的 stage 元素（位置 + 缩放），DOM 与粒子共享坐标系。 */
+  alignWorldToElement(element, { fill = 0.98 } = {}) {
+    if (!element?.getBoundingClientRect || !this.canvas?.getBoundingClientRect || !this.group) return;
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const rect = element.getBoundingClientRect();
+    if (!rect.width || !canvasRect.width) return;
+    const center = this.worldFromViewport(
+      rect.left + rect.width / 2 - canvasRect.left,
+      rect.top + rect.height / 2 - canvasRect.top,
+      0,
+    );
+    const height = Math.max(1, this.canvas.clientHeight || 1);
+    const visibleHeight = 2 * DEFAULT_CAMERA_Z * Math.tan((this.camera?.fov ?? 44) * Math.PI / 360);
+    const pxPerUnit = height / visibleHeight;
+    const radiusPx = Math.min(rect.width * 0.5 * fill, rect.height * 0.62);
+    const scale = (radiusPx / pxPerUnit) / GLOBE_RADIUS;
+    this.group.position.set(center.x, center.y, 0);
+    this.group.scale.setScalar(scale);
+    this.controls?.target?.set?.(center.x, center.y, 0);
+  }
+
   /** 城市 pin：每帧把 lat/lng 投影到屏幕，驱动 DOM 标签跟随点云地球。 */
-  trackCityPins(pins) {
+  trackCityPins(pins, container = null) {
+    this.pinContainer = container;
     this.trackedPins = (pins || []).map((pin) => ({
       ...pin,
       dir: dirFromLatLng(pin.lat, pin.lng),
@@ -202,6 +224,15 @@ export class MemorySceneManager {
     if (!this.trackedPins.length || !this.camera || !this.canvas || !this._pinVecA) return;
     const width = this.canvas.clientWidth || 1;
     const height = this.canvas.clientHeight || 1;
+    // pin 元素相对自己的容器定位，投影坐标相对 canvas —— 每帧换算一次偏移
+    let offsetX = 0;
+    let offsetY = 0;
+    if (this.pinContainer?.getBoundingClientRect && this.canvas.getBoundingClientRect) {
+      const canvasRect = this.canvas.getBoundingClientRect();
+      const containerRect = this.pinContainer.getBoundingClientRect();
+      offsetX = containerRect.left - canvasRect.left;
+      offsetY = containerRect.top - canvasRect.top;
+    }
     this.trackedPins.forEach((pin) => {
       if (!pin.el?.style) return;
       this._pinVecA.set(pin.dir[0] * GLOBE_RADIUS, pin.dir[1] * GLOBE_RADIUS, pin.dir[2] * GLOBE_RADIUS);
@@ -211,8 +242,8 @@ export class MemorySceneManager {
       const toCamera = this.camera.position.clone().sub(this.group.position).normalize();
       const facing = this._pinVecB.dot(toCamera);
       this._pinVecA.project(this.camera);
-      const x = (this._pinVecA.x * 0.5 + 0.5) * width;
-      const y = (-this._pinVecA.y * 0.5 + 0.5) * height;
+      const x = (this._pinVecA.x * 0.5 + 0.5) * width - offsetX;
+      const y = (-this._pinVecA.y * 0.5 + 0.5) * height - offsetY;
       pin.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
       pin.el.style.opacity = facing > 0.18 ? '1' : '0';
       pin.el.style.pointerEvents = facing > 0.18 ? 'auto' : 'none';
@@ -222,6 +253,14 @@ export class MemorySceneManager {
   target(mode, payload) {
     const array = createSemanticTarget(mode, this.particles.count, payload);
     this.particles.setTarget(array);
+  }
+
+  /** 页面渲染后用 DOM 锚点重新对齐粒子目标（保持当前 flow 语义，仅补一段短重组）。 */
+  retarget(mode, payload = {}) {
+    if (!this.particles) return this;
+    this.target(mode, payload);
+    this.flows.morph(this.particles, { duration: 0.9, reducedMotion: this.reducedMotion, focus: payload.focus ?? 0 });
+    return this;
   }
 
   setStaticFallback(visible) {
@@ -244,7 +283,10 @@ export class MemorySceneManager {
     if (!this.group) return;
     const offset = WORLD_MODES.has(mode) ? WORLD_GROUP_OFFSET : { x: 0, y: 0, z: 0 };
     this.group.position.set(offset.x, offset.y, offset.z);
-    if (!WORLD_MODES.has(mode)) this.group.rotation.set(0, 0, 0);
+    if (!WORLD_MODES.has(mode)) {
+      this.group.rotation.set(0, 0, 0);
+      this.group.scale.setScalar(1);
+    }
     this.controls?.target?.set?.(offset.x, offset.y, offset.z);
   }
 

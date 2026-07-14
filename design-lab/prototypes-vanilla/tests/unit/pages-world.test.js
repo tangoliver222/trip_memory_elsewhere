@@ -17,13 +17,22 @@ const paths = [
 const state = createInitialState();
 
 for (const path of paths) {
-  test(`${path} renders one main action and no internal id`, () => {
+  test(`${path} renders one main action and no internal id leaked as copy`, () => {
     const view = renderRoute(path, state);
     assert.equal((view.html.match(/data-primary-action/g) || []).length, 1);
-    assert.doesNotMatch(view.html, /frag-|rel-|scene-/);
+    // 内部 id 只允许出现在 data-* 属性里（统一 Fragment Lens 入口），不允许成为可见文案
+    const visibleText = view.html.replaceAll(/<[^>]*>/g, ' ');
+    assert.doesNotMatch(visibleText, /frag-|rel-|scene-/);
     assert.match(view.html, /data-page-id=/);
   });
 }
+
+test('city home opens fragments through the unified Fragment Lens only', () => {
+  const html = renderRoute('#/world/city/bangkok', state).html;
+  const lensOpeners = html.match(/data-action="open-lens"/g) || [];
+  assert.ok(lensOpeners.length >= 6, 'city clusters expose their originals through open-lens');
+  assert.doesNotMatch(html, /data-action="open-original"/);
+});
 
 test('world and cities share the world scene and real coordinates', () => {
   assert.equal(renderRoute('#/world', state).sceneMode, 'world');
