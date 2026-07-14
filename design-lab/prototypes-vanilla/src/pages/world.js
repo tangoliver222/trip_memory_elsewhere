@@ -55,7 +55,6 @@ export function renderWorldHome() {
         <p class="world-happening will-flow" data-flow="3">世界正在发生：${pending} 个连接待你判断 · ${newDiscoveries} 条发现新显影 · ${processing} 组照片正在整理</p>
 
         <button class="world-entry will-flow" data-flow="4" type="button" data-action="navigate" data-route="#/world/import">
-          <span class="world-entry__index">02</span>
           <div class="world-entry__visual world-entry__visual--import" aria-hidden="true">
             <i class="mini-photo"></i><i class="mini-receipt"></i><i class="mini-map"></i>
           </div>
@@ -68,7 +67,6 @@ export function renderWorldHome() {
         </button>
 
         <button class="world-entry will-flow" data-flow="5" type="button" data-action="navigate" data-route="#/world/inbox">
-          <span class="world-entry__index">03</span>
           <div class="world-entry__visual world-entry__visual--inbox" aria-hidden="true">
             <svg viewBox="0 0 64 40"><circle cx="14" cy="20" r="3.4"/><circle cx="50" cy="20" r="3.4"/><path d="M18 20 H28 M36 20 H46"/><text x="32" y="24">?</text></svg>
           </div>
@@ -81,7 +79,6 @@ export function renderWorldHome() {
         </button>
 
         <button class="world-entry will-flow" data-flow="6" type="button" data-action="navigate" data-route="#/world/fragments">
-          <span class="world-entry__index">04</span>
           <div class="world-entry__visual world-entry__visual--field" aria-hidden="true">
             <i style="--gx:22%;--gy:30%"></i><i style="--gx:66%;--gy:22%"></i><i style="--gx:48%;--gy:66%"></i>
           </div>
@@ -114,13 +111,14 @@ export function renderWorldHome() {
       if (reduced) {
         gsap.set(targets, { opacity: 1, y: 0 });
       } else {
-        gsap.fromTo(targets, { opacity: 0, y: 16 }, {
-          opacity: 1,
-          y: 0,
-          duration: 0.9,
-          ease: 'power3.out',
-          stagger: 0.14,
-          delay: firstVisit ? 2.1 : 0.3,
+        const brand = pageRoot.querySelector('.world-brand');
+        const lede = pageRoot.querySelector('.globe-lede');
+        const delay = firstVisit ? 0.8 : 0.15;
+        gsap.fromTo(brand, { opacity: 0, y: -8 }, { opacity: 1, y: 0, duration: 0.5, ease: 'power3.out', delay });
+        gsap.fromTo(lede, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.6, ease: 'power3.out', delay: firstVisit ? 1.4 : 0.25 });
+        gsap.fromTo(targets, { opacity: 0, y: 20 }, {
+          opacity: 1, y: 0, duration: 0.8, ease: 'power3.out', stagger: 0.1,
+          delay: firstVisit ? 2.4 : 0.35,
         });
       }
       return () => sceneManager.trackCityPins([]);
@@ -231,11 +229,14 @@ export function renderCityHome(routeId = 'bangkok') {
 
       const reduced = reducedMotionQuery();
       const tiles = pageRoot.querySelectorAll('.city-tile, .city-cluster__name');
+      const willFlow = pageRoot.querySelectorAll('.will-flow');
       if (reduced) {
-        gsap.set([...tiles, ...pageRoot.querySelectorAll('.will-flow')], { opacity: 1, y: 0 });
+        gsap.set([...tiles, ...willFlow], { opacity: 1, y: 0 });
       } else {
-        gsap.fromTo(pageRoot.querySelectorAll('.will-flow'), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out', stagger: 0.12 });
-        gsap.fromTo(tiles, { opacity: 0, y: 22, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 1, ease: 'power3.out', stagger: 0.07, delay: 0.35 });
+        gsap.fromTo(willFlow, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.7, ease: 'power3.out', stagger: 0.1, delay: 0.1 });
+        gsap.fromTo(tiles, { opacity: 0, y: 24, scale: 0.92 }, {
+          opacity: 1, y: 0, scale: 1, duration: 1.1, ease: 'power3.out', stagger: 0.08, delay: 0.35,
+        });
       }
       return () => {};
     },

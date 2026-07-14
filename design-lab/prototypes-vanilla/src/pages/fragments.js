@@ -32,6 +32,12 @@ export function renderFragmentField(state) {
         </div>
       </header>
       <section class="field-viewport" data-field-viewport aria-label="可拖拽和缩放的碎片空间">
+        <div class="field-cluster-labels" aria-hidden="true">
+          <span class="field-cluster-label field-cluster-label--bangkok">Bangkok · 63 碎片</span>
+          <span class="field-cluster-label field-cluster-label--tokyo">Tokyo · 81 碎片</span>
+          <span class="field-cluster-label field-cluster-label--chiangmai">Chiang Mai · 28 碎片</span>
+          <span class="field-cluster-label field-cluster-label--unplaced">未安放</span>
+        </div>
         <div class="field-depth-grid" aria-hidden="true"><span>NEAR</span><span>MID</span><span>DEEP</span></div>
         ${fragments.map((fragment, index) => {
           const node = positions[fragment.id];
@@ -87,10 +93,10 @@ export function renderInboxPage() {
   return {
     sceneMode: 'quiet-tool', scenePayload: { target: 'quiet' }, afterRender: null,
     html: `<main class="page inbox-page" data-page-id="world-inbox">
-      <header><p class="eyebrow">收件箱 · 一次只做一个判断</p><h1>这张交通截图是否也靠近 Chao Phraya Ferry？</h1><p>截图文字包含 ferry，但缺少可确认的具体码头。你的选择会改变地点连接，不会修改原件。</p></header>
-      <section class="review-comparison"><div class="review-source review-source--pending"><span>22 OCT · 18:04</span><strong>交通截图</strong><small>具体码头待确认</small></div><div class="review-link" aria-hidden="true"><i></i><span>?</span><i></i></div><div class="review-source"><img src="/assets/bangkok-photo-02-riverside.jpg" alt="已确认的河岸原件"><span>18 OCT · 17:59</span><strong>Chao Phraya Ferry</strong></div></section>
+      <header class="inbox-header"><p class="eyebrow">收件箱 · 一次只做一个判断</p><h1>这张交通截图<br>是否也靠近<br>Chao Phraya Ferry？</h1><p>截图文字包含 ferry，但缺少可确认的具体码头。你的选择会改变地点连接，不会修改原件。</p></header>
+      <section class="review-comparison"><div class="review-source review-source--pending"><span>22 OCT · 18:04</span><strong>交通截图</strong><small>具体码头待确认</small></div><div class="review-link" aria-hidden="true"><i></i><span class="review-link__question">?</span><i></i></div><div class="review-source"><img src="/assets/bangkok-photo-02-riverside.jpg" alt="已确认的河岸原件"><span>18 OCT · 17:59</span><strong>Chao Phraya Ferry</strong></div></section>
       <div class="review-choices">${review.choices.map((choice, index) => `<button type="button" data-review-choice data-action="review-choice" data-value="${index}">${escapeHtml(choice)}</button>`).join('')}</div>
-      <section class="inbox-queues"><div><span>正在整理</span><strong>${escapeHtml(processingItems[0].label)}</strong></div><div><span>需要原件</span><strong>${escapeHtml(exceptions[0].label)}</strong></div></section>
+      <section class="inbox-queues"><div class="inbox-queue-item"><span>正在整理</span><strong>${escapeHtml(processingItems[0].label)}</strong></div><div class="inbox-queue-item"><span>需要原件</span><strong>${escapeHtml(exceptions[0].label)}</strong></div></section>
       ${primary('回到全部碎片', '#/world/fragments')}
     </main>`,
   };
