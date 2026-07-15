@@ -1,12 +1,16 @@
 # Else AI Service v1 — 实施文档
 
-**状态：** v1 完成（真实模型调用待使用者配置 API key 后冒烟）
+**状态：** legacy 查询原型冻结；未挂载到当前 foundation app
 **日期：** 2026-07-15
 **上位依据：** `Elsewhere_Google_First_Technical_Architecture_v1.0.md` §10（Else Agent 架构）、§6（模型路由）、§20（不推荐路径）
 **范围声明：** 只包含 Else AI 服务端。不修改任何前端代码；前端对接由前端同学按本文 §4 契约自行实现。
 
 > 2026-07-16 审计结论：本实现保留为 legacy 查询原型，目录已迁移到
 > `services/backend`。在 Auth、真实 Repository 和结构化来源验证完成前不得公开部署。
+> 当前可运行边界与验证命令以 `services/backend/README.md` 和
+> `docs/implementation/backend-foundation-v1.md` 为准。本文件以下接口、目录和运行说明
+> 记录原型交付时的历史形态，不代表当前公开 API。Module 1 已建立 Firestore Repository
+> 基础，但 legacy Else 仍读取前端 fixtures，二者尚未连接。
 
 ---
 
@@ -131,16 +135,10 @@ event: error   data: {"message":"…"}             # 仅出错时
 | `PORT` | 否 | `8787` | Cloud Run 会注入 |
 | `ELSE_CORS_ORIGIN` | 否 | `*` | 生产收紧为前端域名 |
 
-## 6. 运行与验证
+## 6. 历史运行说明
 
-```bash
-cd services/backend
-npm install
-cp .env.example .env   # 填入 GEMINI_API_KEY
-npm run dev            # http://127.0.0.1:8787
-npm test               # 单元测试（无网络）
-node scripts/smoke.mjs # 真实调用冒烟（需服务运行中）
-```
+原型 smoke 脚本仍保留供后续接线参考，但 legacy Else 路由当前未挂载。不要以本节历史
+接口说明部署服务；实际支持的本地命令见 `services/backend/README.md`。
 
 ## 7. 实施记录
 
@@ -161,4 +159,4 @@ node scripts/smoke.mjs # 真实调用冒烟（需服务运行中）
 
 ## 8. 后续路线（P1，不在本次范围）
 
-Firestore 数据源实现 → Auth/App Check/限流 → 会话落库（TTL）→ 工具型写操作（confirm_relation 等，走事务 API）→ ADK + Agent Engine 编排 → 向量检索接入（Firestore Vector Search）→ Cloud Run 部署流水线。
+Auth Boundary → App Check/限流 → 导入链路 → legacy Else 与 Repository 接线 → 会话落库（TTL）→ 工具型写操作（confirm_relation 等，走事务 API）→ ADK + Agent Engine 编排 → 向量检索接入（Firestore Vector Search）→ Cloud Run 部署流水线。

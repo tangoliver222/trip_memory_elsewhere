@@ -7,9 +7,10 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "node --env-file=.env --watch src/server.js",
+    "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
+    "test:emulator": "firebase emulators:exec --project demo-elsewhere --config ../../firebase/firebase.json --only firestore,storage \"node --test --test-concurrency=1 test/rules/firestore.rules.test.js test/rules/storage.rules.test.js test/contract/firestore-repository.test.js\"",
     "test:legacy": "node --test test/legacy/*.test.js"
   },
   "dependencies": {
