@@ -1,0 +1,41 @@
+﻿模块/页面,核心数据,客户端/前端,Google 数据与托管,Google 后端/事件,模型/AI,关键验收
+价值说明,Remote Config 内容,Vanilla/PWA,"Firebase Hosting, Remote Config",Analytics event,无必需模型,10秒理解价值
+权限说明,user settings,Auth/App Check UI,"Firestore, Auth, App Check",Cloud Run permission versioning,无,真实说明读取范围
+首次/日常导入,"importBatch, fragments","Photos Picker, resumable upload","Storage, Firestore","Cloud Run, Eventarc, Pub/Sub",无/轻量分类,原件先保存
+Processing,batch status,Firestore realtime,Firestore,"Pub/Sub, Tasks, Cloud Run","Document AI, Gemini Flash, Embeddings",可离开等待
+第一条关系,"connection, evidence",Evidence UI,"Firestore, Storage",Connection service,Flash/Pro,"来源可见, 可确认"
+世界首页,"cities, stats, recentJourney",Three.js globe,"Firestore, Maps JS",summary precompute,无实时LLM,数据变化视觉变化
+城市列表,"cities, journeys",Globe/List,"Firestore, Maps",Cloud Run counters,预计算摘要,所有城市有真实状态
+城市世界,"clusters, fragments, places",Data-driven particle clusters,"Firestore, Storage, Maps",clustering service,Flash/Pro offline,不同数据量不穿帮
+全部碎片,"fragments, clusters, vectors",Pan/zoom/LOD/Lens,"Firestore, Storage, Vector Search",Search API,"Embeddings, Else",全库空间感
+Fragment Lens,fragment + refs,Bottom sheet / Flip,"Firestore, Storage",Object API,无实时生成事实,权威对象视图
+原件查看,original object,Fullscreen viewer,Storage,Signed/access-controlled read,无,原始比例/返回状态
+入库回执,batch result,Result composition,Firestore,Batch coordinator,Flash/Pro summary,明确交付变化
+收件箱,"inboxItems, connection candidates",Decision UI,Firestore,"Transactional API, Tasks",规则/Pro explanation,是/不是/稍后
+City Capsule,"scenes, discoveries, notes",Editorial reader,"Firestore, Storage",Capsule job,Gemini Pro,"来源绑定, 不推断情绪"
+时间视角,"visits, scenes",Timeline,"Firestore, Time Zone API",Context service,预计算节奏,时间与原件联动
+地点视角,"places, visits",Maps JS,"Firestore, Places, Geocoding",Place resolution,Flash辅助消歧,真实坐标/候选
+连接视角/详情,"connections, evidence",SVG + particles,Firestore,Connection service,Pro仅冲突,路径绑定真实节点
+场景详情,"scene, fragments",Source timeline,"Firestore, Storage",Scene service,Flash observation,一次事件可追溯
+地点详情,"place, visits",Map + visits,"Firestore, Places",Place service,Cross-trip pattern,多次到访
+发现首页,discoveries,Discovery compositions,Firestore,Discovery service,Pro offline,少量高价值
+发现详情,"evidence, connections",Evidence-first reveal,"Firestore, Storage",Discovery API,Gemini Pro,先证据后标题
+跨旅程,"journeys, embeddings",Dual journey view,"Firestore, Vector Search, BigQuery",Discovery batch job,Pro,事实呼应
+未决发现,"candidate, missing evidence",Unresolved UI,Firestore,Candidate service,Pro/规则,合法保持未决
+Else Quick,"scope, suggestions",Overlay/SSE,Firestore,Cloud Run tool API,Qwen/Flash router,不重播底层页面
+Else Answer,evidence pack,Streaming answer,"Firestore, Storage, Maps","ADK, Agent Engine, Cloud Run",Flash/Pro,直接答案+来源
+Else Sources,structured results,Object grouped list,Firestore/Storage,Tool services,无,回到权威对象
+档案/搜索,"filters, vectors",Search UI,Firestore Vector Search,Search API,Embeddings,结构化+语义混合
+批量管理,selected fragments,Batch UI,Firestore,"Cloud Run, Tasks",无,不批量确认低置信关系
+我的首页,"counters, settings",Utility dashboard,Firestore,Counter aggregation,无,不是内容Feed
+我的书写,notes + refs,Warm authored UI,"Firestore, Storage",Note API,可选Flash辅助但不代写,文字关联对象
+隐私/权限,privacy settings,Tool pages,Firestore/Auth/App Check,Cloud Run audit,无,真实控制
+存储/同步,usage counters,Storage UI,"Storage, Firestore",Usage aggregator,无,解释原件/派生/缓存
+AI偏好,preference,Example selector,"Firestore, Remote Config",Model config API,模型别名,不改变事实
+通知,notification prefs,Web push UI,"Firestore, FCM",notification-service,无,仅高价值事件
+分享/导出,export config,Preview UI,Storage temp output,Cloud Run Jobs/Workflows,Pro可选摘要,默认脱敏
+删除,impact + status,Confirmation UI,"Firestore, Storage","Workflows, Tasks",无,完整删除与审计
+合并/拆分,affected objects,Source grouping UI,Firestore,"Transactional API, Pub/Sub",Pro可解释影响,版本可回滚
+冲突处理,contradicting evidence,Evidence comparison,Firestore,Conflict service,Gemini Pro,可保持未决
+重复处理,"hashes, embeddings",Duplicate UI,"Firestore, Storage",Dedupe service,Multimodal embedding,不静默删除
+分析与评估,"events, modelRuns",N/A,BigQuery,Analytics export,Vertex AI Eval,不复制完整私密内容
