@@ -5,6 +5,9 @@
 **上位依据：** `Elsewhere_Google_First_Technical_Architecture_v1.0.md` §10（Else Agent 架构）、§6（模型路由）、§20（不推荐路径）
 **范围声明：** 只包含 Else AI 服务端。不修改任何前端代码；前端对接由前端同学按本文 §4 契约自行实现。
 
+> 2026-07-16 审计结论：本实现保留为 legacy 查询原型，目录已迁移到
+> `services/backend`。在 Auth、真实 Repository 和结构化来源验证完成前不得公开部署。
+
 ---
 
 ## 1. 本次要做什么（范围）
@@ -17,7 +20,7 @@
 ```
 
 ### 明确做
-- 独立 Node 服务 `services/else-service/`（Cloud Run-ready，含 Dockerfile）；
+- 独立 Node 服务原型 `services/backend/`（含 Dockerfile，但审计后暂不允许公开部署）；
 - 浏览器**不直连**模型（总架构"不推荐 1"）：前端只调本服务；
 - 模型别名路由：`FAST_MULTIMODAL` / `DEEP_REASONING`，模型 ID 只存在于环境变量，业务代码零硬编码（总架构 §6）；
 - 证据包：按页面范围（world/city/fragment/discovery/inbox…）从数据源取真实对象，拼装带 ID 的证据行；
@@ -47,7 +50,7 @@
 ## 3. 目录结构
 
 ```text
-services/else-service/
+services/backend/
 ├─ package.json            # type:module，依赖仅 @google/genai
 ├─ .env.example            # 全部环境变量及说明
 ├─ README.md               # 快速启动
@@ -131,7 +134,7 @@ event: error   data: {"message":"…"}             # 仅出错时
 ## 6. 运行与验证
 
 ```bash
-cd services/else-service
+cd services/backend
 npm install
 cp .env.example .env   # 填入 GEMINI_API_KEY
 npm run dev            # http://127.0.0.1:8787

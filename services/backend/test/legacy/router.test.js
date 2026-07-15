@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pickAlias } from '../src/router.js';
+import { pickAlias } from '../../src/router.js';
 
 test('简单事实问题走 FAST', () => {
   assert.equal(pickAlias('10 月 18 日我在哪里？', 10), 'FAST_MULTIMODAL');

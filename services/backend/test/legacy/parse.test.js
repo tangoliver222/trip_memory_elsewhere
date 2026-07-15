@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TokenGate, parseTrailer, validateSources } from '../src/answer.js';
-import { resolveScope } from '../src/scope.js';
+import { TokenGate, parseTrailer, validateSources } from '../../src/answer.js';
+import { resolveScope } from '../../src/scope.js';
 
 test('TokenGate：正文放行，尾部缓冲，分隔符跨 chunk 也能切开', () => {
   const gate = new TokenGate('---ELSE---');

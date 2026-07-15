@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveScope } from '../src/scope.js';
-import { config } from '../src/config.js';
+import { resolveScope } from '../../src/scope.js';
+import { config } from '../../src/config.js';
 
 test('world scope 汇总城市、发现与待判断，且不超过证据上限', () => {
   const pack = resolveScope({ type: 'world' });
