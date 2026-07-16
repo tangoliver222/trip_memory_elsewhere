@@ -212,6 +212,112 @@ test('processing summaries partition eligible work and bind every top-level coun
   });
 });
 
+const sourceBoundSummary = (overrides = {}) => ({
+  deterministic: {
+    processorName: 'deterministic-media',
+    processorVersion: 'v1',
+    eligible: 1,
+    running: 1,
+    succeeded: 0,
+    failedRetryable: 0,
+    failedTerminal: 0,
+    unsupportedCapabilities: 0,
+    updatedAt: '2026-07-16T00:02:00.000Z',
+    ...overrides,
+  },
+});
+
+const uploadsInStates = (states) => Object.fromEntries(states.map((state, index) => {
+  const fragmentId = `frag_${String(index).padStart(8, '0')}`;
+  return [fragmentId, makeUploadItem({
+    fragmentId,
+    state,
+    finalizedGeneration: state === 'pending' ? null : `generation-${index}`,
+    failureCode: state === 'failed' ? 'ingestion/invalid-original' : null,
+  })];
+}));
+
+const sourceBoundCases = [
+  {
+    name: 'eligible work above finalized uploads',
+    uploads: uploadsInStates(['finalized', 'pending']),
+    processingSummary: sourceBoundSummary({ eligible: 2, running: 2 }),
+    previousCounters: { saved: 0, processed: 0, failed: 0, needsReview: 0 },
+    derived: {
+      status: 'open',
+      uploadStatus: 'pending',
+      counters: { saved: 1, processed: 0, failed: 0, needsReview: 0 },
+    },
+  },
+  {
+    name: 'upload and terminal failures above input count',
+    uploads: uploadsInStates(['failed', 'pending']),
+    processingSummary: sourceBoundSummary({
+      eligible: 2,
+      running: 0,
+      failedTerminal: 2,
+    }),
+    previousCounters: { saved: 0, processed: 0, failed: 0, needsReview: 0 },
+    derived: {
+      status: 'open',
+      uploadStatus: 'pending',
+      counters: { saved: 0, processed: 0, failed: 3, needsReview: 0 },
+    },
+  },
+  {
+    name: 'review work above derived processed count',
+    uploads: uploadsInStates(['finalized']),
+    processingSummary: sourceBoundSummary(),
+    previousCounters: { saved: 0, processed: 0, failed: 0, needsReview: 1 },
+    derived: {
+      status: 'processing',
+      uploadStatus: 'complete',
+      counters: { saved: 1, processed: 0, failed: 0, needsReview: 1 },
+    },
+  },
+  {
+    name: 'pending-only upload with succeeded processing',
+    uploads: uploadsInStates(['pending']),
+    processingSummary: sourceBoundSummary({ running: 0, succeeded: 1 }),
+    previousCounters: { saved: 0, processed: 0, failed: 0, needsReview: 0 },
+    derived: {
+      status: 'open',
+      uploadStatus: 'pending',
+      counters: { saved: 0, processed: 1, failed: 0, needsReview: 0 },
+    },
+  },
+  {
+    name: 'terminal processing without a finalized source',
+    uploads: uploadsInStates(['pending']),
+    processingSummary: sourceBoundSummary({ running: 0, failedTerminal: 1 }),
+    previousCounters: { saved: 0, processed: 0, failed: 0, needsReview: 0 },
+    derived: {
+      status: 'open',
+      uploadStatus: 'pending',
+      counters: { saved: 0, processed: 0, failed: 1, needsReview: 0 },
+    },
+  },
+];
+
+for (const scenario of sourceBoundCases) {
+  test(`import batch parser rejects ${scenario.name}`, () => {
+    assert.throws(() => importBatchDomain.parseImportBatch(makePendingBatch({
+      inputCount: Object.keys(scenario.uploads).length,
+      uploads: scenario.uploads,
+      processingSummary: scenario.processingSummary,
+      ...scenario.derived,
+    })));
+  });
+
+  test(`batch state derivation rejects ${scenario.name}`, () => {
+    assert.throws(() => importBatchDomain.deriveImportBatchState(
+      scenario.uploads,
+      scenario.previousCounters,
+      scenario.processingSummary,
+    ));
+  });
+}
+
 test('fragment requires authoritative storage facts and complete source descriptor', () => {
   const fragment = makeUploadedFragment();
   assert.deepEqual(parseFragment(fragment), fragment);

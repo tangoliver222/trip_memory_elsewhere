@@ -925,17 +925,21 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
         updatedAt: '2026-07-16T00:00:10.000Z',
       },
     };
+    const finalizedUpload = makeUploadItem({
+      state: 'finalized',
+      finalizedGeneration: fragment.storage.generation,
+      failureCode: null,
+    });
     const futureBatch = makePendingBatch({
-      counters: { saved: 0, processed: 1, failed: 0, needsReview: 1 },
+      status: 'completed',
+      uploadStatus: 'complete',
+      counters: { saved: 1, processed: 1, failed: 0, needsReview: 1 },
       processingSummary: activeSummary,
+      uploads: { [fragment.id]: finalizedUpload },
     });
     const repository = await createRepository();
     await repository.createImportBatch(UID, futureBatch);
-    await repository.finalizeOriginal(UID, finalizeInputFor(
-      futureBatch,
-      fragment,
-      '2026-07-16T00:00:30.000Z',
-    ));
+    await repository.createFragment(UID, fragment);
     const oldClaim = claimInput();
     await repository.claimProcessingTask(UID, oldClaim);
     await repository.registerContentHash(UID, registrationInputFor(oldClaim));
