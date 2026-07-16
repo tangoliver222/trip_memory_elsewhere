@@ -12,7 +12,7 @@ import {
   makeProcessingTask,
 } from '../fixtures/processing.js';
 
-const UID = 'user_alpha';
+let UID = 'user_alpha';
 const CLAIMED_AT = '2026-07-16T00:01:00.000Z';
 const SOFT_DEADLINE_AT = '2026-07-16T00:04:00.000Z';
 const LEASE_EXPIRES_AT = '2026-07-16T00:05:00.000Z';
@@ -30,8 +30,8 @@ const PERCEPTUAL_BANDS = [
   '7:00',
 ];
 
-const fragment = makeUploadedFragment();
-const batch = makePendingBatch();
+let fragment = makeUploadedFragment();
+let batch = makePendingBatch();
 const sourceRevisionFor = (fragmentInput) => ({
   bucket: fragmentInput.storage.bucket,
   objectName: fragmentInput.storage.originalPath,
@@ -69,7 +69,60 @@ function claimInputFor(fragmentInput, batchInput, overrides = {}) {
 }
 
 const claimInput = (overrides = {}) => claimInputFor(fragment, batch, overrides);
-const taskId = claimInput().taskId;
+let taskId = claimInput().taskId;
+
+function useTestNamespace(index) {
+  const suffix = String(index).padStart(8, '0');
+  UID = `user_processing_${suffix}`;
+  const batchId = `batch_processing_${suffix}`;
+  const fragmentId = `frag_processing_${suffix}`;
+  batch = makePendingBatch({
+    id: batchId,
+    ownerId: UID,
+    uploads: {
+      [fragmentId]: makeUploadItem({
+        ownerId: UID,
+        batchId,
+        fragmentId,
+      }),
+    },
+  });
+  fragment = makeUploadedFragment({
+    id: fragmentId,
+    ownerId: UID,
+    batchId,
+  });
+  taskId = claimInput().taskId;
+  return Object.freeze({ ownerId: UID, batchId });
+}
+
+const makeScopedUploadItem = (overrides = {}) => makeUploadItem({
+  fragmentId: fragment.id,
+  ownerId: UID,
+  batchId: batch.id,
+  ...overrides,
+});
+
+const makeScopedPendingBatch = (overrides = {}) => makePendingBatch({
+  id: batch.id,
+  ownerId: UID,
+  ...overrides,
+});
+
+const makeScopedUploadedFragment = (overrides = {}) => makeUploadedFragment({
+  id: fragment.id,
+  ownerId: UID,
+  batchId: batch.id,
+  ...overrides,
+});
+
+const makeScopedProcessingTask = (overrides = {}) => makeProcessingTask({
+  ownerId: UID,
+  fragmentId: fragment.id,
+  batchId: batch.id,
+  sourceRevision: sourceRevisionFor(fragment),
+  ...overrides,
+});
 
 const finalizeInputFor = (batchInput, fragmentInput, updatedAt) => ({
   batchId: batchInput.id,
@@ -93,14 +146,14 @@ async function createFinalizedRepository(createRepository) {
 
 async function createFinalizedPair(createRepository) {
   const secondFragmentId = 'frag_87654321';
-  const pairBatch = makePendingBatch({
+  const pairBatch = makeScopedPendingBatch({
     inputCount: 2,
     uploads: {
-      [fragment.id]: makeUploadItem({ fragmentId: fragment.id }),
-      [secondFragmentId]: makeUploadItem({ fragmentId: secondFragmentId }),
+      [fragment.id]: makeScopedUploadItem({ fragmentId: fragment.id }),
+      [secondFragmentId]: makeScopedUploadItem({ fragmentId: secondFragmentId }),
     },
   });
-  const secondFragment = makeUploadedFragment({
+  const secondFragment = makeScopedUploadedFragment({
     id: secondFragmentId,
     storage: {
       ...fragment.storage,
@@ -238,8 +291,27 @@ const expectedRunningSummary = (updatedAt = CLAIMED_AT) => ({
   },
 });
 
-export function runProcessingRepositoryContract({ name, createRepository }) {
-  test(`${name}: creates and claims one versioned processing task`, async () => {
+export function runProcessingRepositoryContract({
+  name,
+  createRepository: repositoryFactory,
+  includeFirestoreConcurrencyCase = false,
+}) {
+  let testIndex = 0;
+  const contractTest = (testName, callback) => {
+    testIndex += 1;
+    const namespaceIndex = testIndex;
+    test(testName, { concurrency: false }, async (context) => {
+      const namespace = useTestNamespace(namespaceIndex);
+      let repositoryPromise = null;
+      const createRepository = () => {
+        repositoryPromise ??= repositoryFactory({ ...namespace, context });
+        return repositoryPromise;
+      };
+      return callback(createRepository);
+    });
+  };
+
+  contractTest(`${name}: creates and claims one versioned processing task`, async (createRepository) => {
     const repository = await createFinalizedRepository(createRepository);
 
     for (const mismatch of [
@@ -260,13 +332,13 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     const unlinkedBatchId = 'batch_link0001';
     const manifestFragmentId = 'frag_manifest01';
     const unlinkedFragmentId = 'frag_unlinked1';
-    const unlinkedBatch = makePendingBatch({
+    const unlinkedBatch = makeScopedPendingBatch({
       id: unlinkedBatchId,
       status: 'processing',
       uploadStatus: 'complete',
       counters: { saved: 1, processed: 0, failed: 0, needsReview: 0 },
       uploads: {
-        [manifestFragmentId]: makeUploadItem({
+        [manifestFragmentId]: makeScopedUploadItem({
           batchId: unlinkedBatchId,
           fragmentId: manifestFragmentId,
           state: 'finalized',
@@ -274,7 +346,7 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
         }),
       },
     });
-    const unlinkedFragment = makeUploadedFragment({
+    const unlinkedFragment = makeScopedUploadedFragment({
       id: unlinkedFragmentId,
       batchId: unlinkedBatchId,
       storage: {
@@ -380,7 +452,7 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     });
   });
 
-  test(`${name}: an active lease is busy and cannot be stolen`, async () => {
+  contractTest(`${name}: an active lease is busy and cannot be stolen`, async (createRepository) => {
     const repository = await createFinalizedRepository(createRepository);
     await repository.claimProcessingTask(UID, claimInput());
 
@@ -398,7 +470,7 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.equal(busy.batch, undefined);
   });
 
-  test(`${name}: an expired lease is reclaimed with attemptCount plus one`, async () => {
+  contractTest(`${name}: an expired lease is reclaimed with attemptCount plus one`, async (createRepository) => {
     const repository = await createFinalizedRepository(createRepository);
     await repository.claimProcessingTask(UID, claimInput());
 
@@ -418,7 +490,7 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.deepEqual(reclaimed.batch.processingSummary, expectedRunningSummary(LEASE_EXPIRES_AT));
   });
 
-  test(`${name}: only the current lease owner can heartbeat or transition`, async () => {
+  contractTest(`${name}: only the current lease owner can heartbeat or transition`, async (createRepository) => {
     const repository = await createFinalizedRepository(createRepository);
     await repository.claimProcessingTask(UID, claimInput());
 
@@ -486,16 +558,16 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.equal(Object.isFrozen(heartbeat.task), true);
   });
 
-  test(`${name}: retryable failure releases lease and moves summary exactly once`, async () => {
+  contractTest(`${name}: retryable failure releases lease and moves summary exactly once`, async (createRepository) => {
     const secondFragmentId = 'frag_87654321';
-    const twoFragmentBatch = makePendingBatch({
+    const twoFragmentBatch = makeScopedPendingBatch({
       inputCount: 2,
       uploads: {
-        [fragment.id]: makeUploadItem({ fragmentId: fragment.id }),
-        [secondFragmentId]: makeUploadItem({ fragmentId: secondFragmentId }),
+        [fragment.id]: makeScopedUploadItem({ fragmentId: fragment.id }),
+        [secondFragmentId]: makeScopedUploadItem({ fragmentId: secondFragmentId }),
       },
     });
-    const secondFragment = makeUploadedFragment({
+    const secondFragment = makeScopedUploadedFragment({
       id: secondFragmentId,
       storage: {
         ...fragment.storage,
@@ -602,7 +674,7 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     });
   });
 
-  test(`${name}: concurrent equal hashes select one owner-scoped canonical`, async () => {
+  const assertConcurrentHashRegistration = async (createRepository) => {
     const { repository, pairBatch, secondFragment } = await createFinalizedPair(createRepository);
     const firstClaim = claimInputFor(fragment, pairBatch);
     const secondClaim = claimInputFor(secondFragment, pairBatch, {
@@ -632,9 +704,19 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.equal((await repository.getFragment(UID, fragment.id)).hashes.sha256, SHA256);
     assert.equal((await repository.getFragment(UID, secondFragment.id)).hashes.sha256, SHA256);
     assert.equal((await repository.getImportBatch(UID, pairBatch.id)).counters.saved, 2);
+  };
+
+  contractTest(`${name}: concurrent equal hashes select one owner-scoped canonical`, async (createRepository) => {
+    await assertConcurrentHashRegistration(createRepository);
   });
 
-  test(`${name}: repeated hash registration does not increment fragmentCount`, async () => {
+  if (includeFirestoreConcurrencyCase) {
+    contractTest(`${name}: transaction retries keep one canonical hash owner`, async (createRepository) => {
+      await assertConcurrentHashRegistration(createRepository);
+    });
+  }
+
+  contractTest(`${name}: repeated hash registration does not increment fragmentCount`, async (createRepository) => {
     const repository = await createFinalizedRepository(createRepository);
     const claim = claimInput();
     await repository.claimProcessingTask(UID, claim);
@@ -650,13 +732,13 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.equal((await repository.getFragment(UID, fragment.id)).hashes.sha256, SHA256);
   });
 
-  test(`${name}: near inputs are owner scoped deduplicated and document-id ordered`, async () => {
+  contractTest(`${name}: near inputs are owner scoped deduplicated and document-id ordered`, async (createRepository) => {
     const repository = await createRepository();
     const matchingFragments = [
       ['frag_match002', '0000000000000002'],
       ['frag_match001', '0000000000000001'],
       ['frag_query001', PERCEPTUAL_HASH],
-    ].map(([id, perceptualHash]) => makeUploadedFragment({
+    ].map(([id, perceptualHash]) => makeScopedUploadedFragment({
       id,
       hashes: {
         sha256: SHA256,
@@ -701,12 +783,12 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     ]);
   });
 
-  test(`${name}: success atomically persists task fragment candidates and batch`, async () => {
+  contractTest(`${name}: success atomically persists task fragment candidates and batch`, async (createRepository) => {
     const repository = await createFinalizedRepository(createRepository);
     const claim = claimInput();
     await repository.claimProcessingTask(UID, claim);
     await repository.registerContentHash(UID, registrationInputFor(claim));
-    const matchedFragment = makeUploadedFragment({
+    const matchedFragment = makeScopedUploadedFragment({
       id: 'frag_match001',
       hashes: {
         sha256: 'b'.repeat(64),
@@ -767,13 +849,13 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.deepEqual(await repository.getImportBatch(UID, batch.id), applied.batch);
   });
 
-  test(`${name}: terminal failure is distinct from upload failure`, async () => {
+  contractTest(`${name}: terminal failure is distinct from upload failure`, async (createRepository) => {
     const rejectedFragmentId = 'frag_reject001';
-    const mixedBatch = makePendingBatch({
+    const mixedBatch = makeScopedPendingBatch({
       inputCount: 2,
       uploads: {
-        [fragment.id]: makeUploadItem({ fragmentId: fragment.id }),
-        [rejectedFragmentId]: makeUploadItem({ fragmentId: rejectedFragmentId }),
+        [fragment.id]: makeScopedUploadItem({ fragmentId: fragment.id }),
+        [rejectedFragmentId]: makeScopedUploadItem({ fragmentId: rejectedFragmentId }),
       },
     });
     const repository = await createRepository();
@@ -814,7 +896,7 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.equal(applied.batch.status, 'completed_with_errors');
   });
 
-  test(`${name}: unsupported capabilities do not increment failed`, async () => {
+  contractTest(`${name}: unsupported capabilities do not increment failed`, async (createRepository) => {
     const repository = await createFinalizedRepository(createRepository);
     const claim = claimInput();
     await repository.claimProcessingTask(UID, claim);
@@ -843,7 +925,7 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.equal(applied.batch.status, 'completed');
   });
 
-  test(`${name}: suggested time and GPS never overwrite user or other-source facts`, async () => {
+  contractTest(`${name}: suggested time and GPS never overwrite user or other-source facts`, async (createRepository) => {
     const userCapturedAt = {
       value: '2026-07-12T10:22:14.000Z',
       sourceType: 'user',
@@ -872,7 +954,7 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
       status: 'corrected',
       observedAt: '2026-07-16T00:00:10.000Z',
     };
-    const protectedFragment = makeUploadedFragment({
+    const protectedFragment = makeScopedUploadedFragment({
       facts: { capturedAt: userCapturedAt, geo: correctedGeo },
     });
     const repository = await createRepository();
@@ -911,7 +993,7 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.deepEqual(applied.task.outputs.warningCodes, ['processing/fact-conflict']);
   });
 
-  test(`${name}: a late old processor version cannot mutate the active summary`, async () => {
+  contractTest(`${name}: a late old processor version cannot mutate the active summary`, async (createRepository) => {
     const activeSummary = {
       deterministic: {
         processorName: 'deterministic-media',
@@ -925,12 +1007,12 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
         updatedAt: '2026-07-16T00:00:10.000Z',
       },
     };
-    const finalizedUpload = makeUploadItem({
+    const finalizedUpload = makeScopedUploadItem({
       state: 'finalized',
       finalizedGeneration: fragment.storage.generation,
       failureCode: null,
     });
-    const futureBatch = makePendingBatch({
+    const futureBatch = makeScopedPendingBatch({
       status: 'completed',
       uploadStatus: 'complete',
       counters: { saved: 1, processed: 1, failed: 0, needsReview: 1 },
@@ -955,7 +1037,7 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.deepEqual(applied.batch.counters, before.counters);
   });
 
-  test(`${name}: repeating terminal completion is a no-op`, async () => {
+  contractTest(`${name}: repeating terminal completion is a no-op`, async (createRepository) => {
     const repository = await createFinalizedRepository(createRepository);
     const claim = claimInput();
     await repository.claimProcessingTask(UID, claim);
@@ -979,13 +1061,13 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     });
   });
 
-  test(`${name}: terminal tasks are claim no-ops`, async () => {
+  contractTest(`${name}: terminal tasks are claim no-ops`, async () => {
     const { applyProcessingClaim } = await import(
       '../../src/repositories/processing-outcome.js'
     );
     for (const state of ['succeeded', 'failed_terminal']) {
       const completedAt = '2026-07-16T00:03:00.000Z';
-      const terminalTask = makeProcessingTask({
+      const terminalTask = makeScopedProcessingTask({
         id: taskId,
         state,
         currentStep: 'complete',
