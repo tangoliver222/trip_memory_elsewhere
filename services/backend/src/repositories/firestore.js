@@ -22,7 +22,10 @@ import {
   applyProcessingHeartbeat,
   applyRetryableProcessingFailure,
 } from './processing-outcome.js';
-import { makeExactCandidateId } from '../processing/identity.js';
+import {
+  makeExactCandidateId,
+  makeNearCandidateId,
+} from '../processing/identity.js';
 
 const isConflict = (error) => (
   error?.code === 6
@@ -245,9 +248,29 @@ export function createFirestoreRepository({ db }) {
         ? await transaction.get(collection(uid, 'duplicateCandidates')
           .where('createdByTaskId', '==', task.id))
         : null;
-      const existingCandidates = candidatesSnapshot
-        ? candidatesSnapshot.docs.map((candidate) => candidate.data())
+      const proposedCandidateIds = task
+        ? matchedIds.map((matchedFragmentId) => makeNearCandidateId({
+          algorithmVersion: 'v1',
+          queryFragmentId: task.fragmentId,
+          matchedFragmentId,
+        }))
         : [];
+      const proposedCandidateSnapshots = [];
+      for (const candidateId of proposedCandidateIds) {
+        proposedCandidateSnapshots.push(await transaction.get(
+          document(uid, 'duplicateCandidates', candidateId),
+        ));
+      }
+      const existingCandidatesById = new Map((candidatesSnapshot
+        ? candidatesSnapshot.docs.map((candidate) => candidate.data())
+        : []).map((candidate) => [candidate.id, candidate]));
+      for (const candidateSnapshot of proposedCandidateSnapshots) {
+        if (candidateSnapshot.exists) {
+          const candidate = candidateSnapshot.data();
+          existingCandidatesById.set(candidate.id, candidate);
+        }
+      }
+      const existingCandidates = [...existingCandidatesById.values()];
       const transition = applyDeterministicCompletion(
         uid,
         task,
