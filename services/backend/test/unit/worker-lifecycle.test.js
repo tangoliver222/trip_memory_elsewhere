@@ -5,15 +5,17 @@ import { PassThrough } from 'node:stream';
 import { runIsolatedWorker } from '../../src/adapters/worker-lifecycle.js';
 
 class FakeWorker extends EventEmitter {
-  constructor() {
+  constructor({ errorDuringTerminate = null } = {}) {
     super();
     this.stdout = new PassThrough();
     this.stderr = new PassThrough();
     this.terminateCount = 0;
+    this.errorDuringTerminate = errorDuringTerminate;
   }
 
   async terminate() {
     this.terminateCount += 1;
+    if (this.errorDuringTerminate) this.emit('error', this.errorDuringTerminate);
     return 1;
   }
 }
@@ -70,5 +72,42 @@ test('worker success error exit and abort paths terminate exactly once with reda
     assert.equal(caught instanceof Error, true);
     assert.equal((caught?.message ?? '').includes(secret), false);
     assert.equal(worker.terminateCount, 1);
+  }
+});
+
+test('late worker errors stay guarded through termination and cannot replace the final result', async () => {
+  const secret = 'private-late-native-error';
+  for (const mode of ['after-result', 'during-terminate']) {
+    const worker = new FakeWorker({
+      errorDuringTerminate: mode === 'during-terminate' ? new Error(secret) : null,
+    });
+    const operation = runIsolatedWorker({
+      signal: safeSignal(),
+      createWorker: () => worker,
+    });
+    worker.emit('message', { kind: 'result', value: 'terminal-evidence' });
+
+    let lateThrown;
+    if (mode === 'after-result') {
+      try {
+        worker.emit('error', new Error(secret));
+      } catch (error) {
+        lateThrown = error;
+      }
+    }
+    let result;
+    let rejected;
+    try {
+      result = await operation;
+    } catch (error) {
+      rejected = error;
+    }
+
+    assert.equal(lateThrown, undefined);
+    assert.equal(rejected, undefined);
+    assert.deepEqual(result, { kind: 'result', value: 'terminal-evidence' });
+    assert.equal(JSON.stringify({ result, lateThrown, rejected }).includes(secret), false);
+    assert.equal(worker.terminateCount, 1);
+    assert.equal(worker.listenerCount('error'), 0);
   }
 });
