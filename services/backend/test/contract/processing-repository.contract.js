@@ -859,6 +859,46 @@ export function runProcessingRepositoryContract({
     assert.deepEqual(await repository.getImportBatch(UID, batch.id), applied.batch);
   });
 
+  contractTest(`${name}: invalid near matches fail stably without writes`, async (createRepository) => {
+    const repository = await createFinalizedRepository(createRepository);
+    const claim = claimInput();
+    await repository.claimProcessingTask(UID, claim);
+    await repository.registerContentHash(UID, registrationInputFor(claim));
+    const errors = [];
+    for (const nearMatches of [
+      [{ fragmentId: fragment.id, distance: 0, rank: 1 }],
+      [{ fragmentId: 'bad', distance: 1, rank: 1 }],
+    ]) {
+      try {
+        await repository.completeDeterministicProcessing(
+          UID,
+          successfulCompletionInput(claim, { nearMatches }),
+        );
+        errors.push(null);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+
+    assert.deepEqual(
+      errors.map((error) => error?.code),
+      ['repository/processing-target-mismatch', 'repository/processing-target-mismatch'],
+    );
+    assert.equal(errors.some((error) => error instanceof TypeError), false);
+    const storedFragment = await repository.getFragment(UID, fragment.id);
+    const storedBatch = await repository.getImportBatch(UID, batch.id);
+    assert.equal(storedFragment.status, 'processing');
+    assert.equal(storedFragment.technicalMetadata, null);
+    assert.equal(storedFragment.hashes.perceptualHash, null);
+    assert.deepEqual(storedBatch.counters, {
+      saved: 1,
+      processed: 0,
+      failed: 0,
+      needsReview: 0,
+    });
+    assert.equal(storedBatch.processingSummary.deterministic.running, 1);
+  });
+
   if (firestoreCandidateCollisionStore) {
     contractTest(`${name}: terminal completion rejects a colliding candidate document`, async (createRepository) => {
       const repository = await createFinalizedRepository(createRepository);

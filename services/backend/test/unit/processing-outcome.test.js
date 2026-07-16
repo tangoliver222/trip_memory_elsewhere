@@ -4,6 +4,7 @@ import {
   applyContentHashRegistration,
   applyDeterministicCompletion,
   applyNearDuplicateInputQuery,
+  deriveProposedNearCandidateIds,
 } from '../../src/repositories/processing-outcome.js';
 import {
   makeNearCandidateId,
@@ -283,6 +284,7 @@ test('terminal duplicate ignores stale mutable associations and malformed remain
   assert.deepEqual(Object.keys(duplicate).sort(), ['outcome', 'task']);
   assert.equal(duplicate.outcome, 'duplicate');
   assert.deepEqual(duplicate.task, terminalTask);
+  assert.deepEqual(deriveProposedNearCandidateIds(UID, terminalTask, null), []);
 });
 
 test('near candidate identity collision rejects any immutable field mismatch', () => {
