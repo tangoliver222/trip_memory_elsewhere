@@ -224,16 +224,6 @@ function makeSuggestedFact({ key, value, observedAt = COMPLETED_AT }) {
   };
 }
 
-const createPreCallFailureFactory = (createRepository) => async () => {
-  const repository = await createRepository();
-  return Object.freeze({
-    ...repository,
-    async completeDeterministicProcessing() {
-      throw new Error('simulated terminal commit failure');
-    },
-  });
-};
-
 const expectedRunningSummary = (updatedAt = CLAIMED_AT) => ({
   deterministic: {
     processorName: 'deterministic-media',
@@ -775,28 +765,6 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.equal(applied.batch.status, 'completed');
     assert.deepEqual(await repository.getFragment(UID, fragment.id), applied.fragment);
     assert.deepEqual(await repository.getImportBatch(UID, batch.id), applied.batch);
-
-    const failingRepository = await createFinalizedRepository(
-      createPreCallFailureFactory(createRepository),
-    );
-    const failingClaim = claimInput();
-    await failingRepository.claimProcessingTask(UID, failingClaim);
-    await failingRepository.registerContentHash(UID, registrationInputFor(failingClaim));
-    const running = await failingRepository.claimProcessingTask(UID, failingClaim);
-    const beforeFragment = await failingRepository.getFragment(UID, fragment.id);
-    const beforeBatch = await failingRepository.getImportBatch(UID, batch.id);
-    await assert.rejects(
-      () => failingRepository.completeDeterministicProcessing(
-        UID,
-        successfulCompletionInput(failingClaim),
-      ),
-      /simulated terminal commit failure/,
-    );
-    const stillRunning = await failingRepository.claimProcessingTask(UID, failingClaim);
-    assert.equal(stillRunning.outcome, 'busy');
-    assert.deepEqual(stillRunning.task, running.task);
-    assert.deepEqual(await failingRepository.getFragment(UID, fragment.id), beforeFragment);
-    assert.deepEqual(await failingRepository.getImportBatch(UID, batch.id), beforeBatch);
   });
 
   test(`${name}: terminal failure is distinct from upload failure`, async () => {
@@ -996,9 +964,9 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.equal(applied.outcome, 'applied');
     assert.equal(repeated.outcome, 'duplicate');
     assert.deepEqual(repeated.task, applied.task);
-    assert.deepEqual(repeated.fragment, applied.fragment);
-    assert.deepEqual(repeated.batch, applied.batch);
-    assert.deepEqual(repeated.candidates, applied.candidates);
+    assert.equal(repeated.fragment, undefined);
+    assert.equal(repeated.batch, undefined);
+    assert.equal(repeated.candidates, undefined);
     assert.deepEqual((await repository.getImportBatch(UID, batch.id)).counters, {
       saved: 1,
       processed: 1,

@@ -137,6 +137,76 @@ test('derives the four frozen batch status transitions from upload states', () =
   }
 });
 
+test('processing summaries partition eligible work and bind every top-level counter', () => {
+  const summary = (overrides = {}) => ({
+    deterministic: {
+      processorName: 'deterministic-media',
+      processorVersion: 'v1',
+      eligible: 2,
+      running: 1,
+      succeeded: 1,
+      failedRetryable: 0,
+      failedTerminal: 0,
+      unsupportedCapabilities: 0,
+      updatedAt: '2026-07-16T00:02:00.000Z',
+      ...overrides,
+    },
+  });
+  const pendingUploads = makeUploads(2);
+  for (const processingSummary of [
+    summary({ running: 2, succeeded: 1 }),
+    summary({ running: 1, succeeded: 0 }),
+    summary({ unsupportedCapabilities: 7 }),
+  ]) {
+    assert.throws(() => importBatchDomain.parseImportBatch(batchWithUploads(
+      pendingUploads,
+      { processingSummary },
+    )));
+  }
+
+  const finalizedUploads = makeUploads(2, (index) => ({
+    state: 'finalized',
+    finalizedGeneration: `generation-${index}`,
+    failureCode: null,
+  }));
+  const runningBatch = batchWithUploads(finalizedUploads, {
+    status: 'processing',
+    uploadStatus: 'complete',
+    counters: { saved: 2, processed: 1, failed: 0, needsReview: 1 },
+    processingSummary: summary(),
+  });
+  assert.deepEqual(importBatchDomain.parseImportBatch(runningBatch), runningBatch);
+  assert.throws(() => importBatchDomain.parseImportBatch({
+    ...runningBatch,
+    counters: { ...runningBatch.counters, processed: 0, needsReview: 0 },
+  }));
+  assert.throws(() => importBatchDomain.parseImportBatch({
+    ...runningBatch,
+    counters: { ...runningBatch.counters, needsReview: 2 },
+  }));
+
+  const terminalFailureSummary = summary({
+    running: 0,
+    succeeded: 1,
+    failedTerminal: 1,
+  });
+  assert.throws(() => importBatchDomain.parseImportBatch({
+    ...runningBatch,
+    status: 'completed_with_errors',
+    counters: { saved: 2, processed: 1, failed: 0, needsReview: 0 },
+    processingSummary: terminalFailureSummary,
+  }));
+  assert.deepEqual(importBatchDomain.deriveImportBatchState(
+    finalizedUploads,
+    { saved: 0, processed: 0, failed: 0, needsReview: 1 },
+    terminalFailureSummary,
+  ), {
+    status: 'completed_with_errors',
+    uploadStatus: 'complete',
+    counters: { saved: 2, processed: 1, failed: 1, needsReview: 1 },
+  });
+});
+
 test('fragment requires authoritative storage facts and complete source descriptor', () => {
   const fragment = makeUploadedFragment();
   assert.deepEqual(parseFragment(fragment), fragment);
