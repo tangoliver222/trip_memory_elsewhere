@@ -1,6 +1,10 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { brotliDecompressSync, inflateSync } from 'node:zlib';
 import ExifReader from 'exifreader';
+import sharp from 'sharp';
+
+console.warn = () => {};
+console.error = () => {};
 
 const EXIF_TAGS = Object.freeze([
   'Orientation',
@@ -168,8 +172,9 @@ function createBoundedDecompressors(maxOutputLength, state) {
   };
 }
 
-async function extract() {
+async function extractExif() {
   const state = { limitExceeded: false };
+  parentPort.postMessage({ kind: 'stage', stage: 'exif' });
   try {
     const tags = await ExifReader.load(workerData.path, {
       length: 'auto',
@@ -197,8 +202,8 @@ async function extract() {
     const claimedExif = tags.metadataRange?.blocks?.some(({ type }) => type === 'exif') ?? false;
     const exif = tags.exif ?? {};
     return {
-      kind: 'result',
       limitExceeded: state.limitExceeded,
+      parserError: false,
       parserPartial: claimedExif && Object.keys(exif).length === 0,
       technicalExif: technicalExif(exif),
       capturedAt: capturedAtHint(exif),
@@ -206,10 +211,47 @@ async function extract() {
     };
   } catch {
     return {
-      kind: 'parser-error',
       limitExceeded: state.limitExceeded,
+      parserError: true,
+      parserPartial: false,
+      technicalExif: {},
+      capturedAt: null,
+      geo: null,
     };
   }
 }
 
-parentPort.postMessage(await extract());
+async function extractImage() {
+  if (!['jpeg', 'png', 'webp'].includes(workerData.format)) return null;
+  parentPort.postMessage({ kind: 'stage', stage: 'sharp' });
+  try {
+    const image = await sharp(workerData.path, {
+      limitInputPixels: 60_000_000,
+      failOn: 'error',
+      pages: 1,
+    }).metadata();
+    return {
+      error: false,
+      width: Number.isInteger(image.width) && image.width > 0 ? image.width : null,
+      height: Number.isInteger(image.height) && image.height > 0 ? image.height : null,
+      pageCount: Number.isInteger(image.pages) && image.pages > 0 ? image.pages : null,
+      orientation: Number.isInteger(image.orientation)
+        && image.orientation >= 1
+        && image.orientation <= 8
+        ? image.orientation
+        : null,
+    };
+  } catch {
+    return {
+      error: true,
+      width: null,
+      height: null,
+      pageCount: null,
+      orientation: null,
+    };
+  }
+}
+
+const exif = await extractExif();
+const image = exif.limitExceeded ? null : await extractImage();
+parentPort.postMessage({ kind: 'result', ...exif, image });

@@ -1,14 +1,12 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { Worker } from 'node:worker_threads';
-import sharp from 'sharp';
 import { TechnicalMetadataSchema } from '../domain/processing-result.js';
 import { getUploadPolicy } from '../imports/upload-policy.js';
 import {
   retryableProcessingError,
   terminalProcessingError,
 } from '../processing/errors.js';
-import { runAbortableOperation } from './abortable-operation.js';
+import { runMediaMetadataWorker } from './media-metadata-worker-client.js';
 
 const HARD_LIMITS = Object.freeze({
   maxInputBytes: 52_428_800,
@@ -28,8 +26,6 @@ const CONTENT_FORMATS = Object.freeze({
   'application/pdf': 'pdf',
   'text/plain': 'text',
 });
-
-const METADATA_WORKER_URL = new URL('./media-metadata-worker.js', import.meta.url);
 
 function validateLimits(input) {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
@@ -124,29 +120,6 @@ function freezeResult(technicalMetadata, factHints) {
   });
 }
 
-function waitForWorker(worker) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const cleanup = () => {
-      worker.off('message', onMessage);
-      worker.off('error', onError);
-      worker.off('exit', onExit);
-    };
-    const finish = (callback, value) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      callback(value);
-    };
-    const onMessage = (message) => finish(resolve, message);
-    const onError = () => finish(reject, new Error('Metadata worker failed'));
-    const onExit = () => finish(reject, new Error('Metadata worker exited'));
-    worker.on('message', onMessage);
-    worker.on('error', onError);
-    worker.on('exit', onExit);
-  });
-}
-
 function normalizeWorkerMessage(message) {
   if (message?.kind === 'parser-error') {
     return {
@@ -156,12 +129,13 @@ function normalizeWorkerMessage(message) {
       technicalExif: {},
       capturedAt: null,
       geo: null,
+      image: null,
     };
   }
   if (message?.kind !== 'result') return null;
   const technical = message.technicalExif ?? {};
   return {
-    error: false,
+    error: message.parserError === true,
     limitExceeded: message.limitExceeded === true,
     parserPartial: message.parserPartial === true,
     technicalExif: {
@@ -176,31 +150,17 @@ function normalizeWorkerMessage(message) {
     },
     capturedAt: message.capturedAt ?? null,
     geo: message.geo ?? null,
+    image: message.image ?? null,
   };
 }
 
-async function readExif(path, limits, signal) {
-  let worker;
-  let termination;
-  const terminate = () => {
-    if (!worker) return Promise.resolve();
-    if (!termination) termination = worker.terminate().catch(() => undefined);
-    return termination;
-  };
-
+async function readNativeMetadata(path, format, limits, signal) {
   try {
-    const message = await runAbortableOperation({
+    const message = await runMediaMetadataWorker({
+      path,
+      format,
+      maxMetadataDecompressedBytes: limits.maxMetadataDecompressedBytes,
       signal,
-      start: () => {
-        worker = new Worker(METADATA_WORKER_URL, {
-          workerData: {
-            path,
-            maxMetadataDecompressedBytes: limits.maxMetadataDecompressedBytes,
-          },
-        });
-        return waitForWorker(worker);
-      },
-      cancel: terminate,
     });
     return normalizeWorkerMessage(message) ?? {
       error: true,
@@ -209,6 +169,7 @@ async function readExif(path, limits, signal) {
       technicalExif: {},
       capturedAt: null,
       geo: null,
+      image: null,
     };
   } catch (error) {
     if (error?.name === 'AbortError') {
@@ -221,9 +182,8 @@ async function readExif(path, limits, signal) {
       technicalExif: {},
       capturedAt: null,
       geo: null,
+      image: null,
     };
-  } finally {
-    await terminate();
   }
 }
 
@@ -300,7 +260,7 @@ export function createMediaMetadataReader({ limits: rawLimits, warningSink } = {
           return freezeResult(emptyMetadata('text'), { capturedAt: null, geo: null });
         }
 
-        const exifRead = await readExif(path, limits, active.signal);
+        const exifRead = await readNativeMetadata(path, format, limits, active.signal);
         if (exifRead.limitExceeded) {
           emit('processing/media-limits-exceeded', 'exifreader', 'error');
           throw terminalProcessingError('processing/media-limits-exceeded');
@@ -324,32 +284,13 @@ export function createMediaMetadataReader({ limits: rawLimits, warningSink } = {
           );
         }
 
-        let image;
-        let pipeline;
-        try {
-          image = await runAbortableOperation({
-            signal: active.signal,
-            start: () => {
-              pipeline = sharp(path, {
-                limitInputPixels: HARD_LIMITS.maxInputPixels,
-                failOn: 'error',
-                pages: 1,
-              });
-              return pipeline.metadata();
-            },
-            cancel: () => pipeline?.destroy(),
-          });
-        } catch (error) {
-          if (error?.name === 'AbortError') {
-            throw retryableProcessingError('processing/soft-timeout');
-          }
+        const image = exifRead.image;
+        if (image?.error !== false) {
           emit('processing/invalid-media', 'sharp', 'error');
           throw terminalProcessingError('processing/invalid-media');
         }
 
-        const width = Number.isInteger(image.width) && image.width > 0 ? image.width : null;
-        const height = Number.isInteger(image.height) && image.height > 0 ? image.height : null;
-        const pages = Number.isInteger(image.pages) && image.pages > 0 ? image.pages : null;
+        const { width, height, pageCount: pages } = image;
         if (width === null || height === null
           || width > limits.maxImageWidth
           || height > limits.maxImageHeight
@@ -367,9 +308,7 @@ export function createMediaMetadataReader({ limits: rawLimits, warningSink } = {
           height,
           pageCount: pages,
           orientation: extracted.orientation ?? (
-            Number.isInteger(image.orientation) && image.orientation >= 1 && image.orientation <= 8
-              ? image.orientation
-              : null
+            image.orientation
           ),
           cameraMake: extracted.cameraMake,
           cameraModel: extracted.cameraModel,
