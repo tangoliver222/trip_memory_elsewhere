@@ -1,39 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { makePendingBatch, makeUploadedFragment } from '../fixtures/import.js';
 
-const now = '2026-07-16T00:00:00.000Z';
-
-const fragment = {
-  id: 'frag_12345678',
-  ownerId: 'user_alpha',
-  schemaVersion: 1,
-  createdAt: now,
-  updatedAt: now,
-  deletedAt: null,
-  batchId: 'batch_12345678',
-  type: 'photo',
-  status: 'uploaded',
-  storage: {
-    originalPath: 'users/user_alpha/originals/batch_12345678/frag_12345678',
-  },
-  hashes: {},
-  facts: {},
-  journeyId: null,
-  sceneId: null,
-  placeId: null,
-};
-
-const batch = {
-  id: 'batch_12345678',
-  ownerId: 'user_alpha',
-  schemaVersion: 1,
-  createdAt: now,
-  updatedAt: now,
-  deletedAt: null,
-  status: 'open',
-  inputCount: 1,
-  counters: { saved: 0, processed: 0, failed: 0, needsReview: 0 },
-};
+const fragment = makeUploadedFragment();
+const batch = makePendingBatch();
 
 export function runRepositoryContract({ name, createRepository }) {
   test(`${name}: creates and returns owner-scoped objects`, async () => {

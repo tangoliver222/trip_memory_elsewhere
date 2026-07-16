@@ -1,18 +1,113 @@
 import { z } from 'zod';
-import { CommonFields } from './common.js';
+import { CommonFields, IdSchema } from './common.js';
+import { SourceDescriptorSchema, SourceTypeSchema } from './source-descriptor.js';
 
 const CounterSchema = z.number().int().nonnegative();
+const MAX_ORIGINAL_BYTES = 50 * 1024 * 1024;
+
+export const UploadManifestItemSchema = z.strictObject({
+  fragmentId: IdSchema,
+  sourceType: SourceTypeSchema,
+  state: z.enum(['pending', 'finalized', 'failed']),
+  originalPath: z.string().min(1),
+  declaredContentType: z.string().trim().min(1),
+  declaredSizeBytes: z.number().int().positive().max(MAX_ORIGINAL_BYTES),
+  allowedContentTypes: z.array(z.string().trim().min(1)).min(1).max(6).refine(
+    (values) => new Set(values).size === values.length,
+    'Content types must be unique',
+  ),
+  maxBytes: z.number().int().positive().max(MAX_ORIGINAL_BYTES),
+  source: SourceDescriptorSchema,
+  finalizedGeneration: z.string().trim().min(1).nullable(),
+  failureCode: z.string().trim().min(1).max(128).nullable(),
+}).superRefine((item, context) => {
+  if (!item.allowedContentTypes.includes(item.declaredContentType)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Declared content type must be allowed',
+      path: ['declaredContentType'],
+    });
+  }
+  if (item.declaredSizeBytes > item.maxBytes) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Declared size cannot exceed item maximum',
+      path: ['declaredSizeBytes'],
+    });
+  }
+
+  const hasGeneration = item.finalizedGeneration !== null;
+  const hasFailure = item.failureCode !== null;
+  const validState = (
+    (item.state === 'pending' && !hasGeneration && !hasFailure)
+    || (item.state === 'finalized' && hasGeneration && !hasFailure)
+    || (item.state === 'failed' && hasGeneration && hasFailure)
+  );
+  if (!validState) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Upload outcome fields do not match item state',
+      path: ['state'],
+    });
+  }
+});
+
+const UploadsSchema = z.record(IdSchema, UploadManifestItemSchema).refine((uploads) => {
+  const count = Object.keys(uploads).length;
+  return count >= 1 && count <= 50;
+}, 'Import batch must contain between 1 and 50 uploads');
+
+export function deriveImportBatchState(uploads, previousCounters) {
+  const items = Object.values(uploads);
+  if (items.length === 0) throw new TypeError('Import batch must contain uploads');
+
+  const saved = items.filter(({ state }) => state === 'finalized').length;
+  const failed = items.filter(({ state }) => state === 'failed').length;
+  const pending = items.filter(({ state }) => state === 'pending').length;
+  if (saved + failed + pending !== items.length) {
+    throw new TypeError('Unknown upload item state');
+  }
+
+  let status;
+  let uploadStatus;
+  if (pending > 0) {
+    status = 'open';
+    uploadStatus = 'pending';
+  } else if (saved === items.length) {
+    status = 'processing';
+    uploadStatus = 'complete';
+  } else if (failed === items.length) {
+    status = 'failed';
+    uploadStatus = 'complete_with_errors';
+  } else {
+    status = 'processing';
+    uploadStatus = 'complete_with_errors';
+  }
+
+  return Object.freeze({
+    status,
+    uploadStatus,
+    counters: Object.freeze({
+      saved,
+      processed: previousCounters.processed,
+      failed,
+      needsReview: previousCounters.needsReview,
+    }),
+  });
+}
 
 export const ImportBatchSchema = z.strictObject({
   ...CommonFields,
   status: z.enum(['open', 'processing', 'completed', 'completed_with_errors', 'failed']),
-  inputCount: z.number().int().nonnegative(),
+  uploadStatus: z.enum(['pending', 'complete', 'complete_with_errors']),
+  inputCount: z.number().int().positive().max(50),
   counters: z.strictObject({
     saved: CounterSchema,
     processed: CounterSchema,
     failed: CounterSchema,
     needsReview: CounterSchema,
   }),
+  uploads: UploadsSchema,
 }).superRefine((batch, context) => {
   for (const [name, count] of Object.entries(batch.counters)) {
     if (count > batch.inputCount) {
@@ -20,6 +115,53 @@ export const ImportBatchSchema = z.strictObject({
         code: 'custom',
         message: `${name} cannot exceed inputCount`,
         path: ['counters', name],
+      });
+    }
+  }
+
+  const entries = Object.entries(batch.uploads);
+  if (batch.inputCount !== entries.length) {
+    context.addIssue({
+      code: 'custom',
+      message: 'inputCount must equal upload count',
+      path: ['inputCount'],
+    });
+  }
+
+  for (const [fragmentId, item] of entries) {
+    if (item.fragmentId !== fragmentId) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Upload key must equal fragmentId',
+        path: ['uploads', fragmentId, 'fragmentId'],
+      });
+    }
+    const expectedPath = `users/${batch.ownerId}/originals/${batch.id}/${fragmentId}`;
+    if (item.originalPath !== expectedPath) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Upload path must match owner, batch and fragment',
+        path: ['uploads', fragmentId, 'originalPath'],
+      });
+    }
+  }
+
+  const derived = deriveImportBatchState(batch.uploads, batch.counters);
+  for (const field of ['status', 'uploadStatus']) {
+    if (batch[field] !== derived[field]) {
+      context.addIssue({
+        code: 'custom',
+        message: `${field} does not match upload states`,
+        path: [field],
+      });
+    }
+  }
+  for (const field of ['saved', 'failed']) {
+    if (batch.counters[field] !== derived.counters[field]) {
+      context.addIssue({
+        code: 'custom',
+        message: `${field} counter does not match upload states`,
+        path: ['counters', field],
       });
     }
   }

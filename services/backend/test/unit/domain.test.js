@@ -6,6 +6,7 @@ import {
   parseProvenance,
   parseReference,
 } from '../../src/domain/index.js';
+import { makePendingBatch, makeUploadedFragment } from '../fixtures/import.js';
 
 const now = '2026-07-16T00:00:00.000Z';
 
@@ -38,51 +39,24 @@ test('provenance requires source, processor, confidence and status', () => {
 });
 
 test('fragment original path must stay inside its owner', () => {
-  const fragment = {
-    id: 'frag_12345678',
-    ownerId: 'user_alpha',
-    schemaVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: null,
-    batchId: 'batch_12345678',
-    type: 'photo',
-    status: 'uploaded',
-    storage: {
-      originalPath: 'users/user_alpha/originals/batch_12345678/frag_12345678',
-    },
-    hashes: {},
-    facts: {},
-    journeyId: null,
-    sceneId: null,
-    placeId: null,
-  };
+  const fragment = makeUploadedFragment();
 
   assert.equal(parseFragment(fragment).ownerId, 'user_alpha');
   assert.throws(() => parseFragment({
     ...fragment,
     storage: {
+      ...fragment.storage,
       originalPath: 'users/user_beta/originals/batch_12345678/frag_12345678',
     },
   }));
 });
 
 test('import batch counters cannot exceed the declared input count', () => {
-  const batch = {
-    id: 'batch_12345678',
-    ownerId: 'user_alpha',
-    schemaVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: null,
-    status: 'open',
-    inputCount: 2,
-    counters: { saved: 1, processed: 0, failed: 0, needsReview: 0 },
-  };
+  const batch = makePendingBatch();
 
-  assert.equal(parseImportBatch(batch).counters.saved, 1);
+  assert.equal(parseImportBatch(batch).counters.saved, 0);
   assert.throws(() => parseImportBatch({
     ...batch,
-    counters: { ...batch.counters, saved: 3 },
+    counters: { ...batch.counters, saved: 2 },
   }));
 });

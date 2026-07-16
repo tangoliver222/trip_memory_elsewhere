@@ -6,7 +6,12 @@ export {
 } from './common.js';
 export { ProvenanceSchema, parseProvenance } from './provenance.js';
 export { FragmentSchema, parseFragment } from './fragment.js';
-export { ImportBatchSchema, parseImportBatch } from './import-batch.js';
+export {
+  ImportBatchSchema,
+  UploadManifestItemSchema,
+  deriveImportBatchState,
+  parseImportBatch,
+} from './import-batch.js';
 export {
   SourceDescriptorSchema,
   SourceTypeSchema,
