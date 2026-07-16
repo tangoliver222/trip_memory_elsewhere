@@ -7,13 +7,17 @@ export {
 export { ProvenanceSchema, parseProvenance } from './provenance.js';
 export { FragmentSchema, parseFragment } from './fragment.js';
 export {
+  PROCESSING_ERROR_CODES,
   PROCESSING_STEPS,
   PROCESSING_TASK_STATES,
+  ProcessingErrorCodeSchema,
   ProcessingTaskSchema,
   parseProcessingTask,
 } from './processing-task.js';
 export {
+  PROCESSING_WARNING_CODES,
   DeterministicFragmentProcessingSchema,
+  ProcessingWarningCodeSchema,
   TechnicalMetadataSchema,
   ThumbnailDerivativeSchema,
 } from './processing-result.js';

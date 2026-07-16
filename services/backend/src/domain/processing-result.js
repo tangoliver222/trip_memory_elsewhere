@@ -10,9 +10,14 @@ export const CapabilityStatusSchema = z.enum([
 
 export const NullableCapabilityStatusSchema = CapabilityStatusSchema.nullable();
 
-const WarningCodeSchema = z.string().regex(/^processing\/[a-z0-9]+(?:-[a-z0-9]+)*$/);
+export const PROCESSING_WARNING_CODES = Object.freeze([
+  'processing/page-count-unsupported',
+  'processing/near-scan-truncated',
+]);
 
-export const WarningCodesSchema = z.array(WarningCodeSchema).refine(
+export const ProcessingWarningCodeSchema = z.enum(PROCESSING_WARNING_CODES);
+
+export const WarningCodesSchema = z.array(ProcessingWarningCodeSchema).refine(
   (codes) => new Set(codes).size === codes.length,
   'Warning codes must be unique',
 );

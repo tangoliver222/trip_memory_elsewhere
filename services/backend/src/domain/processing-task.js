@@ -24,6 +24,18 @@ export const PROCESSING_STEPS = Object.freeze([
   'complete',
 ]);
 
+export const PROCESSING_ERROR_CODES = Object.freeze([
+  'processing/task-busy',
+  'processing/soft-timeout',
+  'processing/storage-unavailable',
+  'processing/repository-unavailable',
+  'processing/media-limits-exceeded',
+  'processing/invalid-media',
+  'processing/derivative-conflict',
+]);
+
+export const ProcessingErrorCodeSchema = z.enum(PROCESSING_ERROR_CODES);
+
 const NullableDateTimeSchema = IsoDateTimeSchema.nullable();
 
 export const ProcessingTaskSchema = z.strictObject({
@@ -48,7 +60,7 @@ export const ProcessingTaskSchema = z.strictObject({
     perceptualHashStatus: NullableCapabilityStatusSchema,
     warningCodes: WarningCodesSchema,
   }),
-  lastErrorCode: z.string().trim().min(1).nullable(),
+  lastErrorCode: ProcessingErrorCodeSchema.nullable(),
   firstStartedAt: NullableDateTimeSchema,
   attemptStartedAt: NullableDateTimeSchema,
   lastHeartbeatAt: NullableDateTimeSchema,

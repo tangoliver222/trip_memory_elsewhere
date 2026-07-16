@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as domain from '../../src/domain/index.js';
 import {
   PROCESSING_STEPS,
   PROCESSING_TASK_STATES,
@@ -137,4 +138,50 @@ test('PDF technical metadata keeps pageCount null and the unsupported warning', 
   assert.deepEqual(TechnicalMetadataSchema.parse(metadata), metadata);
   assert.throws(() => TechnicalMetadataSchema.parse({ ...metadata, pageCount: 1 }));
   assert.throws(() => TechnicalMetadataSchema.parse({ ...metadata, warningCodes: [] }));
+});
+
+test('processing error codes use the frozen v1 vocabulary', () => {
+  assert.throws(() => parseProcessingTask(makeProcessingTask({
+    lastErrorCode: 'processing/not-real',
+  })));
+
+  const expected = [
+    'processing/task-busy',
+    'processing/soft-timeout',
+    'processing/storage-unavailable',
+    'processing/repository-unavailable',
+    'processing/media-limits-exceeded',
+    'processing/invalid-media',
+    'processing/derivative-conflict',
+  ];
+  assert.deepEqual(domain.PROCESSING_ERROR_CODES, expected);
+  assert.equal(Object.isFrozen(domain.PROCESSING_ERROR_CODES), true);
+  for (const lastErrorCode of expected) {
+    assert.equal(parseProcessingTask(makeProcessingTask({ lastErrorCode })).lastErrorCode,
+      lastErrorCode);
+  }
+});
+
+test('processing warning codes use the frozen v1 vocabulary', () => {
+  const task = makeProcessingTask();
+  assert.throws(() => parseProcessingTask({
+    ...task,
+    outputs: { ...task.outputs, warningCodes: ['processing/not-real'] },
+  }));
+  assert.throws(() => TechnicalMetadataSchema.parse(makePdfTechnicalMetadata({
+    warningCodes: ['processing/page-count-unsupported', 'processing/not-real'],
+  })));
+
+  const expected = [
+    'processing/page-count-unsupported',
+    'processing/near-scan-truncated',
+  ];
+  assert.deepEqual(domain.PROCESSING_WARNING_CODES, expected);
+  assert.equal(Object.isFrozen(domain.PROCESSING_WARNING_CODES), true);
+  for (const warningCode of expected) {
+    assert.deepEqual(parseProcessingTask({
+      ...task,
+      outputs: { ...task.outputs, warningCodes: [warningCode] },
+    }).outputs.warningCodes, [warningCode]);
+  }
 });
