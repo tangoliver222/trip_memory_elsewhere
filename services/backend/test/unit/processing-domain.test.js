@@ -42,21 +42,31 @@ test('task states enforce lease deadline step and completion invariants', () => 
     softDeadlineAt: '2026-07-16T00:05:00.000Z',
   })));
   assert.throws(() => parseProcessingTask(makeProcessingTask({ currentStep: 'extracting' })));
-  assert.throws(() => parseProcessingTask(makeProcessingTask({
+
+  const failedTerminal = makeProcessingTask({
     state: 'failed_terminal',
     currentStep: 'complete',
     leaseOwner: null,
     leaseExpiresAt: null,
-    completedAt: null,
-    lastErrorCode: 'processing/decode-failed',
-  })));
-  assert.throws(() => parseProcessingTask(makeProcessingTask({
+    completedAt: '2026-07-16T00:03:30.000Z',
+    lastErrorCode: 'processing/invalid-media',
+  });
+  assert.equal(parseProcessingTask(failedTerminal).completedAt,
+    '2026-07-16T00:03:30.000Z');
+  assert.throws(() => parseProcessingTask({ ...failedTerminal, completedAt: null }));
+
+  const failedRetryable = makeProcessingTask({
     state: 'failed_retryable',
     leaseOwner: null,
     leaseExpiresAt: null,
+    completedAt: null,
+    lastErrorCode: 'processing/soft-timeout',
+  });
+  assert.equal(parseProcessingTask(failedRetryable).completedAt, null);
+  assert.throws(() => parseProcessingTask({
+    ...failedRetryable,
     completedAt: '2026-07-16T00:03:30.000Z',
-    lastErrorCode: 'processing/deadline-exceeded',
-  })));
+  }));
 });
 
 test('fragment processing fields use null rather than empty or forged values', () => {
