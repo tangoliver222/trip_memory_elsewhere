@@ -6,12 +6,29 @@ import {
   makeUploadItem,
   makeUploadedFragment,
 } from '../fixtures/import.js';
-import { makeProcessingTask } from '../fixtures/processing.js';
+import {
+  SHA256,
+  makePdfTechnicalMetadata,
+  makeProcessingTask,
+} from '../fixtures/processing.js';
 
 const UID = 'user_alpha';
 const CLAIMED_AT = '2026-07-16T00:01:00.000Z';
 const SOFT_DEADLINE_AT = '2026-07-16T00:04:00.000Z';
 const LEASE_EXPIRES_AT = '2026-07-16T00:05:00.000Z';
+const REGISTERED_AT = '2026-07-16T00:02:00.000Z';
+const COMPLETED_AT = '2026-07-16T00:03:00.000Z';
+const PERCEPTUAL_HASH = '0000000000000000';
+const PERCEPTUAL_BANDS = [
+  '0:00',
+  '1:00',
+  '2:00',
+  '3:00',
+  '4:00',
+  '5:00',
+  '6:00',
+  '7:00',
+];
 
 const fragment = makeUploadedFragment();
 const batch = makePendingBatch();
@@ -73,6 +90,149 @@ async function createFinalizedRepository(createRepository) {
   ));
   return repository;
 }
+
+async function createFinalizedPair(createRepository) {
+  const secondFragmentId = 'frag_87654321';
+  const pairBatch = makePendingBatch({
+    inputCount: 2,
+    uploads: {
+      [fragment.id]: makeUploadItem({ fragmentId: fragment.id }),
+      [secondFragmentId]: makeUploadItem({ fragmentId: secondFragmentId }),
+    },
+  });
+  const secondFragment = makeUploadedFragment({
+    id: secondFragmentId,
+    storage: {
+      ...fragment.storage,
+      originalPath: `users/${UID}/originals/${pairBatch.id}/${secondFragmentId}`,
+      generation: '1740000000000002',
+    },
+  });
+  const repository = await createRepository();
+  await repository.createImportBatch(UID, pairBatch);
+  await repository.finalizeOriginal(UID, finalizeInputFor(
+    pairBatch,
+    fragment,
+    '2026-07-16T00:00:20.000Z',
+  ));
+  await repository.finalizeOriginal(UID, finalizeInputFor(
+    pairBatch,
+    secondFragment,
+    '2026-07-16T00:00:30.000Z',
+  ));
+  return { repository, pairBatch, secondFragment };
+}
+
+function registrationInputFor(claim, overrides = {}) {
+  return {
+    taskId: claim.taskId,
+    leaseOwner: claim.leaseOwner,
+    registeredAt: REGISTERED_AT,
+    sha256: SHA256,
+    ...overrides,
+  };
+}
+
+function makeJpegTechnicalMetadata(overrides = {}) {
+  return {
+    format: 'jpeg',
+    width: 4032,
+    height: 3024,
+    orientation: 1,
+    pageCount: null,
+    cameraMake: null,
+    cameraModel: null,
+    lensModel: null,
+    focalLengthMm: null,
+    apertureFNumber: null,
+    isoEquivalent: null,
+    exposureTimeSeconds: null,
+    metadataStatus: 'complete',
+    warningCodes: [],
+    processorVersion: 'v1',
+    ...overrides,
+  };
+}
+
+function successfulCompletionInput(claim, overrides = {}) {
+  return {
+    taskId: claim.taskId,
+    leaseOwner: claim.leaseOwner,
+    completedAt: COMPLETED_AT,
+    technicalMetadata: makeJpegTechnicalMetadata(),
+    factSuggestions: {},
+    derivative: {
+      path: `users/${UID}/derived/${claim.fragmentId}/deterministic-media/v1/${SHA256}/thumbnail.webp`,
+      generation: '1740000000000100',
+      metageneration: '1',
+      contentType: 'image/webp',
+      sizeBytes: 48_291,
+      crc32c: 'ImIEBA==',
+      width: 512,
+      height: 384,
+    },
+    perceptualHash: {
+      value: PERCEPTUAL_HASH,
+      bands: PERCEPTUAL_BANDS,
+    },
+    capabilityStatuses: {
+      metadata: 'complete',
+      thumbnail: 'complete',
+      perceptualHash: 'complete',
+    },
+    warningCodes: [],
+    nearMatches: [],
+    ...overrides,
+  };
+}
+
+function terminalFailureInput(claim, overrides = {}) {
+  return {
+    taskId: claim.taskId,
+    leaseOwner: claim.leaseOwner,
+    completedAt: COMPLETED_AT,
+    technicalMetadata: null,
+    factSuggestions: {},
+    derivative: null,
+    perceptualHash: null,
+    capabilityStatuses: {
+      metadata: 'failed',
+      thumbnail: 'failed',
+      perceptualHash: 'failed',
+    },
+    warningCodes: [],
+    nearMatches: [],
+    errorCode: 'processing/invalid-media',
+    ...overrides,
+  };
+}
+
+function makeSuggestedFact({ key, value, observedAt = COMPLETED_AT }) {
+  return {
+    value,
+    sourceType: key === 'capturedAt' ? 'exif' : 'gps',
+    sourceRefs: [{ type: 'fragment', id: fragment.id }],
+    processor: {
+      name: 'deterministic-media',
+      version: 'v1',
+      modelAlias: null,
+      promptVersion: null,
+    },
+    confidence: 0.9,
+    status: 'suggested',
+    observedAt,
+  };
+}
+
+const createPreCallFailureFactory = (createRepository) => async () => {
+  const repository = await createRepository();
+  return Object.freeze({
+    ...repository,
+    async completeDeterministicProcessing() {
+      throw new Error('simulated terminal commit failure');
+    },
+  });
+};
 
 const expectedRunningSummary = (updatedAt = CLAIMED_AT) => ({
   deterministic: {
@@ -447,6 +607,400 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.deepEqual(reclaimed.batch.counters, {
       saved: 2,
       processed: 0,
+      failed: 0,
+      needsReview: 0,
+    });
+  });
+
+  test(`${name}: concurrent equal hashes select one owner-scoped canonical`, async () => {
+    const { repository, pairBatch, secondFragment } = await createFinalizedPair(createRepository);
+    const firstClaim = claimInputFor(fragment, pairBatch);
+    const secondClaim = claimInputFor(secondFragment, pairBatch, {
+      leaseOwner: 'exec_second01',
+      claimedAt: '2026-07-16T00:01:10.000Z',
+      softDeadlineAt: '2026-07-16T00:04:10.000Z',
+      leaseExpiresAt: '2026-07-16T00:05:10.000Z',
+    });
+    await repository.claimProcessingTask(UID, firstClaim);
+    await repository.claimProcessingTask(UID, secondClaim);
+
+    const registrations = await Promise.all([
+      repository.registerContentHash(UID, registrationInputFor(firstClaim)),
+      repository.registerContentHash(UID, registrationInputFor(secondClaim)),
+    ]);
+
+    assert.deepEqual(registrations[0].canonicalFragmentRef,
+      registrations[1].canonicalFragmentRef);
+    assert.equal(registrations.filter(({ exactCandidate }) => exactCandidate !== null).length, 1);
+    const exactCandidate = registrations.find(({ exactCandidate }) => exactCandidate)?.exactCandidate;
+    const canonicalId = registrations[0].canonicalFragmentRef.id;
+    const candidateId = canonicalId === fragment.id ? secondFragment.id : fragment.id;
+    assert.equal(exactCandidate.canonicalFragmentRef.id, canonicalId);
+    assert.equal(exactCandidate.candidateFragmentRef.id, candidateId);
+    assert.deepEqual(exactCandidate.pairRefs.map(({ id }) => id),
+      [fragment.id, secondFragment.id].sort());
+    assert.equal((await repository.getFragment(UID, fragment.id)).hashes.sha256, SHA256);
+    assert.equal((await repository.getFragment(UID, secondFragment.id)).hashes.sha256, SHA256);
+    assert.equal((await repository.getImportBatch(UID, pairBatch.id)).counters.saved, 2);
+  });
+
+  test(`${name}: repeated hash registration does not increment fragmentCount`, async () => {
+    const repository = await createFinalizedRepository(createRepository);
+    const claim = claimInput();
+    await repository.claimProcessingTask(UID, claim);
+
+    const first = await repository.registerContentHash(UID, registrationInputFor(claim));
+    const repeated = await repository.registerContentHash(UID, registrationInputFor(claim));
+
+    assert.deepEqual(repeated, first);
+    assert.deepEqual(first, {
+      canonicalFragmentRef: { type: 'fragment', id: fragment.id },
+      exactCandidate: null,
+    });
+    assert.equal((await repository.getFragment(UID, fragment.id)).hashes.sha256, SHA256);
+  });
+
+  test(`${name}: near inputs are owner scoped deduplicated and document-id ordered`, async () => {
+    const repository = await createRepository();
+    const matchingFragments = [
+      ['frag_match002', '0000000000000002'],
+      ['frag_match001', '0000000000000001'],
+      ['frag_query001', PERCEPTUAL_HASH],
+    ].map(([id, perceptualHash]) => makeUploadedFragment({
+      id,
+      hashes: {
+        sha256: SHA256,
+        perceptualHash,
+        perceptualHashAlgorithm: 'dhash',
+        perceptualHashVersion: 'v1',
+        perceptualHashBands: PERCEPTUAL_BANDS,
+      },
+      storage: {
+        ...fragment.storage,
+        originalPath: `users/${UID}/originals/${batch.id}/${id}`,
+      },
+    }));
+    for (const matchingFragment of matchingFragments) {
+      await repository.createFragment(UID, matchingFragment);
+    }
+    await repository.createFragment('user_beta', makeUploadedFragment({
+      id: 'frag_cross001',
+      ownerId: 'user_beta',
+      batchId: 'batch_beta0001',
+      storage: {
+        ...fragment.storage,
+        originalPath: 'users/user_beta/originals/batch_beta0001/frag_cross001',
+      },
+      hashes: {
+        sha256: SHA256,
+        perceptualHash: '0000000000000003',
+        perceptualHashAlgorithm: 'dhash',
+        perceptualHashVersion: 'v1',
+        perceptualHashBands: PERCEPTUAL_BANDS,
+      },
+    }));
+
+    const inputs = await repository.findNearDuplicateInputs(UID, {
+      fragmentId: 'frag_query001',
+      bands: PERCEPTUAL_BANDS,
+    });
+
+    assert.deepEqual(inputs, [
+      { fragmentId: 'frag_match001', perceptualHash: '0000000000000001' },
+      { fragmentId: 'frag_match002', perceptualHash: '0000000000000002' },
+    ]);
+  });
+
+  test(`${name}: success atomically persists task fragment candidates and batch`, async () => {
+    const repository = await createFinalizedRepository(createRepository);
+    const claim = claimInput();
+    await repository.claimProcessingTask(UID, claim);
+    await repository.registerContentHash(UID, registrationInputFor(claim));
+    const matchedFragment = makeUploadedFragment({
+      id: 'frag_match001',
+      hashes: {
+        sha256: 'b'.repeat(64),
+        perceptualHash: '0000000000000001',
+        perceptualHashAlgorithm: 'dhash',
+        perceptualHashVersion: 'v1',
+        perceptualHashBands: PERCEPTUAL_BANDS,
+      },
+      storage: {
+        ...fragment.storage,
+        originalPath: `users/${UID}/originals/${batch.id}/frag_match001`,
+      },
+    });
+    await repository.createFragment(UID, matchedFragment);
+    const completion = successfulCompletionInput(claim, {
+      nearMatches: [{ fragmentId: matchedFragment.id, distance: 1, rank: 1 }],
+    });
+
+    const applied = await repository.completeDeterministicProcessing(UID, completion);
+
+    assert.equal(applied.outcome, 'applied');
+    assert.equal(applied.task.state, 'succeeded');
+    assert.equal(applied.task.currentStep, 'complete');
+    assert.equal(applied.task.leaseOwner, null);
+    assert.deepEqual(applied.task.outputs, {
+      metadataStatus: 'complete',
+      thumbnailStatus: 'complete',
+      perceptualHashStatus: 'complete',
+      warningCodes: [],
+    });
+    assert.equal(applied.fragment.status, 'unresolved');
+    assert.deepEqual(applied.fragment.technicalMetadata, completion.technicalMetadata);
+    assert.deepEqual(applied.fragment.derivatives.thumbnail, completion.derivative);
+    assert.equal(applied.fragment.hashes.perceptualHash, PERCEPTUAL_HASH);
+    assert.equal(applied.candidates.length, 1);
+    assert.equal(applied.candidates[0].queryFragmentRef.id, fragment.id);
+    assert.equal(applied.candidates[0].matchedFragmentRef.id, matchedFragment.id);
+    assert.equal(applied.candidates[0].rank, 1);
+    assert.deepEqual(applied.batch.processingSummary.deterministic, {
+      processorName: 'deterministic-media',
+      processorVersion: 'v1',
+      eligible: 1,
+      running: 0,
+      succeeded: 1,
+      failedRetryable: 0,
+      failedTerminal: 0,
+      unsupportedCapabilities: 0,
+      updatedAt: COMPLETED_AT,
+    });
+    assert.deepEqual(applied.batch.counters, {
+      saved: 1,
+      processed: 1,
+      failed: 0,
+      needsReview: 1,
+    });
+    assert.equal(applied.batch.status, 'completed');
+    assert.deepEqual(await repository.getFragment(UID, fragment.id), applied.fragment);
+    assert.deepEqual(await repository.getImportBatch(UID, batch.id), applied.batch);
+
+    const failingRepository = await createFinalizedRepository(
+      createPreCallFailureFactory(createRepository),
+    );
+    const failingClaim = claimInput();
+    const running = await failingRepository.claimProcessingTask(UID, failingClaim);
+    await failingRepository.registerContentHash(UID, registrationInputFor(failingClaim));
+    const beforeFragment = await failingRepository.getFragment(UID, fragment.id);
+    const beforeBatch = await failingRepository.getImportBatch(UID, batch.id);
+    await assert.rejects(
+      () => failingRepository.completeDeterministicProcessing(
+        UID,
+        successfulCompletionInput(failingClaim),
+      ),
+      /simulated terminal commit failure/,
+    );
+    const stillRunning = await failingRepository.claimProcessingTask(UID, failingClaim);
+    assert.equal(stillRunning.outcome, 'busy');
+    assert.deepEqual(stillRunning.task, running.task);
+    assert.deepEqual(await failingRepository.getFragment(UID, fragment.id), beforeFragment);
+    assert.deepEqual(await failingRepository.getImportBatch(UID, batch.id), beforeBatch);
+  });
+
+  test(`${name}: terminal failure is distinct from upload failure`, async () => {
+    const rejectedFragmentId = 'frag_reject001';
+    const mixedBatch = makePendingBatch({
+      inputCount: 2,
+      uploads: {
+        [fragment.id]: makeUploadItem({ fragmentId: fragment.id }),
+        [rejectedFragmentId]: makeUploadItem({ fragmentId: rejectedFragmentId }),
+      },
+    });
+    const repository = await createRepository();
+    await repository.createImportBatch(UID, mixedBatch);
+    await repository.finalizeOriginal(UID, finalizeInputFor(
+      mixedBatch,
+      fragment,
+      '2026-07-16T00:00:20.000Z',
+    ));
+    await repository.rejectOriginal(UID, {
+      batchId: mixedBatch.id,
+      fragmentId: rejectedFragmentId,
+      originalPath: mixedBatch.uploads[rejectedFragmentId].originalPath,
+      generation: '1740000000000999',
+      failureCode: 'ingestion/invalid-original',
+      updatedAt: '2026-07-16T00:00:30.000Z',
+    });
+    const claim = claimInputFor(fragment, mixedBatch);
+    await repository.claimProcessingTask(UID, claim);
+    await repository.registerContentHash(UID, registrationInputFor(claim));
+
+    const applied = await repository.completeDeterministicProcessing(
+      UID,
+      terminalFailureInput(claim),
+    );
+
+    assert.equal(applied.task.state, 'failed_terminal');
+    assert.equal(applied.fragment.status, 'failed');
+    assert.equal(applied.batch.processingSummary.deterministic.failedTerminal, 1);
+    assert.equal(applied.batch.uploads[fragment.id].state, 'finalized');
+    assert.equal(applied.batch.uploads[rejectedFragmentId].state, 'failed');
+    assert.deepEqual(applied.batch.counters, {
+      saved: 1,
+      processed: 0,
+      failed: 2,
+      needsReview: 0,
+    });
+    assert.equal(applied.batch.status, 'completed_with_errors');
+  });
+
+  test(`${name}: unsupported capabilities do not increment failed`, async () => {
+    const repository = await createFinalizedRepository(createRepository);
+    const claim = claimInput();
+    await repository.claimProcessingTask(UID, claim);
+    await repository.registerContentHash(UID, registrationInputFor(claim));
+
+    const applied = await repository.completeDeterministicProcessing(UID, successfulCompletionInput(
+      claim,
+      {
+        technicalMetadata: makePdfTechnicalMetadata(),
+        derivative: null,
+        perceptualHash: null,
+        capabilityStatuses: {
+          metadata: 'partial',
+          thumbnail: 'unsupported',
+          perceptualHash: 'unsupported',
+        },
+        warningCodes: ['processing/page-count-unsupported'],
+      },
+    ));
+
+    assert.equal(applied.task.state, 'succeeded');
+    assert.equal(applied.batch.processingSummary.deterministic.unsupportedCapabilities, 2);
+    assert.equal(applied.batch.processingSummary.deterministic.succeeded, 1);
+    assert.equal(applied.batch.counters.processed, 1);
+    assert.equal(applied.batch.counters.failed, 0);
+    assert.equal(applied.batch.status, 'completed');
+  });
+
+  test(`${name}: suggested time and GPS never overwrite user or other-source facts`, async () => {
+    const userCapturedAt = {
+      value: '2026-07-12T10:22:14.000Z',
+      sourceType: 'user',
+      sourceRefs: [{ type: 'fragment', id: fragment.id }],
+      processor: {
+        name: 'manual-entry',
+        version: 'v1',
+        modelAlias: null,
+        promptVersion: null,
+      },
+      confidence: 1,
+      status: 'confirmed',
+      observedAt: '2026-07-16T00:00:10.000Z',
+    };
+    const correctedGeo = {
+      value: { lat: 13.7563, lng: 100.5018 },
+      sourceType: 'places',
+      sourceRefs: [{ type: 'fragment', id: fragment.id }],
+      processor: {
+        name: 'place-resolution',
+        version: 'v3',
+        modelAlias: null,
+        promptVersion: null,
+      },
+      confidence: 1,
+      status: 'corrected',
+      observedAt: '2026-07-16T00:00:10.000Z',
+    };
+    const protectedFragment = makeUploadedFragment({
+      facts: { capturedAt: userCapturedAt, geo: correctedGeo },
+    });
+    const repository = await createRepository();
+    await repository.createImportBatch(UID, batch);
+    await repository.finalizeOriginal(UID, finalizeInputFor(
+      batch,
+      protectedFragment,
+      '2026-07-16T00:00:30.000Z',
+    ));
+    const claim = claimInput();
+    await repository.claimProcessingTask(UID, claim);
+    await repository.registerContentHash(UID, registrationInputFor(claim));
+    const sourceBefore = structuredClone(protectedFragment.source);
+
+    const applied = await repository.completeDeterministicProcessing(UID, successfulCompletionInput(
+      claim,
+      {
+        factSuggestions: {
+          capturedAt: makeSuggestedFact({
+            key: 'capturedAt',
+            value: '2026-07-11T03:22:14.000Z',
+          }),
+          geo: makeSuggestedFact({
+            key: 'geo',
+            value: { lat: 35.6764, lng: 139.65 },
+          }),
+        },
+      },
+    ));
+
+    assert.deepEqual(applied.fragment.facts, {
+      capturedAt: userCapturedAt,
+      geo: correctedGeo,
+    });
+    assert.deepEqual(applied.fragment.source, sourceBefore);
+    assert.deepEqual(applied.task.outputs.warningCodes, ['processing/fact-conflict']);
+  });
+
+  test(`${name}: a late old processor version cannot mutate the active summary`, async () => {
+    const activeSummary = {
+      deterministic: {
+        processorName: 'deterministic-media',
+        processorVersion: 'v2',
+        eligible: 1,
+        running: 1,
+        succeeded: 0,
+        failedRetryable: 0,
+        failedTerminal: 0,
+        unsupportedCapabilities: 0,
+        updatedAt: '2026-07-16T00:00:10.000Z',
+      },
+    };
+    const futureBatch = makePendingBatch({
+      counters: { saved: 0, processed: 0, failed: 0, needsReview: 1 },
+      processingSummary: activeSummary,
+    });
+    const repository = await createRepository();
+    await repository.createImportBatch(UID, futureBatch);
+    await repository.finalizeOriginal(UID, finalizeInputFor(
+      futureBatch,
+      fragment,
+      '2026-07-16T00:00:30.000Z',
+    ));
+    const oldClaim = claimInput();
+    await repository.claimProcessingTask(UID, oldClaim);
+    await repository.registerContentHash(UID, registrationInputFor(oldClaim));
+    const before = await repository.getImportBatch(UID, futureBatch.id);
+
+    const applied = await repository.completeDeterministicProcessing(
+      UID,
+      successfulCompletionInput(oldClaim),
+    );
+
+    assert.equal(applied.task.processorVersion, 'v1');
+    assert.deepEqual(applied.batch.processingSummary, before.processingSummary);
+    assert.deepEqual(applied.batch.counters, before.counters);
+  });
+
+  test(`${name}: repeating terminal completion is a no-op`, async () => {
+    const repository = await createFinalizedRepository(createRepository);
+    const claim = claimInput();
+    await repository.claimProcessingTask(UID, claim);
+    await repository.registerContentHash(UID, registrationInputFor(claim));
+    const completion = successfulCompletionInput(claim);
+
+    const applied = await repository.completeDeterministicProcessing(UID, completion);
+    const repeated = await repository.completeDeterministicProcessing(UID, completion);
+
+    assert.equal(applied.outcome, 'applied');
+    assert.equal(repeated.outcome, 'duplicate');
+    assert.deepEqual(repeated.task, applied.task);
+    assert.deepEqual(repeated.fragment, applied.fragment);
+    assert.deepEqual(repeated.batch, applied.batch);
+    assert.deepEqual(repeated.candidates, applied.candidates);
+    assert.deepEqual((await repository.getImportBatch(UID, batch.id)).counters, {
+      saved: 1,
+      processed: 1,
       failed: 0,
       needsReview: 0,
     });
