@@ -56,13 +56,18 @@ export async function runIsolatedWorker({ signal, createWorker, onStage }) {
   let waiter;
   let termination;
   let cleanupOutput = () => {};
+  let cleanupErrorGuard = () => {};
   const terminate = () => {
     waiter?.cleanup();
     if (!worker) return Promise.resolve();
     if (!termination) {
-      termination = Promise.resolve(worker.terminate())
+      termination = Promise.resolve()
+        .then(() => worker.terminate())
         .catch(() => undefined)
-        .finally(cleanupOutput);
+        .finally(() => {
+          cleanupOutput();
+          cleanupErrorGuard();
+        });
     }
     return termination;
   };
@@ -72,6 +77,9 @@ export async function runIsolatedWorker({ signal, createWorker, onStage }) {
       signal,
       start: () => {
         worker = createWorker();
+        const guardLateError = () => {};
+        worker.on('error', guardLateError);
+        cleanupErrorGuard = () => worker.off('error', guardLateError);
         const cleanupStdout = discard(worker.stdout);
         const cleanupStderr = discard(worker.stderr);
         cleanupOutput = () => {
