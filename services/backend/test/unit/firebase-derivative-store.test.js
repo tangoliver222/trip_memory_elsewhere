@@ -1,0 +1,304 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createFirebaseDerivativeStore } from '../../src/adapters/firebase-derivative-store.js';
+import { makeDerivativePath } from '../../src/processing/identity.js';
+
+const BUCKET = 'demo-elsewhere.appspot.com';
+const OWNER_ID = 'user_alpha';
+const FRAGMENT_ID = 'frag_12345678';
+const INPUT_HASH = 'a'.repeat(64);
+const PROCESSOR_NAME = 'deterministic-media';
+const PROCESSOR_VERSION = 'v1';
+const THUMBNAIL = Object.freeze({
+  buffer: Buffer.from('immutable-webp-thumbnail'),
+  width: 512,
+  height: 384,
+});
+const PATH = makeDerivativePath({
+  ownerId: OWNER_ID,
+  fragmentId: FRAGMENT_ID,
+  processorName: PROCESSOR_NAME,
+  processorVersion: PROCESSOR_VERSION,
+  inputHash: INPUT_HASH,
+});
+
+function crc32cBase64(bytes) {
+  let crc = 0xffff_ffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ ((crc & 1) === 1 ? 0x82f6_3b78 : 0);
+    }
+  }
+  const encoded = Buffer.allocUnsafe(4);
+  encoded.writeUInt32BE((crc ^ 0xffff_ffff) >>> 0);
+  return encoded.toString('base64');
+}
+
+assert.equal(crc32cBase64(Buffer.from('123456789')), '4waSgw==');
+const CRC32C = crc32cBase64(THUMBNAIL.buffer);
+
+function frozenCustomMetadata(overrides = {}) {
+  return {
+    ownerId: OWNER_ID,
+    fragmentId: FRAGMENT_ID,
+    processorName: PROCESSOR_NAME,
+    processorVersion: PROCESSOR_VERSION,
+    inputHash: INPUT_HASH,
+    width: String(THUMBNAIL.width),
+    height: String(THUMBNAIL.height),
+    ...overrides,
+  };
+}
+
+function liveMetadata(overrides = {}) {
+  return {
+    name: PATH,
+    generation: '1740000000000001',
+    metageneration: '1',
+    contentType: 'image/webp',
+    size: String(THUMBNAIL.buffer.byteLength),
+    crc32c: CRC32C,
+    metadata: frozenCustomMetadata(),
+    ...overrides,
+  };
+}
+
+function createStorageFake({
+  metadata = liveMetadata(),
+  saveError = null,
+  metadataError = null,
+} = {}) {
+  const calls = {
+    buckets: [],
+    files: [],
+    saves: [],
+    metadata: 0,
+    order: [],
+  };
+  const file = {
+    async save(bytes, options) {
+      calls.order.push('save');
+      calls.saves.push({ bytes, options });
+      if (saveError) throw saveError;
+    },
+    async getMetadata() {
+      calls.order.push('getMetadata');
+      calls.metadata += 1;
+      if (metadataError) throw metadataError;
+      return [metadata];
+    },
+  };
+  const storage = {
+    bucket(bucketName) {
+      calls.buckets.push(bucketName);
+      return {
+        file(path) {
+          calls.files.push(path);
+          return file;
+        },
+      };
+    },
+  };
+  return { storage, calls };
+}
+
+function createStore(storage, allowedBuckets = [BUCKET]) {
+  return createFirebaseDerivativeStore({ storage, allowedBuckets });
+}
+
+function putThumbnail(store, overrides = {}) {
+  return store.putThumbnail({
+    bucket: BUCKET,
+    ownerId: OWNER_ID,
+    fragmentId: FRAGMENT_ID,
+    inputHash: INPUT_HASH,
+    thumbnail: THUMBNAIL,
+    ...overrides,
+  });
+}
+
+function expectedSaveOptions() {
+  return {
+    resumable: false,
+    preconditionOpts: { ifGenerationMatch: 0 },
+    metadata: {
+      contentType: 'image/webp',
+      metadata: frozenCustomMetadata(),
+    },
+  };
+}
+
+function assertStableError(error, code, retryable) {
+  assert.equal(error.name, 'ProcessingError');
+  assert.equal(error.code, code);
+  assert.equal(error.retryable, retryable);
+  assert.equal(error.cause, undefined);
+  assert.equal(error.message.includes('secret'), false);
+  return true;
+}
+
+test('creates the deterministic thumbnail path with generation zero precondition', async () => {
+  const { storage, calls } = createStorageFake();
+
+  await putThumbnail(createStore(storage));
+
+  assert.deepEqual(calls.buckets, [BUCKET]);
+  assert.deepEqual(calls.files, [PATH]);
+  assert.deepEqual(calls.order, ['save', 'getMetadata']);
+  assert.equal(calls.saves.length, 1);
+  assert.deepEqual(calls.saves[0].bytes, THUMBNAIL.buffer);
+  assert.deepEqual(calls.saves[0].options, expectedSaveOptions());
+});
+
+test('returns frozen authoritative normalized object facts after creation', async () => {
+  const { storage, calls } = createStorageFake({
+    metadata: liveMetadata({
+      generation: 7,
+      metageneration: 3,
+      size: THUMBNAIL.buffer.byteLength,
+    }),
+  });
+
+  const result = await putThumbnail(createStore(storage));
+
+  assert.equal(calls.metadata, 1);
+  assert.deepEqual(result, {
+    path: PATH,
+    generation: '7',
+    metageneration: '3',
+    contentType: 'image/webp',
+    sizeBytes: THUMBNAIL.buffer.byteLength,
+    crc32c: CRC32C,
+    width: THUMBNAIL.width,
+    height: THUMBNAIL.height,
+  });
+  assert.equal(Object.isFrozen(result), true);
+});
+
+test('a numeric or string 412 reuses only a byte-identical frozen derivative', async (t) => {
+  for (const code of [412, '412']) {
+    await t.test(`code ${JSON.stringify(code)}`, async () => {
+      const { storage, calls } = createStorageFake({
+        saveError: { code, message: 'secret provider precondition detail' },
+      });
+
+      const result = await putThumbnail(createStore(storage));
+
+      assert.equal(result.path, PATH);
+      assert.equal(result.crc32c, CRC32C);
+      assert.deepEqual(calls.order, ['save', 'getMetadata']);
+      assert.equal(calls.saves.length, 1);
+      assert.equal(calls.metadata, 1);
+    });
+  }
+});
+
+test('a 412 with any frozen object fact mismatch is terminal conflict without overwrite', async (t) => {
+  const mismatches = [
+    ['path', { name: PATH.replace(OWNER_ID, 'user_beta') }],
+    ['owner', { metadata: frozenCustomMetadata({ ownerId: 'user_beta' }) }],
+    ['fragment', { metadata: frozenCustomMetadata({ fragmentId: 'frag_87654321' }) }],
+    ['hash', { metadata: frozenCustomMetadata({ inputHash: 'b'.repeat(64) }) }],
+    ['processor', { metadata: frozenCustomMetadata({ processorName: 'other-media' }) }],
+    ['version', { metadata: frozenCustomMetadata({ processorVersion: 'v2' }) }],
+    ['MIME', { contentType: 'image/png' }],
+    ['size', { size: String(THUMBNAIL.buffer.byteLength + 1) }],
+    ['checksum', { crc32c: crc32cBase64(Buffer.from('different bytes')) }],
+    ['width', { metadata: frozenCustomMetadata({ width: '511' }) }],
+    ['height', { metadata: frozenCustomMetadata({ height: '383' }) }],
+    ['generation', { generation: '' }],
+    ['metageneration', { metageneration: '' }],
+    ['missing custom field', (() => {
+      const metadata = frozenCustomMetadata();
+      delete metadata.inputHash;
+      return { metadata };
+    })()],
+    ['extra custom field', {
+      metadata: frozenCustomMetadata({ unexpected: 'not-frozen-contract' }),
+    }],
+  ];
+
+  for (const [name, override] of mismatches) {
+    await t.test(name, async () => {
+      const { storage, calls } = createStorageFake({
+        saveError: { code: 412 },
+        metadata: liveMetadata(override),
+      });
+
+      await assert.rejects(
+        () => putThumbnail(createStore(storage)),
+        (error) => assertStableError(error, 'processing/derivative-conflict', false),
+      );
+      assert.equal(calls.saves.length, 1);
+      assert.equal(calls.metadata, 1);
+    });
+  }
+});
+
+test('successful creation also rejects mismatched authoritative metadata', async () => {
+  const { storage, calls } = createStorageFake({
+    metadata: liveMetadata({ crc32c: crc32cBase64(Buffer.from('forged')) }),
+  });
+
+  await assert.rejects(
+    () => putThumbnail(createStore(storage)),
+    (error) => assertStableError(error, 'processing/derivative-conflict', false),
+  );
+  assert.deepEqual(calls.order, ['save', 'getMetadata']);
+});
+
+test('only a stable 412 code is reusable and transient provider failures are retryable and redacted', async (t) => {
+  const cases = [
+    ['save', {
+      saveError: { code: 500, message: 'secret save detail mentioning 412' },
+    }, 0],
+    ['metadata after create', {
+      metadataError: new Error('secret metadata detail'),
+    }, 1],
+    ['metadata after 412', {
+      saveError: { code: 412 },
+      metadataError: new Error('secret reuse metadata detail'),
+    }, 1],
+  ];
+
+  for (const [name, setup, expectedMetadataCalls] of cases) {
+    await t.test(name, async () => {
+      const { storage, calls } = createStorageFake(setup);
+      await assert.rejects(
+        () => putThumbnail(createStore(storage)),
+        (error) => assertStableError(error, 'processing/storage-unavailable', true),
+      );
+      assert.equal(calls.saves.length, 1);
+      assert.equal(calls.metadata, expectedMetadataCalls);
+    });
+  }
+});
+
+test('unallowlisted buckets invalid identities and client paths fail before Storage access', async (t) => {
+  const invalidInputs = [
+    ['unallowlisted bucket', { bucket: 'other.appspot.com' }],
+    ['owner ID', { ownerId: 'short' }],
+    ['fragment ID', { fragmentId: 'short' }],
+    ['input hash', { inputHash: 'not-a-sha256' }],
+    ['empty thumbnail', { thumbnail: { ...THUMBNAIL, buffer: Buffer.alloc(0) } }],
+    ['oversize width', { thumbnail: { ...THUMBNAIL, width: 513 } }],
+    ['client path', { path: PATH }],
+    ['cross-owner client path', { path: PATH.replace(OWNER_ID, 'user_beta') }],
+    ['client processor override', { processorVersion: 'v2' }],
+  ];
+
+  for (const [name, override] of invalidInputs) {
+    await t.test(name, async () => {
+      const { storage, calls } = createStorageFake();
+      await assert.rejects(
+        () => putThumbnail(createStore(storage), override),
+        (error) => assertStableError(error, 'processing/invalid-media', false),
+      );
+      assert.deepEqual(calls.buckets, []);
+      assert.deepEqual(calls.files, []);
+      assert.deepEqual(calls.saves, []);
+      assert.equal(calls.metadata, 0);
+    });
+  }
+});
