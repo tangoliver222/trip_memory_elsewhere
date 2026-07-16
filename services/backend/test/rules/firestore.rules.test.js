@@ -6,7 +6,13 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import {
+  deleteDoc,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore';
 
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 
@@ -40,6 +46,31 @@ test('Firestore rules isolate owner data and block client-derived writes', { ski
     await t.test('the owner cannot write server-derived fragments', async () => {
       const database = environment.authenticatedContext('user_alpha').firestore();
       await assertFails(setDoc(doc(database, `${path}_new`), { ownerId: 'user_alpha' }));
+    });
+
+    await t.test('the owner cannot forge ImportBatch manifests or derived state', async () => {
+      const batchPath = 'users/user_alpha/importBatches/batch_12345678';
+      await environment.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), batchPath), {
+          ownerId: 'user_alpha',
+          status: 'open',
+          uploadStatus: 'pending',
+          counters: { saved: 0 },
+          uploads: {},
+        });
+      });
+      const database = environment.authenticatedContext('user_alpha').firestore();
+
+      await assertFails(setDoc(doc(database, `${batchPath}_new`), {
+        ownerId: 'user_alpha',
+        uploads: { frag_forged01: { state: 'pending' } },
+      }));
+      await assertFails(updateDoc(doc(database, batchPath), {
+        status: 'processing',
+        uploadStatus: 'complete',
+        'counters.saved': 1,
+      }));
+      await assertFails(deleteDoc(doc(database, batchPath)));
     });
   } finally {
     await environment.cleanup();

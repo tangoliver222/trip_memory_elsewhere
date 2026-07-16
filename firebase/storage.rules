@@ -5,11 +5,27 @@ service firebase.storage {
       return request.auth != null && request.auth.uid == userId;
     }
 
+    function isRegisteredPendingUpload(userId, batchId, fragmentId) {
+      let batch = firestore.get(
+        /databases/(default)/documents/users/$(userId)/importBatches/$(batchId)
+      );
+      return batch != null
+        && batch.data.ownerId == userId
+        && batch.data.uploads is map
+        && fragmentId in batch.data.uploads
+        && batch.data.uploads[fragmentId].state == 'pending'
+        && batch.data.uploads[fragmentId].originalPath
+          == 'users/' + userId + '/originals/' + batchId + '/' + fragmentId
+        && request.resource.contentType
+          in batch.data.uploads[fragmentId].allowedContentTypes
+        && request.resource.size <= batch.data.uploads[fragmentId].maxBytes;
+    }
+
     match /users/{userId}/originals/{batchId}/{fragmentId} {
       allow read: if owns(userId);
       allow create: if owns(userId)
-        && request.resource.size < 50 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*|application/pdf|text/plain');
+        && resource == null
+        && isRegisteredPendingUpload(userId, batchId, fragmentId);
       allow update, delete: if false;
     }
 
