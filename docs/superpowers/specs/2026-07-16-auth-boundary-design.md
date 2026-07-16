@@ -11,7 +11,7 @@ Auth Boundary 只解决一个问题：自定义后端在调用任何用例或 Re
 
 完成后必须满足：
 
-1. 受保护路由同时验证 Firebase ID Token 与 Firebase App Check token；
+1. 受保护路由同时验证 Firebase ID Token 与 Firebase App Check token，并校验 App ID 白名单；
 2. 业务代码只能使用服务端验证得到的 `uid`，不信任 header、query 或 body 中的 ownerId；
 3. 任一验证失败时，路由 handler 和 Repository 均不执行；
 4. 匿名 Firebase 用户与已绑定登录方式的用户使用同一条后端身份路径；
@@ -82,19 +82,35 @@ Auth Boundary 只解决一个问题：自定义后端在调用任何用例或 Re
 `createFirebaseTokenVerifier({ auth, appCheck })` 适配 Firebase Admin：
 
 - `auth.verifyIdToken(token)` 的 decoded `uid` 映射为 `{ uid }`；
-- `appCheck.verifyToken(token)` 的 decoded `app_id` 映射为 `{ appId }`；
+- `appCheck.verifyToken(token)` 返回 `VerifyAppCheckTokenResponse`，adapter 只读取
+  `result.appId` 并映射为 `{ appId }`；不得把 response 错当成 `DecodedAppCheckToken`，也不得
+  读取 `result.app_id`；
 - 不把完整 decoded token 传给应用模块；
-- 缺失 `uid` 或 `app_id` 视为无效 token。
+- 缺失 `uid` 或 `appId` 视为无效 token。
 
 ### 4.2 Fastify boundary
 
 ```js
-const requireAuth = createAuthBoundary({ tokenVerifier });
+const requireAuth = registerAuthBoundary(app, {
+  tokenVerifier,
+  allowedAppIds: ['elsewhere-web-dev'],
+});
 
 app.get('/protected', { preHandler: requireAuth }, async (request) => {
   return useCase({ uid: request.authContext.uid });
 });
 ```
+
+上面的 `/protected` 只用于测试 harness，禁止在 `src/app.js`、`src/server.js` 或任何生产路由中
+注册。`registerAuthBoundary()` 只安装 request decoration 并返回 preHandler，不创建路由。
+
+注册时必须先执行 `app.decorateRequest('authContext', null)`。验证成功后使用
+`Object.defineProperty()` 为当前 request 写入不可覆盖的 own property，其 value 为
+`Object.freeze({ uid, appId })`；业务 handler 对 property 或对象字段的覆盖都必须失败。
+
+`allowedAppIds` 是当前部署环境明确配置的非空白名单。`verifyAppCheckToken()` 返回的 `appId`
+不在白名单中时，按 `app-check/invalid-token` 拒绝，且不进入 handler。白名单不从请求读取，也
+不提供“允许所有 App ID”的默认值。
 
 验证顺序固定为：
 
@@ -107,6 +123,9 @@ app.get('/protected', { preHandler: requireAuth }, async (request) => {
 
 不并行验证两个 token：顺序执行能在身份已失败时避免不必要的 App Check 调用，并保持错误行为
 稳定。客户端传入的 `x-user-id`、ownerId 或 uid 字段不参与此流程。
+
+两个认证 header 均只接受一个非空字符串。空值、数组值、重复 header 被 Node 合并后的逗号值，
+以及 `Bearer first, Bearer second` 一律拒绝；parser 不尝试挑选其中任意一个 token。
 
 ## 5. 错误契约
 
@@ -131,8 +150,9 @@ app.get('/protected', { preHandler: requireAuth }, async (request) => {
 | App Check header 缺失 | `app-check/missing-token` | `Refresh the app session and retry.` |
 | App Check 验证失败 | `app-check/invalid-token` | `Refresh the app session and retry.` |
 
-边界捕获 Firebase 原始错误后只返回上表内容。token、完整 header、decoded claims、email 和底层
-异常 message 均不进入响应或业务日志。
+边界捕获 Firebase 原始错误后只返回上表内容。`requestId` 只读取 Fastify 在服务端生成的
+`request.id`，忽略 header、query 和 body 中任何同名字段。token、完整 header、decoded
+claims、email 和底层异常 message 均不进入响应或业务日志。
 
 ## 6. Firebase 与本地验证
 
@@ -159,7 +179,9 @@ Auth Emulator 发出的未签名 ID Token 只在明确配置 Emulator 的 Admin 
 
 - Firebase adapter 只返回 `uid` / `appId`；
 - 缺失、格式错误和 verifier 抛错映射到四个稳定 code；
+- 空 header、重复 header、数组 header 和逗号合并 header 均被拒绝；
 - ID Token 失败后不调用 App Check verifier；
+- App Check `appId` 不在 `allowedAppIds` 中时被拒绝；
 - 所有成功结果被冻结；
 - Firebase 原始错误内容不出现在响应中。
 
@@ -168,7 +190,9 @@ Auth Emulator 发出的未签名 ID Token 只在明确配置 Emulator 的 Admin 
 - 公开健康端点不要求 token；
 - 四种失败场景均不进入 handler；
 - 合法 token 进入 handler，且使用 verified `uid`；
-- 客户端伪造 `x-user-id` 或 body ownerId 不能覆盖 verified `uid`。
+- 客户端伪造 `x-user-id` 或 body ownerId 不能覆盖 verified `uid`；
+- 客户端伪造 requestId 不能覆盖响应中的服务端 `request.id`；
+- `/protected` 仅由 `test/helpers/create-protected-app.js` 注册，生产 composition root 不包含该路由。
 
 ### 7.3 Emulator 集成测试
 
