@@ -154,6 +154,107 @@ test('GPS becomes a suggested fact and never confirmed user truth', async (t) =>
   assert.notEqual(result.factHints.geo.status, 'confirmed');
 });
 
+test('raw EXIF GPS applies exact N E S W reference signs', async (t) => {
+  for (const [refs, expected] of [
+    [{ latRef: 'N', lngRef: 'E' }, { lat: 13.7563, lng: 100.5018 }],
+    [{ latRef: 'S', lngRef: 'W' }, { lat: -13.7563, lng: -100.5018 }],
+  ]) {
+    const path = await createFixtureFile(t, exifJpegBytes({
+      gps: {
+        ...refs,
+        lat: [[13, 1], [45, 1], [2268, 100]],
+        lng: [[100, 1], [30, 1], [648, 100]],
+      },
+    }), `gps-${refs.latRef}${refs.lngRef}.jpg`);
+
+    const result = await read(createReader(), path);
+
+    assert.deepEqual(result.factHints.geo, {
+      ...expected,
+      sourceType: 'gps',
+      status: 'suggested',
+    });
+  }
+});
+
+test('invalid raw EXIF GPS rationals references and DMS boundaries are never suggested', async (t) => {
+  const valid = {
+    latRef: 'N',
+    lat: [[13, 1], [45, 1], [2268, 100]],
+    lngRef: 'E',
+    lng: [[100, 1], [30, 1], [648, 100]],
+  };
+  const invalid = [
+    { latRef: 'Q' },
+    { lngRef: 'Q' },
+    { lat: [[13, 0], [45, 1], [2268, 100]] },
+    { lng: [[100, 1], [30, 0], [648, 100]] },
+    { lat: [[91, 1], [0, 1], [0, 1]] },
+    { lng: [[181, 1], [0, 1], [0, 1]] },
+    { lat: [[13, 1], [60, 1], [0, 1]] },
+    { lng: [[100, 1], [30, 1], [60, 1]] },
+    { lat: [[90, 1], [1, 1], [0, 1]] },
+    { lng: [[180, 1], [0, 1], [1, 1]] },
+  ];
+
+  for (const [index, override] of invalid.entries()) {
+    const path = await createFixtureFile(
+      t,
+      exifJpegBytes({ gps: { ...valid, ...override } }),
+      `invalid-gps-${index}.jpg`,
+    );
+
+    const result = await read(createReader(), path);
+
+    assert.equal(result.factHints.geo, null);
+  }
+});
+
+test('source families accept only their canonical exact upload MIME policy', async (t) => {
+  const paths = {
+    jpeg: await createFixtureFile(t, exifJpegBytes(), 'policy.jpg'),
+    pdf: await createFixtureFile(t, minimalPdfBytes(), 'policy.pdf'),
+    text: await createFixtureFile(t, strictUtf8Bytes(), 'policy.txt'),
+  };
+  const cases = [
+    { sourceType: 'photo', allowed: ['image/jpeg', paths.jpeg], forbidden: ['application/pdf', paths.pdf] },
+    { sourceType: 'screenshot', allowed: ['image/jpeg', paths.jpeg], forbidden: ['application/pdf', paths.pdf] },
+    { sourceType: 'receipt', allowed: ['application/pdf', paths.pdf], forbidden: ['text/plain', paths.text] },
+    { sourceType: 'ticket', allowed: ['application/pdf', paths.pdf], forbidden: ['text/plain', paths.text] },
+    { sourceType: 'menu', allowed: ['application/pdf', paths.pdf], forbidden: ['text/plain', paths.text] },
+    { sourceType: 'text', allowed: ['text/plain', paths.text], forbidden: ['text/plain;charset=utf-8', paths.text] },
+  ];
+
+  for (const { sourceType, allowed, forbidden } of cases) {
+    const accepted = await read(createReader(), allowed[1], {
+      sourceType,
+      contentType: allowed[0],
+    });
+    assert.equal(accepted.technicalMetadata.format, allowed[0] === 'text/plain' ? 'text' : (
+      allowed[0] === 'application/pdf' ? 'pdf' : 'jpeg'
+    ));
+
+    const observations = [];
+    await assert.rejects(
+      () => read(createReader({
+        warningSink: (observation) => observations.push(observation),
+      }), forbidden[1], {
+        sourceType,
+        contentType: forbidden[0],
+      }),
+      { code: 'processing/invalid-media', retryable: false },
+    );
+    assert.deepEqual(observations, []);
+  }
+
+  for (const contentType of ['image/jpeg;charset=binary', 'text/plain; charset=utf-8']) {
+    await assert.rejects(
+      () => read(createReader(), paths.jpeg, { sourceType: 'photo', contentType }),
+      { code: 'processing/invalid-media', retryable: false },
+    );
+  }
+});
+
 test('PDF reports pageCount null and page-count-unsupported', async (t) => {
   const path = await createFixtureFile(t, minimalPdfBytes(), 'fixture.pdf');
 
@@ -309,6 +410,32 @@ test('pre-aborted signals and expired deadlines stop before parsing', async (t) 
     assert.equal(caught?.retryable, true);
     assert.equal((caught?.message ?? '').includes(secret), false);
   }
+});
+
+test('abort during metadata parsing remains authoritative and redacted', async (t) => {
+  const secret = 'inflight-parser-secret.jpg';
+  const path = await createFixtureFile(
+    t,
+    pngWithCompressedMetadataBytes(8 * 1024 * 1024),
+    secret,
+  );
+  const controller = new AbortController();
+  const operation = read(createReader(), path, {
+    contentType: 'image/png',
+    signal: controller.signal,
+  });
+  setImmediate(() => controller.abort());
+
+  let caught;
+  try {
+    await operation;
+  } catch (error) {
+    caught = error;
+  }
+
+  assert.equal(caught?.code, 'processing/soft-timeout');
+  assert.equal(caught?.retryable, true);
+  assert.equal((caught?.message ?? '').includes(secret), false);
 });
 
 test('fatal decoder errors expose only stable classifications to the sink', async (t) => {

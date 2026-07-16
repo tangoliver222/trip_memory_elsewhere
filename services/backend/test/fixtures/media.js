@@ -86,7 +86,7 @@ function makeIfd(entries, dataStart) {
   return { directory, data, nextOffset: dataOffset };
 }
 
-function makeExifPayload({ offsetTimeOriginal = null, includeGps = false } = {}) {
+function makeExifPayload({ offsetTimeOriginal = null, includeGps = false, gps = null } = {}) {
   const make = ascii('Elsewhere');
   const model = ascii('Fixture One');
   const date = ascii('2024:10:12 08:42:00');
@@ -96,11 +96,18 @@ function makeExifPayload({ offsetTimeOriginal = null, includeGps = false } = {})
   const serial = ascii('private-device-serial');
   const unknown = ascii('private-unknown-tag');
 
-  const ifd0Count = includeGps ? 5 : 4;
+  const gpsValues = gps ?? (includeGps ? {
+    latRef: 'N',
+    lat: [[13, 1], [45, 1], [2268, 100]],
+    lngRef: 'E',
+    lng: [[100, 1], [30, 1], [648, 100]],
+  } : null);
+  const hasGps = gpsValues !== null;
+  const ifd0Count = hasGps ? 5 : 4;
   const ifd0Size = 2 + (ifd0Count * 12) + 4;
   const exifCount = offset === null ? 9 : 10;
   const exifSize = 2 + (exifCount * 12) + 4;
-  const gpsSize = includeGps ? 2 + (4 * 12) + 4 : 0;
+  const gpsSize = hasGps ? 2 + (4 * 12) + 4 : 0;
   const ifd0Offset = 8;
   const exifOffset = ifd0Offset + ifd0Size;
   const gpsOffset = exifOffset + exifSize;
@@ -111,7 +118,7 @@ function makeExifPayload({ offsetTimeOriginal = null, includeGps = false } = {})
     { tag: 0x010f, type: 2, count: make.length, value: make },
     { tag: 0x0110, type: 2, count: model.length, value: model },
     { tag: 0x8769, type: 4, count: 1, value: long(exifOffset) },
-    ...(includeGps ? [{ tag: 0x8825, type: 4, count: 1, value: long(gpsOffset) }] : []),
+    ...(hasGps ? [{ tag: 0x8825, type: 4, count: 1, value: long(gpsOffset) }] : []),
   ], dataOffset);
   dataOffset = ifd0.nextOffset;
 
@@ -129,11 +136,11 @@ function makeExifPayload({ offsetTimeOriginal = null, includeGps = false } = {})
   ], dataOffset);
   dataOffset = exif.nextOffset;
 
-  const gps = includeGps ? makeIfd([
-    { tag: 0x0001, type: 2, count: 2, value: ascii('N').subarray(0, 2) },
-    { tag: 0x0002, type: 5, count: 3, value: Buffer.concat([rational(13), rational(45), rational(2268, 100)]) },
-    { tag: 0x0003, type: 2, count: 2, value: ascii('E').subarray(0, 2) },
-    { tag: 0x0004, type: 5, count: 3, value: Buffer.concat([rational(100), rational(30), rational(648, 100)]) },
+  const gpsIfd = hasGps ? makeIfd([
+    { tag: 0x0001, type: 2, count: 2, value: ascii(gpsValues.latRef).subarray(0, 2) },
+    { tag: 0x0002, type: 5, count: 3, value: Buffer.concat(gpsValues.lat.map(([numerator, denominator]) => rational(numerator, denominator))) },
+    { tag: 0x0003, type: 2, count: 2, value: ascii(gpsValues.lngRef).subarray(0, 2) },
+    { tag: 0x0004, type: 5, count: 3, value: Buffer.concat(gpsValues.lng.map(([numerator, denominator]) => rational(numerator, denominator))) },
   ], dataOffset) : null;
 
   const header = Buffer.alloc(8);
@@ -146,10 +153,10 @@ function makeExifPayload({ offsetTimeOriginal = null, includeGps = false } = {})
     header,
     ifd0.directory,
     exif.directory,
-    ...(gps ? [gps.directory] : []),
+    ...(gpsIfd ? [gpsIfd.directory] : []),
     ...ifd0.data,
     ...exif.data,
-    ...(gps ? gps.data : []),
+    ...(gpsIfd ? gpsIfd.data : []),
   ]);
 }
 
