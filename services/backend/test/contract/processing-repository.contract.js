@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeProcessingTaskId } from '../../src/processing/identity.js';
-import { makePendingBatch, makeUploadedFragment } from '../fixtures/import.js';
+import {
+  makePendingBatch,
+  makeUploadItem,
+  makeUploadedFragment,
+} from '../fixtures/import.js';
 import { makeProcessingTask } from '../fixtures/processing.js';
 
 const UID = 'user_alpha';
@@ -11,47 +15,62 @@ const LEASE_EXPIRES_AT = '2026-07-16T00:05:00.000Z';
 
 const fragment = makeUploadedFragment();
 const batch = makePendingBatch();
-const taskId = makeProcessingTaskId({
-  ownerId: UID,
-  fragmentId: fragment.id,
-  processorName: 'deterministic-media',
-  processorVersion: 'v1',
-  bucket: fragment.storage.bucket,
-  objectName: fragment.storage.originalPath,
-  generation: fragment.storage.generation,
+const sourceRevisionFor = (fragmentInput) => ({
+  bucket: fragmentInput.storage.bucket,
+  objectName: fragmentInput.storage.originalPath,
+  generation: fragmentInput.storage.generation,
 });
 
-const claimInput = (overrides = {}) => ({
-  taskId,
-  fragmentId: fragment.id,
-  batchId: batch.id,
-  processorName: 'deterministic-media',
-  processorVersion: 'v1',
-  sourceRevision: {
-    bucket: fragment.storage.bucket,
-    objectName: fragment.storage.originalPath,
-    generation: fragment.storage.generation,
-  },
-  leaseOwner: 'exec_first001',
-  claimedAt: CLAIMED_AT,
-  softDeadlineAt: SOFT_DEADLINE_AT,
-  leaseExpiresAt: LEASE_EXPIRES_AT,
-  ...overrides,
-});
+function claimInputFor(fragmentInput, batchInput, overrides = {}) {
+  const {
+    processorName = 'deterministic-media',
+    processorVersion = 'v1',
+    sourceRevision = sourceRevisionFor(fragmentInput),
+    taskId: taskIdOverride,
+    ...claimOverrides
+  } = overrides;
+  const resolvedTaskId = taskIdOverride ?? makeProcessingTaskId({
+    ownerId: UID,
+    fragmentId: fragmentInput.id,
+    processorName,
+    processorVersion,
+    ...sourceRevision,
+  });
+  return {
+    taskId: resolvedTaskId,
+    fragmentId: fragmentInput.id,
+    batchId: batchInput.id,
+    processorName,
+    processorVersion,
+    sourceRevision,
+    leaseOwner: 'exec_first001',
+    claimedAt: CLAIMED_AT,
+    softDeadlineAt: SOFT_DEADLINE_AT,
+    leaseExpiresAt: LEASE_EXPIRES_AT,
+    ...claimOverrides,
+  };
+}
 
-const finalizeInput = () => ({
-  batchId: batch.id,
-  fragmentId: fragment.id,
-  originalPath: fragment.storage.originalPath,
-  generation: fragment.storage.generation,
-  updatedAt: '2026-07-16T00:00:30.000Z',
-  fragment,
+const claimInput = (overrides = {}) => claimInputFor(fragment, batch, overrides);
+const taskId = claimInput().taskId;
+
+const finalizeInputFor = (batchInput, fragmentInput, updatedAt) => ({
+  batchId: batchInput.id,
+  fragmentId: fragmentInput.id,
+  originalPath: fragmentInput.storage.originalPath,
+  generation: fragmentInput.storage.generation,
+  updatedAt,
+  fragment: fragmentInput,
 });
 
 async function createFinalizedRepository(createRepository) {
   const repository = await createRepository();
   await repository.createImportBatch(UID, batch);
-  await repository.finalizeOriginal(UID, finalizeInput());
+  await repository.finalizeOriginal(UID, finalizeInputFor(
+    batch,
+    fragment,
+    '2026-07-16T00:00:30.000Z',
+  ));
   return repository;
 }
 
@@ -79,12 +98,50 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
       { sourceRevision: { ...claimInput().sourceRevision, bucket: 'other.appspot.com' } },
       { sourceRevision: { ...claimInput().sourceRevision, objectName: `${fragment.storage.originalPath}-other` } },
       { sourceRevision: { ...claimInput().sourceRevision, generation: '1740000000000002' } },
+      { taskId: 'task_wrong0001' },
+      { batchId: 'batch_wrong0001' },
     ]) {
       await assert.rejects(
         () => repository.claimProcessingTask(UID, claimInput(mismatch)),
         { code: 'repository/processing-target-mismatch' },
       );
     }
+
+    const unlinkedBatchId = 'batch_link0001';
+    const manifestFragmentId = 'frag_manifest01';
+    const unlinkedFragmentId = 'frag_unlinked1';
+    const unlinkedBatch = makePendingBatch({
+      id: unlinkedBatchId,
+      status: 'processing',
+      uploadStatus: 'complete',
+      counters: { saved: 1, processed: 0, failed: 0, needsReview: 0 },
+      uploads: {
+        [manifestFragmentId]: makeUploadItem({
+          batchId: unlinkedBatchId,
+          fragmentId: manifestFragmentId,
+          state: 'finalized',
+          finalizedGeneration: 'manifest-generation',
+        }),
+      },
+    });
+    const unlinkedFragment = makeUploadedFragment({
+      id: unlinkedFragmentId,
+      batchId: unlinkedBatchId,
+      storage: {
+        ...fragment.storage,
+        originalPath: `users/${UID}/originals/${unlinkedBatchId}/${unlinkedFragmentId}`,
+      },
+    });
+    const unlinkedRepository = await createRepository();
+    await unlinkedRepository.createImportBatch(UID, unlinkedBatch);
+    await unlinkedRepository.createFragment(UID, unlinkedFragment);
+    await assert.rejects(
+      () => unlinkedRepository.claimProcessingTask(
+        UID,
+        claimInputFor(unlinkedFragment, unlinkedBatch),
+      ),
+      { code: 'repository/processing-target-mismatch' },
+    );
 
     const claimed = await repository.claimProcessingTask(UID, claimInput());
 
@@ -154,11 +211,23 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.throws(() => {
       claimed.task.attemptCount = 99;
     }, TypeError);
-    assert.equal((await repository.getFragment(UID, fragment.id)).status, 'processing');
-    assert.deepEqual(
-      (await repository.getImportBatch(UID, batch.id)).processingSummary,
-      expectedRunningSummary(),
-    );
+    assert.throws(() => {
+      claimed.fragment.status = 'failed';
+    }, TypeError);
+    assert.throws(() => {
+      claimed.batch.counters.saved = 99;
+    }, TypeError);
+    const storedFragment = await repository.getFragment(UID, fragment.id);
+    const storedBatch = await repository.getImportBatch(UID, batch.id);
+    assert.equal(storedFragment.status, 'processing');
+    assert.deepEqual(storedFragment.processing, claimed.fragment.processing);
+    assert.deepEqual(storedBatch.processingSummary, expectedRunningSummary());
+    assert.deepEqual(storedBatch.counters, {
+      saved: 1,
+      processed: 0,
+      failed: 0,
+      needsReview: 0,
+    });
   });
 
   test(`${name}: an active lease is busy and cannot be stolen`, async () => {
@@ -223,6 +292,36 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
       { code: 'repository/lease-owner-mismatch' },
     );
 
+    const exactExpiryWithOffset = '2026-07-15T19:05:00.000-05:00';
+    const afterExpiryButLexicallyEarlier = '2026-07-15T19:05:00.001-05:00';
+    assert.equal(Date.parse(exactExpiryWithOffset), Date.parse(LEASE_EXPIRES_AT));
+    assert.equal(afterExpiryButLexicallyEarlier < LEASE_EXPIRES_AT, true);
+    assert.equal(
+      Date.parse(afterExpiryButLexicallyEarlier) > Date.parse(LEASE_EXPIRES_AT),
+      true,
+    );
+    for (const expiredAt of [exactExpiryWithOffset, afterExpiryButLexicallyEarlier]) {
+      await assert.rejects(
+        () => repository.heartbeatProcessingTask(UID, {
+          taskId,
+          leaseOwner: 'exec_first001',
+          heartbeatAt: expiredAt,
+          currentStep: 'metadata',
+          leaseExpiresAt: '2026-07-16T00:06:00.000Z',
+        }),
+        { code: 'repository/lease-owner-mismatch' },
+      );
+      await assert.rejects(
+        () => repository.failDeterministicProcessing(UID, {
+          taskId,
+          leaseOwner: 'exec_first001',
+          failedAt: expiredAt,
+          errorCode: 'processing/storage-unavailable',
+        }),
+        { code: 'repository/lease-owner-mismatch' },
+      );
+    }
+
     const heartbeat = await repository.heartbeatProcessingTask(UID, {
       taskId,
       leaseOwner: 'exec_first001',
@@ -238,10 +337,58 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
   });
 
   test(`${name}: retryable failure releases lease and moves summary exactly once`, async () => {
-    const repository = await createFinalizedRepository(createRepository);
-    await repository.claimProcessingTask(UID, claimInput());
+    const secondFragmentId = 'frag_87654321';
+    const twoFragmentBatch = makePendingBatch({
+      inputCount: 2,
+      uploads: {
+        [fragment.id]: makeUploadItem({ fragmentId: fragment.id }),
+        [secondFragmentId]: makeUploadItem({ fragmentId: secondFragmentId }),
+      },
+    });
+    const secondFragment = makeUploadedFragment({
+      id: secondFragmentId,
+      storage: {
+        ...fragment.storage,
+        originalPath: `users/${UID}/originals/${twoFragmentBatch.id}/${secondFragmentId}`,
+        generation: '1740000000000002',
+      },
+    });
+    const repository = await createRepository();
+    await repository.createImportBatch(UID, twoFragmentBatch);
+    await repository.finalizeOriginal(UID, finalizeInputFor(
+      twoFragmentBatch,
+      fragment,
+      '2026-07-16T00:00:20.000Z',
+    ));
+    await repository.finalizeOriginal(UID, finalizeInputFor(
+      twoFragmentBatch,
+      secondFragment,
+      '2026-07-16T00:00:30.000Z',
+    ));
+
+    const firstClaimInput = claimInputFor(fragment, twoFragmentBatch);
+    await repository.claimProcessingTask(UID, firstClaimInput);
+    const secondClaimedAt = '2026-07-16T00:01:10.000Z';
+    const secondClaim = await repository.claimProcessingTask(UID, claimInputFor(
+      secondFragment,
+      twoFragmentBatch,
+      {
+        leaseOwner: 'exec_second01',
+        claimedAt: secondClaimedAt,
+        softDeadlineAt: '2026-07-16T00:04:10.000Z',
+        leaseExpiresAt: '2026-07-16T00:05:10.000Z',
+      },
+    ));
+    assert.deepEqual(secondClaim.batch.processingSummary, {
+      deterministic: {
+        ...expectedRunningSummary(secondClaimedAt).deterministic,
+        eligible: 2,
+        running: 2,
+      },
+    });
+
     const failureInput = {
-      taskId,
+      taskId: firstClaimInput.taskId,
       leaseOwner: 'exec_first001',
       failedAt: '2026-07-16T00:02:00.000Z',
       errorCode: 'processing/storage-unavailable',
@@ -254,16 +401,18 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.equal(applied.task.leaseAcquiredAt, null);
     assert.equal(applied.task.leaseExpiresAt, null);
     assert.equal(applied.task.lastErrorCode, 'processing/storage-unavailable');
+    assert.equal(applied.task.completedAt, null);
     assert.deepEqual(applied.batch.processingSummary, {
       deterministic: {
         ...expectedRunningSummary().deterministic,
-        running: 0,
+        eligible: 2,
+        running: 1,
         failedRetryable: 1,
         updatedAt: failureInput.failedAt,
       },
     });
     assert.deepEqual(applied.batch.counters, {
-      saved: 1,
+      saved: 2,
       processed: 0,
       failed: 0,
       needsReview: 0,
@@ -275,6 +424,32 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
     assert.deepEqual(repeated.batch, applied.batch);
     assert.notEqual(repeated.batch, applied.batch);
     assert.equal(Object.isFrozen(repeated.batch.processingSummary.deterministic), true);
+
+    const reclaimedAt = '2026-07-16T00:03:00.000Z';
+    const reclaimed = await repository.claimProcessingTask(UID, claimInputFor(
+      fragment,
+      twoFragmentBatch,
+      {
+        leaseOwner: 'exec_third001',
+        claimedAt: reclaimedAt,
+        softDeadlineAt: '2026-07-16T00:06:00.000Z',
+        leaseExpiresAt: '2026-07-16T00:07:00.000Z',
+      },
+    ));
+    assert.equal(reclaimed.task.attemptCount, 2);
+    assert.deepEqual(reclaimed.batch.processingSummary, {
+      deterministic: {
+        ...expectedRunningSummary(reclaimedAt).deterministic,
+        eligible: 2,
+        running: 2,
+      },
+    });
+    assert.deepEqual(reclaimed.batch.counters, {
+      saved: 2,
+      processed: 0,
+      failed: 0,
+      needsReview: 0,
+    });
   });
 
   test(`${name}: terminal tasks are claim no-ops`, async () => {
