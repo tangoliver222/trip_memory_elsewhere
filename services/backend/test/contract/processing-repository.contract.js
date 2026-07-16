@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeProcessingTaskId } from '../../src/processing/identity.js';
+import {
+  makeNearCandidateId,
+  makePairKey,
+  makeProcessingTaskId,
+} from '../../src/processing/identity.js';
 import {
   makePendingBatch,
   makeUploadItem,
@@ -294,20 +298,21 @@ const expectedRunningSummary = (updatedAt = CLAIMED_AT) => ({
 export function runProcessingRepositoryContract({
   name,
   createRepository: repositoryFactory,
-  includeFirestoreConcurrencyCase = false,
+  firestoreConcurrencyCase = null,
+  firestoreCandidateCollisionStore = null,
 }) {
   let testIndex = 0;
-  const contractTest = (testName, callback) => {
+  const contractTest = (testName, callback, factory = repositoryFactory) => {
     testIndex += 1;
     const namespaceIndex = testIndex;
     test(testName, { concurrency: false }, async (context) => {
       const namespace = useTestNamespace(namespaceIndex);
       let repositoryPromise = null;
       const createRepository = () => {
-        repositoryPromise ??= repositoryFactory({ ...namespace, context });
+        repositoryPromise ??= factory({ ...namespace, context });
         return repositoryPromise;
       };
-      return callback(createRepository);
+      return callback(createRepository, namespace);
     });
   };
 
@@ -704,16 +709,21 @@ export function runProcessingRepositoryContract({
     assert.equal((await repository.getFragment(UID, fragment.id)).hashes.sha256, SHA256);
     assert.equal((await repository.getFragment(UID, secondFragment.id)).hashes.sha256, SHA256);
     assert.equal((await repository.getImportBatch(UID, pairBatch.id)).counters.saved, 2);
+    return repository;
   };
 
   contractTest(`${name}: concurrent equal hashes select one owner-scoped canonical`, async (createRepository) => {
     await assertConcurrentHashRegistration(createRepository);
   });
 
-  if (includeFirestoreConcurrencyCase) {
+  if (firestoreConcurrencyCase) {
     contractTest(`${name}: transaction retries keep one canonical hash owner`, async (createRepository) => {
-      await assertConcurrentHashRegistration(createRepository);
-    });
+      const repository = await assertConcurrentHashRegistration(createRepository);
+      assert.equal(
+        firestoreConcurrencyCase.attemptCountsFor(repository).some((count) => count > 1),
+        true,
+      );
+    }, firestoreConcurrencyCase.createRepository);
   }
 
   contractTest(`${name}: repeated hash registration does not increment fragmentCount`, async (createRepository) => {
@@ -848,6 +858,67 @@ export function runProcessingRepositoryContract({
     assert.deepEqual(await repository.getFragment(UID, fragment.id), applied.fragment);
     assert.deepEqual(await repository.getImportBatch(UID, batch.id), applied.batch);
   });
+
+  if (firestoreCandidateCollisionStore) {
+    contractTest(`${name}: terminal completion rejects a colliding candidate document`, async (createRepository) => {
+      const repository = await createFinalizedRepository(createRepository);
+      const claim = claimInput();
+      await repository.claimProcessingTask(UID, claim);
+      await repository.registerContentHash(UID, registrationInputFor(claim));
+      const matchedFragment = makeScopedUploadedFragment({
+        id: 'frag_match001',
+        hashes: {
+          sha256: 'b'.repeat(64),
+          perceptualHash: '0000000000000001',
+          perceptualHashAlgorithm: 'dhash',
+          perceptualHashVersion: 'v1',
+          perceptualHashBands: PERCEPTUAL_BANDS,
+        },
+        storage: {
+          ...fragment.storage,
+          originalPath: `users/${UID}/originals/${batch.id}/frag_match001`,
+        },
+      });
+      await repository.createFragment(UID, matchedFragment);
+      const pairIds = [fragment.id, matchedFragment.id].sort();
+      const collision = {
+        id: makeNearCandidateId({
+          algorithmVersion: 'v1',
+          queryFragmentId: fragment.id,
+          matchedFragmentId: matchedFragment.id,
+        }),
+        ownerId: UID,
+        kind: 'near',
+        queryFragmentRef: { type: 'fragment', id: fragment.id },
+        matchedFragmentRef: { type: 'fragment', id: matchedFragment.id },
+        pairRefs: pairIds.map((id) => ({ type: 'fragment', id })),
+        pairKey: makePairKey(pairIds),
+        algorithm: 'dhash',
+        algorithmVersion: 'v1',
+        distance: 2,
+        rank: 1,
+        createdByTaskId: 'task_collision01',
+        status: 'suggested',
+        createdAt: '2026-07-16T00:02:30.000Z',
+        updatedAt: '2026-07-16T00:02:30.000Z',
+      };
+      await firestoreCandidateCollisionStore.seed(UID, collision);
+
+      await assert.rejects(
+        () => repository.completeDeterministicProcessing(UID, successfulCompletionInput(
+          claim,
+          { nearMatches: [{ fragmentId: matchedFragment.id, distance: 1, rank: 1 }] },
+        )),
+        { code: 'repository/processing-target-mismatch' },
+      );
+      assert.deepEqual(
+        await firestoreCandidateCollisionStore.read(UID, collision.id),
+        collision,
+      );
+      assert.equal((await repository.getFragment(UID, fragment.id)).status, 'processing');
+      assert.equal((await repository.getImportBatch(UID, batch.id)).counters.processed, 0);
+    });
+  }
 
   contractTest(`${name}: terminal failure is distinct from upload failure`, async (createRepository) => {
     const rejectedFragmentId = 'frag_reject001';
