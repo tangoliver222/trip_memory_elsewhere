@@ -159,6 +159,7 @@ export function createFirebaseSourceMaterializer({
         throw storageUnavailable();
       }
       assertMetadata(metadata, sourceRevision, expectedFacts);
+      if (signal.aborted || Date.now() >= deadline) throw softTimeout();
 
       let directory = null;
       let sourceStream = null;
@@ -167,8 +168,10 @@ export function createFirebaseSourceMaterializer({
       const operationController = new AbortController();
       const abortOperation = () => operationController.abort();
       signal.addEventListener('abort', abortOperation, { once: true });
+      if (signal.aborted) abortOperation();
 
       try {
+        if (operationController.signal.aborted) throw softTimeout();
         const remaining = deadline - Date.now();
         if (remaining <= 0) throw softTimeout();
         timeout = setTimeout(abortOperation, remaining);
