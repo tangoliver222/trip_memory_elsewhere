@@ -96,3 +96,30 @@ test('threshold scan and result limits are validated and applied', () => {
     scanLimit: 0,
   }), TypeError);
 });
+
+const emptyNearInput = {
+  queryFragmentId: 'frag_query000',
+  queryHash: ZERO_HASH,
+  bandMatches: [],
+};
+
+test('rejects a scan limit above the fixed 200-candidate window', () => {
+  assert.throws(() => selectNearDuplicates({
+    ...emptyNearInput,
+    scanLimit: 201,
+  }), TypeError);
+});
+
+test('rejects a threshold above the fixed Hamming distance of six', () => {
+  assert.throws(() => selectNearDuplicates({
+    ...emptyNearInput,
+    threshold: 7,
+  }), TypeError);
+});
+
+test('rejects a result limit above the fixed top five', () => {
+  assert.throws(() => selectNearDuplicates({
+    ...emptyNearInput,
+    limit: 6,
+  }), TypeError);
+});

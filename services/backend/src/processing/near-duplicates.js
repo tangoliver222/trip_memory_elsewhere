@@ -36,9 +36,9 @@ export function selectNearDuplicates({
   requireString(queryFragmentId, 'queryFragmentId', ID_PATTERN);
   requireString(queryHash, 'queryHash', DHASH_PATTERN);
   if (!Array.isArray(bandMatches)) throw new TypeError('bandMatches must be an array');
-  requireInteger(scanLimit, 'scanLimit', { min: 1 });
-  requireInteger(threshold, 'threshold', { min: 0, max: 64 });
-  requireInteger(limit, 'limit', { min: 1 });
+  requireInteger(scanLimit, 'scanLimit', { min: 1, max: 200 });
+  requireInteger(threshold, 'threshold', { min: 0, max: 6 });
+  requireInteger(limit, 'limit', { min: 1, max: 5 });
 
   const uniqueMatches = new Map();
   for (const match of bandMatches) {
