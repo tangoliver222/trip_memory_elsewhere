@@ -15,6 +15,13 @@ test('loadConfig returns safe local defaults', () => {
   assert.deepEqual(result.storageBuckets, ['demo-elsewhere.appspot.com']);
   assert.equal(Object.isFrozen(result.allowedAppIds), true);
   assert.equal(Object.isFrozen(result.storageBuckets), true);
+  assert.deepEqual(result.processing?.timeouts, {
+    softMs: 180000,
+    leaseMs: 240000,
+    requestMs: 300000,
+    cleanupMarginMs: 30000,
+  });
+  assert.equal(Object.isFrozen(result.processing), true);
 });
 
 test('loadConfig rejects an invalid port before startup', () => {
