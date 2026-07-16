@@ -46,6 +46,7 @@ function createStorageFake({
   metadata = {},
   chunks = [SOURCE_BYTES],
   metadataError,
+  metadataGate,
   streamFactory,
 } = {}) {
   const calls = {
@@ -65,6 +66,7 @@ function createStorageFake({
   const file = {
     async getMetadata() {
       calls.metadata += 1;
+      if (metadataGate) await metadataGate;
       if (metadataError) throw metadataError;
       return [completeMetadata];
     },
@@ -236,6 +238,21 @@ test('aborts the source stream at deadline or AbortSignal', async (t) => {
     assert.equal(streams[0].destroyed, true);
     assert.deepEqual(await readdir(tempRoot), []);
   }
+
+  const metadataGate = Promise.withResolvers();
+  const duringMetadata = createStorageFake({ metadataGate: metadataGate.promise });
+  const controller = new AbortController();
+  const pending = materialize(createMaterializer(duringMetadata.storage, tempRoot), {
+    signal: controller.signal,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  metadataGate.resolve();
+  await assert.rejects(
+    () => pending,
+    { code: 'processing/soft-timeout', retryable: true },
+  );
+  assert.equal(duringMetadata.calls.streams.length, 0);
 });
 
 test('cleans partial material after stream and filesystem failures', async (t) => {
