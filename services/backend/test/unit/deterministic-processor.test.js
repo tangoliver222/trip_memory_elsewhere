@@ -1,13 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Writable } from 'node:stream';
+import { createFirebaseDerivativeStore } from '../../src/adapters/firebase-derivative-store.js';
 import { createDeterministicProcessor } from '../../src/processing/service.js';
 import { retryableProcessingError, terminalProcessingError } from '../../src/processing/errors.js';
-import { makeProcessingTaskId } from '../../src/processing/identity.js';
+import { makeDerivativePath, makeProcessingTaskId } from '../../src/processing/identity.js';
+import { makeUploadedFragment } from '../fixtures/import.js';
 
 const OWNER_ID = 'user_alpha';
 const FRAGMENT_ID = 'frag_12345678';
 const BATCH_ID = 'batch_12345678';
-const SECRET_OBJECT_PATH = `users/${OWNER_ID}/originals/${BATCH_ID}/private-secret-original.jpg`;
+const SECRET_OBJECT_PATH = `users/${OWNER_ID}/originals/${BATCH_ID}/${FRAGMENT_ID}`;
 const SECRET_LOCAL_PATH = '/tmp/private-secret-filename.jpg';
 const SECRET_EXIF = 'private-secret-exif-value';
 const SECRET_PROVIDER_ERROR = 'private-secret-provider-error';
@@ -102,11 +105,6 @@ function taskIdFor(event = EVENT) {
   });
 }
 
-function tickingClock(start = CLAIMED_AT) {
-  let tick = 0;
-  return () => new Date(Date.parse(start) + (tick++ * 1_000)).toISOString();
-}
-
 function defaultMetadataResult() {
   return Object.freeze({
     technicalMetadata: JPEG_METADATA,
@@ -168,6 +166,71 @@ function derivativeFacts() {
   });
 }
 
+function crc32cBase64(bytes) {
+  let crc = 0xffff_ffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ ((crc & 1) === 1 ? 0x82f6_3b78 : 0);
+    }
+  }
+  const encoded = Buffer.allocUnsafe(4);
+  encoded.writeUInt32BE((crc ^ 0xffff_ffff) >>> 0);
+  return encoded.toString('base64');
+}
+
+function createDerivativeStorageFake() {
+  const calls = { writes: [] };
+  const thumbnail = defaultImageResult().thumbnail;
+  const path = makeDerivativePath({
+    ownerId: OWNER_ID,
+    fragmentId: FRAGMENT_ID,
+    processorName: 'deterministic-media',
+    processorVersion: 'v1',
+    inputHash: HASH,
+  });
+  const file = {
+    createWriteStream(options) {
+      const record = { chunks: [], options };
+      calls.writes.push(record);
+      return new Writable({
+        write(chunk, _encoding, callback) {
+          record.chunks.push(Buffer.from(chunk));
+          callback();
+        },
+      });
+    },
+    async getMetadata() {
+      return [{
+        bucket: STORAGE.bucket,
+        name: path,
+        generation: '1740000000000100',
+        metageneration: '1',
+        contentType: 'image/webp',
+        size: String(thumbnail.buffer.byteLength),
+        crc32c: crc32cBase64(thumbnail.buffer),
+        metadata: {
+          ownerId: OWNER_ID,
+          fragmentId: FRAGMENT_ID,
+          processorName: 'deterministic-media',
+          processorVersion: 'v1',
+          inputHash: HASH,
+          width: String(thumbnail.width),
+          height: String(thumbnail.height),
+        },
+      }];
+    },
+  };
+  return {
+    storage: {
+      bucket() {
+        return { file: () => file };
+      },
+    },
+    calls,
+  };
+}
+
 function cappedNearInputs() {
   return Array.from({ length: 201 }, (_, index) => ({
     fragmentId: `frag_match${String(index).padStart(4, '0')}`,
@@ -176,20 +239,36 @@ function cappedNearInputs() {
 }
 
 function claimedFragment(overrides = {}) {
-  return Object.freeze({
+  const deterministic = Object.freeze({
+    taskId: taskIdFor(),
+    processorName: 'deterministic-media',
+    processorVersion: 'v1',
+    state: 'running',
+    metadataStatus: null,
+    thumbnailStatus: null,
+    perceptualHashStatus: null,
+    updatedAt: CLAIMED_AT,
+  });
+  return Object.freeze(makeUploadedFragment({
     id: FRAGMENT_ID,
     ownerId: OWNER_ID,
     batchId: BATCH_ID,
-    type: 'photo',
+    updatedAt: CLAIMED_AT,
+    status: 'processing',
     storage: STORAGE,
+    processing: { deterministic },
     ...overrides,
-  });
+  }));
 }
 
-function claimedTask(claim, inputHash = null) {
+function claimedTask(claim, inputHash = null, overrides = {}) {
   return Object.freeze({
     id: claim.taskId,
     ownerId: OWNER_ID,
+    schemaVersion: 1,
+    createdAt: claim.claimedAt,
+    updatedAt: claim.claimedAt,
+    deletedAt: null,
     fragmentId: FRAGMENT_ID,
     batchId: BATCH_ID,
     processorName: 'deterministic-media',
@@ -197,10 +276,48 @@ function claimedTask(claim, inputHash = null) {
     sourceRevision: EVENT.sourceRevision,
     inputHash,
     state: 'running',
+    currentStep: inputHash === null ? 'hashing' : 'hash_registered',
     leaseOwner: claim.leaseOwner,
+    attemptCount: 1,
+    outputs: {
+      metadataStatus: null,
+      thumbnailStatus: null,
+      perceptualHashStatus: null,
+      warningCodes: [],
+    },
+    lastErrorCode: null,
+    firstStartedAt: claim.claimedAt,
+    attemptStartedAt: claim.claimedAt,
+    lastHeartbeatAt: claim.claimedAt,
     softDeadlineAt: claim.softDeadlineAt,
+    leaseAcquiredAt: claim.claimedAt,
     leaseExpiresAt: claim.leaseExpiresAt,
+    completedAt: null,
+    ...overrides,
   });
+}
+
+function terminalTask(claim, state = 'succeeded') {
+  return claimedTask(claim, HASH, {
+    state,
+    currentStep: 'complete',
+    leaseOwner: null,
+    outputs: {
+      metadataStatus: state === 'succeeded' ? 'complete' : 'failed',
+      thumbnailStatus: state === 'succeeded' ? 'complete' : 'failed',
+      perceptualHashStatus: state === 'succeeded' ? 'complete' : 'failed',
+      warningCodes: [],
+    },
+    lastErrorCode: state === 'failed_terminal' ? 'processing/invalid-media' : null,
+    softDeadlineAt: null,
+    leaseAcquiredAt: null,
+    leaseExpiresAt: null,
+    completedAt: claim.claimedAt,
+  });
+}
+
+function repositoryError(code) {
+  return Object.assign(new Error(`${SECRET_PROVIDER_ERROR}:${code}`), { code });
 }
 
 function assertStableError(error, code, retryable) {
@@ -245,20 +362,27 @@ function createHarness(options = {}) {
       calls.order.push('claim');
       calls.claim.push({ uid, input });
       if (options.claimError) throw options.claimError;
+      if (options.claimDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.claimDelayMs));
+      }
+      options.claimHook?.(input);
+      if (options.claimResult) return options.claimResult(input);
       const outcome = options.claimOutcome ?? 'claimed';
       if (outcome === 'busy' || outcome === 'terminal') {
         return Object.freeze({
           outcome,
-          task: Object.freeze({
-            id: input.taskId,
-            inputHash: options.taskInputHash ?? null,
-            state: outcome === 'terminal' ? (options.terminalState ?? 'succeeded') : 'running',
-          }),
+          task: outcome === 'terminal'
+            ? terminalTask(input, options.terminalState ?? 'succeeded')
+            : claimedTask(input, options.taskInputHash ?? null),
         });
       }
       return Object.freeze({
         outcome: 'claimed',
-        task: claimedTask(input, options.taskInputHash ?? null),
+        task: claimedTask(
+          input,
+          options.taskInputHash ?? null,
+          options.taskOverrides,
+        ),
         fragment: claimedFragment(options.fragmentOverrides),
       });
     },
@@ -299,7 +423,20 @@ function createHarness(options = {}) {
       calls.order.push('materialize');
       calls.materialize.push(input);
       materialSignal = input.signal;
+      options.materializeHook?.(input);
+      if (options.materializeWaitForAbort) {
+        await new Promise((resolve, reject) => {
+          if (input.signal.aborted) {
+            reject(retryableProcessingError('processing/soft-timeout'));
+            return;
+          }
+          input.signal.addEventListener('abort', () => {
+            reject(retryableProcessingError('processing/soft-timeout'));
+          }, { once: true });
+        });
+      }
       if (options.materializeError) throw options.materializeError;
+      if (options.materialResult) return options.materialResult;
       return Object.freeze({
         path: SECRET_LOCAL_PATH,
         sizeBytes: STORAGE.sizeBytes,
@@ -317,6 +454,7 @@ function createHarness(options = {}) {
     async read(input) {
       calls.order.push('metadata');
       calls.metadata.push(input);
+      options.metadataHook?.(input);
       if (options.metadataWaitForAbort) {
         await new Promise((resolve, reject) => {
           if (input.signal.aborted) {
@@ -337,15 +475,17 @@ function createHarness(options = {}) {
     async process(input) {
       calls.order.push('image');
       calls.image.push(input);
+      options.imageHook?.(input);
       if (options.imageError) throw options.imageError;
       return options.imageResult ?? defaultImageResult();
     },
   };
 
-  const derivativeStore = {
+  const fakeDerivativeStore = {
     async putThumbnail(input) {
       calls.order.push('derivative');
       calls.derivative.push(input);
+      options.derivativeHook?.(input);
       if (options.derivativeError) throw options.derivativeError;
       return options.derivativeResult ?? derivativeFacts();
     },
@@ -356,9 +496,9 @@ function createHarness(options = {}) {
     materializer,
     metadataReader,
     imageProcessor,
-    derivativeStore,
+    derivativeStore: options.derivativeStore ?? fakeDerivativeStore,
     processingConfig: options.processingConfig ?? PROCESSING_CONFIG,
-    clock: options.clock ?? tickingClock(),
+    clock: options.clock ?? (() => CLAIMED_AT),
     randomUUID: options.randomUUID ?? (() => 'attempt0001'),
   });
 
@@ -411,7 +551,7 @@ test('claims hashes checkpoints extracts derives searches and commits in order',
     input: {
       taskId: taskIdFor(),
       leaseOwner: claim.input.leaseOwner,
-      registeredAt: '2026-07-16T00:01:01.000Z',
+      registeredAt: CLAIMED_AT,
       sha256: HASH,
     },
   });
@@ -439,7 +579,13 @@ test('claims hashes checkpoints extracts derives searches and commits in order',
     ownerId: OWNER_ID,
     fragmentId: FRAGMENT_ID,
     inputHash: HASH,
-    thumbnail: defaultImageResult().thumbnail,
+    thumbnail: {
+      buffer: defaultImageResult().thumbnail.buffer,
+      width: defaultImageResult().thumbnail.width,
+      height: defaultImageResult().thumbnail.height,
+    },
+    signal: calls.materialize[0].signal,
+    deadlineAt: claim.input.softDeadlineAt,
   });
   assert.deepEqual(calls.near[0], {
     uid: OWNER_ID,
@@ -451,7 +597,7 @@ test('claims hashes checkpoints extracts derives searches and commits in order',
   assert.deepEqual(completion.input, {
     taskId: taskIdFor(),
     leaseOwner: claim.input.leaseOwner,
-    completedAt: '2026-07-16T00:01:02.000Z',
+    completedAt: CLAIMED_AT,
     technicalMetadata: JPEG_METADATA,
     factSuggestions: {
       capturedAt: {
@@ -471,7 +617,7 @@ test('claims hashes checkpoints extracts derives searches and commits in order',
         },
         confidence: 1,
         status: 'suggested',
-        observedAt: '2026-07-16T00:01:02.000Z',
+        observedAt: CLAIMED_AT,
       },
       geo: {
         value: { lat: 13.7563, lng: 100.5018 },
@@ -485,7 +631,7 @@ test('claims hashes checkpoints extracts derives searches and commits in order',
         },
         confidence: 1,
         status: 'suggested',
-        observedAt: '2026-07-16T00:01:02.000Z',
+        observedAt: CLAIMED_AT,
       },
     },
     derivative: derivativeFacts(),
@@ -502,6 +648,27 @@ test('claims hashes checkpoints extracts derives searches and commits in order',
   assert.equal(JSON.stringify({ result, completion: completion.input }).includes(SECRET_EXIF), false);
 });
 
+test('projects the Task 9 thumbnail contract through the real derivative adapter', async () => {
+  const { storage, calls: storageCalls } = createDerivativeStorageFake();
+  const derivativeStore = createFirebaseDerivativeStore({
+    storage,
+    allowedBuckets: [STORAGE.bucket],
+  });
+  const { processor, calls } = createHarness({ derivativeStore });
+
+  assert.deepEqual(await processor.handle(EVENT), { outcome: 'succeeded' });
+  assert.equal(storageCalls.writes.length, 1);
+  assert.deepEqual(
+    Buffer.concat(storageCalls.writes[0].chunks),
+    defaultImageResult().thumbnail.buffer,
+  );
+  assert.equal(calls.complete[0].input.derivative.path, derivativeFacts().path);
+  assert.deepEqual(calls.order, [
+    'claim', 'materialize', 'register', 'metadata', 'image',
+    'near', 'complete', 'cleanup',
+  ]);
+});
+
 test('event contract excludes user-controlled task execution and hash identities', async () => {
   for (const extra of [
     { taskId: 'task_attacker1' },
@@ -514,6 +681,56 @@ test('event contract excludes user-controlled task execution and hash identities
       (error) => assertStableError(error, 'processing/invalid-media', false),
     );
     assert.deepEqual(calls.order, []);
+  }
+});
+
+test('claim outcomes require complete matching task and fragment documents', async (t) => {
+  const fixtures = [
+    ['partial terminal task', (input) => ({
+      outcome: 'terminal',
+      task: { id: input.taskId, state: 'succeeded' },
+    })],
+    ['mismatched busy task', (input) => ({
+      outcome: 'busy',
+      task: claimedTask(input, null, { ownerId: 'user_beta' }),
+    })],
+    ['mismatched claimed task source', (input) => ({
+      outcome: 'claimed',
+      task: claimedTask(input, null, {
+        sourceRevision: { ...EVENT.sourceRevision, generation: 'different' },
+      }),
+      fragment: claimedFragment(),
+    })],
+    ['partial claimed fragment', (input) => ({
+      outcome: 'claimed',
+      task: claimedTask(input),
+      fragment: { id: FRAGMENT_ID, ownerId: OWNER_ID, storage: STORAGE },
+    })],
+    ['mismatched claimed fragment link', (input) => ({
+      outcome: 'claimed',
+      task: claimedTask(input),
+      fragment: claimedFragment({
+        processing: {
+          deterministic: {
+            ...claimedFragment().processing.deterministic,
+            taskId: 'task_mismatched1',
+          },
+        },
+      }),
+    })],
+  ];
+
+  for (const [name, claimResult] of fixtures) {
+    await t.test(name, async () => {
+      const { processor, calls } = createHarness({ claimResult });
+      await assert.rejects(
+        () => processor.handle(EVENT),
+        (error) => assertStableError(error, 'processing/repository-unavailable', true),
+      );
+      assert.deepEqual(calls.order, ['claim']);
+      assert.equal(calls.complete.length, 0);
+      assert.equal(calls.fail.length, 0);
+    });
   }
 });
 
@@ -541,6 +758,55 @@ test('active lease returns task-busy without reading the original', async () => 
   );
   assert.deepEqual(calls.order, ['claim']);
   assert.equal(calls.fail.length, 0);
+});
+
+test('repository ownership and target errors at claim are stable terminal invalid media', async (t) => {
+  for (const code of [
+    'repository/owner-mismatch',
+    'repository/processing-target-mismatch',
+  ]) {
+    await t.test(code, async () => {
+      const { processor, calls } = createHarness({ claimError: repositoryError(code) });
+      await assert.rejects(
+        () => processor.handle(EVENT),
+        (error) => assertStableError(error, 'processing/invalid-media', false),
+      );
+      assert.deepEqual(calls.order, ['claim']);
+      assert.equal(calls.complete.length, 0);
+      assert.equal(calls.fail.length, 0);
+    });
+  }
+});
+
+test('repository lease loss after claim is task-busy and is never overwritten', async () => {
+  const { processor, calls } = createHarness({
+    registerError: repositoryError('repository/lease-owner-mismatch'),
+  });
+
+  await assert.rejects(
+    () => processor.handle(EVENT),
+    (error) => assertStableError(error, 'processing/task-busy', true),
+  );
+  assert.deepEqual(calls.order, ['claim', 'materialize', 'register', 'cleanup']);
+  assert.equal(calls.complete.length, 0);
+  assert.equal(calls.fail.length, 0);
+});
+
+test('repository ownership and target errors after claim persist terminal invalid media', async (t) => {
+  for (const code of [
+    'repository/owner-mismatch',
+    'repository/processing-target-mismatch',
+  ]) {
+    await t.test(code, async () => {
+      const { processor, calls } = createHarness({ registerError: repositoryError(code) });
+      assert.deepEqual(await processor.handle(EVENT), { outcome: 'failed_terminal' });
+      assert.deepEqual(calls.order, [
+        'claim', 'materialize', 'register', 'complete', 'cleanup',
+      ]);
+      assert.equal(calls.complete[0].input.errorCode, 'processing/invalid-media');
+      assert.equal(calls.fail.length, 0);
+    });
+  }
 });
 
 test('stale lease resumes from hash checkpoint without changing task identity', async () => {
@@ -579,7 +845,7 @@ test('a stale hash checkpoint mismatch is persisted terminal invalid media', asy
   assert.deepEqual(calls.complete[0].input, {
     taskId: taskIdFor(),
     leaseOwner: calls.claim[0].input.leaseOwner,
-    completedAt: '2026-07-16T00:01:01.000Z',
+    completedAt: CLAIMED_AT,
     technicalMetadata: null,
     factSuggestions: {},
     derivative: null,
@@ -659,6 +925,79 @@ test('unsupported HEIC decode succeeds without thumbnail or dHash', async () => 
     thumbnail: 'unsupported',
     perceptualHash: 'unsupported',
   });
+});
+
+test('malformed adapter results are terminal invalid media and never success', async (t) => {
+  const metadata = defaultMetadataResult();
+  const imageResult = defaultImageResult();
+  const derivative = derivativeFacts();
+  const fixtures = [
+    ['metadata result extra field', {
+      metadataResult: { ...metadata, raw: SECRET_EXIF },
+    }],
+    ['technical metadata extra field', {
+      metadataResult: {
+        ...metadata,
+        technicalMetadata: { ...metadata.technicalMetadata, raw: SECRET_EXIF },
+      },
+    }],
+    ['metadata status mismatch', {
+      metadataResult: { ...metadata, metadataStatus: 'partial' },
+    }],
+    ['fact hint extra field', {
+      metadataResult: {
+        ...metadata,
+        factHints: {
+          ...metadata.factHints,
+          capturedAt: { ...metadata.factHints.capturedAt, raw: SECRET_EXIF },
+        },
+      },
+    }],
+    ['image result extra field', {
+      imageResult: { ...imageResult, debug: SECRET_EXIF },
+    }],
+    ['thumbnail extra field', {
+      imageResult: {
+        ...imageResult,
+        thumbnail: { ...imageResult.thumbnail, debug: SECRET_EXIF },
+      },
+    }],
+    ['thumbnail wrong content type', {
+      imageResult: {
+        ...imageResult,
+        thumbnail: { ...imageResult.thumbnail, contentType: 'image/png' },
+      },
+    }],
+    ['perceptual hash bands do not match value', {
+      imageResult: {
+        ...imageResult,
+        perceptualHash: {
+          ...imageResult.perceptualHash,
+          bands: ['0:ff', ...PERCEPTUAL_BANDS.slice(1)],
+        },
+      },
+    }],
+    ['derivative result extra field', {
+      derivativeResult: { ...derivative, debug: SECRET_EXIF },
+    }],
+    ['derivative identity mismatch', {
+      derivativeResult: { ...derivative, path: derivative.path.replace(HASH, OTHER_HASH) },
+    }],
+    ['derivative dimensions mismatch', {
+      derivativeResult: { ...derivative, width: derivative.width - 1 },
+    }],
+  ];
+
+  for (const [name, options] of fixtures) {
+    await t.test(name, async () => {
+      const { processor, calls } = createHarness(options);
+      assert.deepEqual(await processor.handle(EVENT), { outcome: 'failed_terminal' });
+      assert.equal(calls.complete.length, 1);
+      assert.equal(calls.complete[0].input.errorCode, 'processing/invalid-media');
+      assert.equal(calls.fail.length, 0);
+      assert.equal(JSON.stringify(calls.complete[0].input).includes(SECRET_EXIF), false);
+    });
+  }
 });
 
 test('media limit and derivative conflict persist terminal failure before return', async (t) => {
@@ -754,10 +1093,69 @@ test('Storage Firestore and soft-timeout failures persist retryable state and th
         failedAt: calls.fail[0].input.failedAt,
         errorCode: fixture.code,
       });
-      assert.match(calls.fail[0].input.failedAt, /^2026-07-16T00:01:0[1-9]\.000Z$/);
+      assert.equal(calls.fail[0].input.failedAt, CLAIMED_AT);
       assert.equal(JSON.stringify(calls.fail[0].input).includes(SECRET_PROVIDER_ERROR), false);
     });
   }
+});
+
+test('the soft timeout timer uses only the absolute deadline remaining after claim', async () => {
+  const config = Object.freeze({
+    ...PROCESSING_CONFIG,
+    timeouts: Object.freeze({
+      softMs: 80,
+      leaseMs: 160,
+      requestMs: 220,
+      cleanupMarginMs: 40,
+    }),
+  });
+  const { processor, calls } = createHarness({
+    claimDelayMs: 60,
+    materializeWaitForAbort: true,
+    processingConfig: config,
+    clock: () => new Date().toISOString(),
+  });
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    () => processor.handle(EVENT),
+    (error) => assertStableError(error, 'processing/soft-timeout', true),
+  );
+
+  assert.ok(Date.now() - startedAt < 125, 'deadline must not restart after claim');
+  assert.deepEqual(calls.order, ['claim', 'materialize', 'fail']);
+});
+
+test('deadline equality after claim prevents all media work', async () => {
+  let now = CLAIMED_AT;
+  const { processor, calls } = createHarness({
+    clock: () => now,
+    claimHook: (claim) => {
+      now = claim.softDeadlineAt;
+    },
+  });
+
+  await assert.rejects(
+    () => processor.handle(EVENT),
+    (error) => assertStableError(error, 'processing/soft-timeout', true),
+  );
+  assert.deepEqual(calls.order, ['claim', 'fail']);
+});
+
+test('deadline equality after materialization prevents checkpoints and adapters', async () => {
+  let now = CLAIMED_AT;
+  const { processor, calls } = createHarness({
+    clock: () => now,
+    materializeHook: (input) => {
+      now = input.deadlineAt;
+    },
+  });
+
+  await assert.rejects(
+    () => processor.handle(EVENT),
+    (error) => assertStableError(error, 'processing/soft-timeout', true),
+  );
+  assert.deepEqual(calls.order, ['claim', 'materialize', 'fail', 'cleanup']);
 });
 
 test('terminal transaction failure never reports terminal success', async () => {
@@ -841,6 +1239,39 @@ test('temporary material cleanup runs once on every post-materialization path', 
       assert.equal(getMaterialSignal().aborted, true);
     });
   }
+});
+
+test('a primary processing failure or terminal outcome takes precedence over cleanup failure', async (t) => {
+  const retryableCases = [
+    ['soft timeout', {
+      metadataError: retryableProcessingError('processing/soft-timeout'),
+      cleanupError: new Error(`${SECRET_PROVIDER_ERROR}:${SECRET_LOCAL_PATH}`),
+    }, 'processing/soft-timeout'],
+    ['repository unavailable', {
+      registerError: new Error(SECRET_PROVIDER_ERROR),
+      cleanupError: new Error(`${SECRET_PROVIDER_ERROR}:${SECRET_LOCAL_PATH}`),
+    }, 'processing/repository-unavailable'],
+  ];
+
+  for (const [name, options, code] of retryableCases) {
+    await t.test(name, async () => {
+      const { processor, calls } = createHarness(options);
+      await assert.rejects(
+        () => processor.handle(EVENT),
+        (error) => assertStableError(error, code, true),
+      );
+      assert.equal(calls.cleanup, 1);
+    });
+  }
+
+  await t.test('persisted terminal failure', async () => {
+    const { processor, calls } = createHarness({
+      metadataError: terminalProcessingError('processing/invalid-media'),
+      cleanupError: new Error(`${SECRET_PROVIDER_ERROR}:${SECRET_LOCAL_PATH}`),
+    });
+    assert.deepEqual(await processor.handle(EVENT), { outcome: 'failed_terminal' });
+    assert.equal(calls.cleanup, 1);
+  });
 });
 
 test('cleanup failure is retryable storage-unavailable and redacted after terminal commit', async () => {

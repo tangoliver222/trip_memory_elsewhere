@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Writable } from 'node:stream';
 import { createFirebaseDerivativeStore } from '../../src/adapters/firebase-derivative-store.js';
 import { makeDerivativePath } from '../../src/processing/identity.js';
 
@@ -9,6 +10,7 @@ const FRAGMENT_ID = 'frag_12345678';
 const INPUT_HASH = 'a'.repeat(64);
 const PROCESSOR_NAME = 'deterministic-media';
 const PROCESSOR_VERSION = 'v1';
+const FUTURE_DEADLINE = '2099-01-01T00:00:00.000Z';
 const THUMBNAIL = Object.freeze({
   buffer: Buffer.from('immutable-webp-thumbnail'),
   width: 512,
@@ -71,12 +73,15 @@ function createStorageFake({
   metadataError = null,
   bucketError = null,
   fileError = null,
+  holdUpload = false,
+  metadataDelayMs = 0,
 } = {}) {
   const calls = {
     buckets: [],
     files: [],
     saves: [],
     metadata: 0,
+    destroyed: 0,
     order: [],
   };
   const file = {
@@ -85,9 +90,40 @@ function createStorageFake({
       calls.saves.push({ bytes, options });
       if (saveError) throw saveError;
     },
+    createWriteStream(options) {
+      calls.order.push('createWriteStream');
+      const record = { bytes: Buffer.alloc(0), options };
+      calls.saves.push(record);
+      const chunks = [];
+      let heldWrite = null;
+      return new Writable({
+        write(chunk, _encoding, callback) {
+          chunks.push(Buffer.from(chunk));
+          record.bytes = Buffer.concat(chunks);
+          if (holdUpload) heldWrite = callback;
+          else callback();
+        },
+        final(callback) {
+          if (saveError) callback(saveError);
+          else callback();
+        },
+        destroy(error, callback) {
+          calls.destroyed += 1;
+          if (heldWrite) {
+            const pending = heldWrite;
+            heldWrite = null;
+            pending(error);
+          }
+          callback(error);
+        },
+      });
+    },
     async getMetadata() {
       calls.order.push('getMetadata');
       calls.metadata += 1;
+      if (metadataDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, metadataDelayMs));
+      }
       if (metadataError) throw metadataError;
       return [metadata];
     },
@@ -119,6 +155,8 @@ function putThumbnail(store, overrides = {}) {
     fragmentId: FRAGMENT_ID,
     inputHash: INPUT_HASH,
     thumbnail: THUMBNAIL,
+    signal: new AbortController().signal,
+    deadlineAt: FUTURE_DEADLINE,
     ...overrides,
   });
 }
@@ -127,6 +165,7 @@ function expectedSaveOptions() {
   return {
     resumable: false,
     preconditionOpts: { ifGenerationMatch: 0 },
+    validation: 'crc32c',
     metadata: {
       contentType: 'image/webp',
       metadata: frozenCustomMetadata(),
@@ -150,7 +189,7 @@ test('creates the deterministic thumbnail path with generation zero precondition
 
   assert.deepEqual(calls.buckets, [BUCKET]);
   assert.deepEqual(calls.files, [PATH]);
-  assert.deepEqual(calls.order, ['save', 'getMetadata']);
+  assert.deepEqual(calls.order, ['createWriteStream', 'getMetadata']);
   assert.equal(calls.saves.length, 1);
   assert.deepEqual(calls.saves[0].bytes, THUMBNAIL.buffer);
   assert.deepEqual(calls.saves[0].options, expectedSaveOptions());
@@ -216,7 +255,7 @@ test('a numeric or string 412 reuses only a byte-identical frozen derivative', a
 
       assert.equal(result.path, PATH);
       assert.equal(result.crc32c, CRC32C);
-      assert.deepEqual(calls.order, ['save', 'getMetadata']);
+      assert.deepEqual(calls.order, ['createWriteStream', 'getMetadata']);
       assert.equal(calls.saves.length, 1);
       assert.equal(calls.metadata, 1);
     });
@@ -279,7 +318,7 @@ test('successful creation also rejects mismatched authoritative metadata', async
       () => putThumbnail(createStore(storage)),
       (error) => assertStableError(error, 'processing/derivative-conflict', false),
     );
-    assert.deepEqual(calls.order, ['save', 'getMetadata']);
+    assert.deepEqual(calls.order, ['createWriteStream', 'getMetadata']);
   }
 });
 
@@ -394,6 +433,11 @@ test('unallowlisted buckets invalid identities and client paths fail before Stor
     ['client path', { path: PATH }],
     ['cross-owner client path', { path: PATH.replace(OWNER_ID, 'user_beta') }],
     ['client processor override', { processorVersion: 'v2' }],
+    ['missing signal', { signal: undefined }],
+    ['forged signal', { signal: { aborted: false } }],
+    ['missing deadline', { deadlineAt: undefined }],
+    ['invalid deadline', { deadlineAt: 'not-an-instant' }],
+    ['extra operation field', { operationId: 'client-value' }],
   ];
 
   for (const [name, override] of invalidInputs) {
@@ -409,4 +453,68 @@ test('unallowlisted buckets invalid identities and client paths fail before Stor
       assert.equal(calls.metadata, 0);
     });
   }
+});
+
+test('pre-aborted signals and expired absolute deadlines stop before Storage access', async () => {
+  const aborted = new AbortController();
+  aborted.abort();
+  for (const overrides of [
+    { signal: aborted.signal },
+    { deadlineAt: '2020-01-01T00:00:00.000Z' },
+  ]) {
+    const { storage, calls } = createStorageFake();
+    await assert.rejects(
+      () => putThumbnail(createStore(storage), overrides),
+      (error) => assertStableError(error, 'processing/soft-timeout', true),
+    );
+    assert.deepEqual(calls.buckets, []);
+    assert.deepEqual(calls.files, []);
+  }
+});
+
+test('abort and deadline destroy an in-flight create-only upload without metadata read', async (t) => {
+  for (const mode of ['signal', 'deadline']) {
+    await t.test(mode, async () => {
+      const controller = new AbortController();
+      const { storage, calls } = createStorageFake({ holdUpload: true });
+      const deadlineAt = mode === 'deadline'
+        ? new Date(Date.now() + 15).toISOString()
+        : FUTURE_DEADLINE;
+      const operation = putThumbnail(createStore(storage), {
+        signal: controller.signal,
+        deadlineAt,
+      });
+      if (mode === 'signal') setImmediate(() => controller.abort());
+
+      await assert.rejects(
+        () => operation,
+        (error) => assertStableError(error, 'processing/soft-timeout', true),
+      );
+      assert.equal(calls.saves.length, 1);
+      assert.equal(calls.destroyed, 1);
+      assert.equal(calls.metadata, 0);
+    });
+  }
+});
+
+test('metadata read is deadline-bound and observes a late provider rejection', async () => {
+  const controller = new AbortController();
+  const { storage, calls } = createStorageFake({
+    metadataDelayMs: 50,
+    metadataError: new Error('secret late metadata rejection'),
+  });
+  const operation = putThumbnail(createStore(storage), { signal: controller.signal });
+  setTimeout(() => controller.abort(), 5);
+
+  const settled = await Promise.race([
+    operation.then(
+      () => ({ outcome: 'resolved' }),
+      (error) => ({ outcome: 'rejected', error }),
+    ),
+    new Promise((resolve) => setTimeout(() => resolve({ outcome: 'late' }), 30)),
+  ]);
+  assert.equal(settled.outcome, 'rejected');
+  assertStableError(settled.error, 'processing/soft-timeout', true);
+  assert.equal(calls.metadata, 1);
+  await new Promise((resolve) => setTimeout(resolve, 40));
 });
