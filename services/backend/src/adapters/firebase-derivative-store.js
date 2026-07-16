@@ -1,3 +1,7 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { IsoDateTimeSchema } from '../domain/index.js';
+import { runAbortableOperation } from './abortable-operation.js';
 import { makeDerivativePath } from '../processing/identity.js';
 import {
   retryableProcessingError,
@@ -9,9 +13,11 @@ const PROCESSOR_VERSION = 'v1';
 const CONTENT_TYPE = 'image/webp';
 const INPUT_KEYS = Object.freeze([
   'bucket',
+  'deadlineAt',
   'fragmentId',
   'inputHash',
   'ownerId',
+  'signal',
   'thumbnail',
 ]);
 const THUMBNAIL_KEYS = Object.freeze(['buffer', 'height', 'width']);
@@ -28,6 +34,7 @@ const CUSTOM_METADATA_KEYS = Object.freeze([
 const invalidMedia = () => terminalProcessingError('processing/invalid-media');
 const derivativeConflict = () => terminalProcessingError('processing/derivative-conflict');
 const storageUnavailable = () => retryableProcessingError('processing/storage-unavailable');
+const softTimeout = () => retryableProcessingError('processing/soft-timeout');
 
 function hasExactKeys(input, expectedKeys) {
   return input
@@ -52,6 +59,8 @@ function crc32cBase64(bytes) {
 function normalizeInput(input, allowedBuckets) {
   if (!hasExactKeys(input, INPUT_KEYS)
     || !allowedBuckets.has(input.bucket)
+    || !(input.signal instanceof AbortSignal)
+    || !IsoDateTimeSchema.safeParse(input.deadlineAt).success
     || !hasExactKeys(input.thumbnail, THUMBNAIL_KEYS)
     || !Buffer.isBuffer(input.thumbnail.buffer)
     || input.thumbnail.buffer.byteLength === 0
@@ -63,6 +72,8 @@ function normalizeInput(input, allowedBuckets) {
     || input.thumbnail.height > 512) {
     throw invalidMedia();
   }
+  const deadlineMs = Date.parse(input.deadlineAt);
+  if (input.signal.aborted || Date.now() >= deadlineMs) throw softTimeout();
 
   let path;
   try {
@@ -95,6 +106,8 @@ function normalizeInput(input, allowedBuckets) {
     height: input.thumbnail.height,
     crc32c: crc32cBase64(buffer),
     customMetadata,
+    sourceSignal: input.signal,
+    deadlineMs,
   });
 }
 
@@ -145,11 +158,56 @@ function normalizeLiveFacts(metadata, expected) {
   });
 }
 
-async function readLiveFacts(file, expected) {
+function createOperationScope(sourceSignal, deadlineMs) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  sourceSignal.addEventListener('abort', abort, { once: true });
+  if (sourceSignal.aborted) abort();
+  let timeout = null;
+  const scheduleDeadline = () => {
+    const remainingMs = deadlineMs - Date.now();
+    if (remainingMs <= 0) {
+      abort();
+      return;
+    }
+    timeout = setTimeout(
+      remainingMs > 2_147_483_647 ? scheduleDeadline : abort,
+      Math.min(remainingMs, 2_147_483_647),
+    );
+    timeout.unref?.();
+  };
+  scheduleDeadline();
+  return Object.freeze({
+    signal: controller.signal,
+    assertActive() {
+      if (controller.signal.aborted || Date.now() >= deadlineMs) {
+        controller.abort();
+        throw softTimeout();
+      }
+    },
+    close() {
+      if (timeout !== null) clearTimeout(timeout);
+      sourceSignal.removeEventListener('abort', abort);
+    },
+  });
+}
+
+function isAbort(error, signal, deadlineMs) {
+  return signal.aborted || Date.now() >= deadlineMs || error?.name === 'AbortError';
+}
+
+async function readLiveFacts(file, expected, operation) {
   let response;
   try {
-    response = await file.getMetadata();
+    operation.assertActive();
+    response = await runAbortableOperation({
+      signal: operation.signal,
+      start: () => file.getMetadata(),
+      cancel: () => undefined,
+    });
+    operation.assertActive();
   } catch (error) {
+    if (isAbort(error, operation.signal, expected.deadlineMs)) throw softTimeout();
     // Cloud Storage reads are strongly consistent, so a coded 404 after either create or
     // precondition failure means the immutable object cannot be authoritatively reused.
     if (error?.code === 404 || error?.code === '404') throw derivativeConflict();
@@ -175,25 +233,40 @@ export function createFirebaseDerivativeStore({ storage, allowedBuckets } = {}) 
   return Object.freeze({
     async putThumbnail(input) {
       const expected = normalizeInput(input, allowed);
+      const operation = createOperationScope(expected.sourceSignal, expected.deadlineMs);
       let file;
       try {
+        operation.assertActive();
         file = storage.bucket(expected.bucket).file(expected.path);
       } catch {
+        operation.close();
+        if (isAbort(null, operation.signal, expected.deadlineMs)) throw softTimeout();
         throw storageUnavailable();
       }
       try {
-        await file.save(expected.buffer, {
-          resumable: false,
-          preconditionOpts: { ifGenerationMatch: 0 },
-          metadata: {
-            contentType: CONTENT_TYPE,
-            metadata: expected.customMetadata,
-          },
-        });
-      } catch (error) {
-        if (!isPreconditionFailure(error)) throw storageUnavailable();
+        try {
+          operation.assertActive();
+          const upload = file.createWriteStream({
+            resumable: false,
+            preconditionOpts: { ifGenerationMatch: 0 },
+            validation: 'crc32c',
+            metadata: {
+              contentType: CONTENT_TYPE,
+              metadata: expected.customMetadata,
+            },
+          });
+          await pipeline(Readable.from([expected.buffer]), upload, {
+            signal: operation.signal,
+          });
+          operation.assertActive();
+        } catch (error) {
+          if (isAbort(error, operation.signal, expected.deadlineMs)) throw softTimeout();
+          if (!isPreconditionFailure(error)) throw storageUnavailable();
+        }
+        return await readLiveFacts(file, expected, operation);
+      } finally {
+        operation.close();
       }
-      return readLiveFacts(file, expected);
     },
   });
 }

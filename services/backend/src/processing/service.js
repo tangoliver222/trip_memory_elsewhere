@@ -1,6 +1,11 @@
 import {
   IdSchema,
   IsoDateTimeSchema,
+  TechnicalMetadataSchema,
+  ThumbnailDerivativeSchema,
+  WarningCodesSchema,
+  parseFragment,
+  parseProcessingTask,
   parseProvenance,
 } from '../domain/index.js';
 import { assertProcessingRepository } from '../repositories/contract.js';
@@ -9,7 +14,7 @@ import {
   retryableProcessingError,
   terminalProcessingError,
 } from './errors.js';
-import { makeProcessingTaskId } from './identity.js';
+import { makeDerivativePath, makeProcessingTaskId } from './identity.js';
 import { selectNearDuplicates } from './near-duplicates.js';
 
 const PROCESSOR_NAME = 'deterministic-media';
@@ -17,6 +22,25 @@ const PROCESSOR_VERSION = 'v1';
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const EVENT_KEYS = Object.freeze(['batchId', 'fragmentId', 'sourceRevision', 'uid']);
 const SOURCE_REVISION_KEYS = Object.freeze(['bucket', 'generation', 'objectName']);
+const METADATA_RESULT_KEYS = Object.freeze([
+  'factHints',
+  'metadataStatus',
+  'technicalMetadata',
+  'warningCodes',
+]);
+const FACT_HINT_KEYS = Object.freeze(['capturedAt', 'geo']);
+const CAPTURED_AT_HINT_KEYS = Object.freeze([
+  'instant',
+  'localDateTime',
+  'offsetMinutes',
+  'sourceType',
+  'status',
+  'zoneId',
+]);
+const GEO_HINT_KEYS = Object.freeze(['lat', 'lng', 'sourceType', 'status']);
+const IMAGE_RESULT_KEYS = Object.freeze(['perceptualHash', 'thumbnail', 'warnings']);
+const THUMBNAIL_KEYS = Object.freeze(['buffer', 'contentType', 'height', 'width']);
+const PERCEPTUAL_HASH_KEYS = Object.freeze(['bands', 'value']);
 const SUCCEEDED = Object.freeze({ outcome: 'succeeded' });
 const FAILED_TERMINAL = Object.freeze({ outcome: 'failed_terminal' });
 const TERMINAL_NOOP = Object.freeze({ outcome: 'terminal_noop' });
@@ -89,16 +113,29 @@ function addMilliseconds(instant, milliseconds) {
   return new Date(Date.parse(instant) + milliseconds).toISOString();
 }
 
-function assertActive(signal) {
-  if (signal.aborted) throw softTimeout();
+function assertBeforeDeadline(clock, signal, deadlineAt) {
+  if (signal.aborted || Date.parse(readClock(clock)) >= Date.parse(deadlineAt)) {
+    throw softTimeout();
+  }
+}
+
+function mapRepositoryError(error) {
+  if (error instanceof ProcessingError) return error;
+  if (error?.code === 'repository/owner-mismatch'
+    || error?.code === 'repository/processing-target-mismatch') {
+    return invalidMedia();
+  }
+  if (error?.code === 'repository/lease-owner-mismatch') {
+    return retryableProcessingError('processing/task-busy');
+  }
+  return repositoryUnavailable();
 }
 
 async function repositoryCall(operation) {
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof ProcessingError) throw error;
-    throw repositoryUnavailable();
+    throw mapRepositoryError(error);
   }
 }
 
@@ -120,17 +157,82 @@ async function mediaCall(operation) {
   }
 }
 
-function normalizeClaim(claim) {
-  if (claim?.outcome === 'busy' || claim?.outcome === 'terminal') return claim;
-  if (claim?.outcome !== 'claimed'
-    || !claim.task
-    || !claim.fragment
-    || ![null, undefined].includes(claim.task.inputHash)
-      && (typeof claim.task.inputHash !== 'string'
-        || !HASH_PATTERN.test(claim.task.inputHash))) {
+function sameSourceRevision(actual, expected) {
+  return actual.bucket === expected.bucket
+    && actual.objectName === expected.objectName
+    && actual.generation === expected.generation;
+}
+
+function matchingTask(input, event, claimInput) {
+  let task;
+  try {
+    task = parseProcessingTask(input);
+  } catch {
     throw repositoryUnavailable();
   }
-  return claim;
+  if (task.id !== claimInput.taskId
+    || task.ownerId !== event.uid
+    || task.fragmentId !== event.fragmentId
+    || task.batchId !== event.batchId
+    || task.processorName !== PROCESSOR_NAME
+    || task.processorVersion !== PROCESSOR_VERSION
+    || !sameSourceRevision(task.sourceRevision, event.sourceRevision)) {
+    throw repositoryUnavailable();
+  }
+  return task;
+}
+
+function matchingFragment(input, event, claimInput) {
+  let fragment;
+  try {
+    fragment = parseFragment(input);
+  } catch {
+    throw repositoryUnavailable();
+  }
+  const processing = fragment.processing.deterministic;
+  if (fragment.id !== event.fragmentId
+    || fragment.ownerId !== event.uid
+    || fragment.batchId !== event.batchId
+    || fragment.status !== 'processing'
+    || fragment.storage.bucket !== event.sourceRevision.bucket
+    || fragment.storage.originalPath !== event.sourceRevision.objectName
+    || fragment.storage.generation !== event.sourceRevision.generation
+    || processing?.taskId !== claimInput.taskId
+    || processing?.processorName !== PROCESSOR_NAME
+    || processing?.processorVersion !== PROCESSOR_VERSION
+    || processing?.state !== 'running') {
+    throw repositoryUnavailable();
+  }
+  return fragment;
+}
+
+function normalizeClaim(claim, event, claimInput) {
+  if (!claim || typeof claim !== 'object' || Array.isArray(claim)) {
+    throw repositoryUnavailable();
+  }
+  const task = matchingTask(claim.task, event, claimInput);
+  if (claim.outcome === 'terminal') {
+    if (!['succeeded', 'failed_terminal'].includes(task.state)) throw repositoryUnavailable();
+    return Object.freeze({ outcome: 'terminal', task });
+  }
+  if (claim.outcome === 'busy') {
+    if (task.state !== 'running') throw repositoryUnavailable();
+    return Object.freeze({ outcome: 'busy', task });
+  }
+  if (claim.outcome !== 'claimed'
+    || task.state !== 'running'
+    || task.leaseOwner !== claimInput.leaseOwner
+    || task.attemptStartedAt !== claimInput.claimedAt
+    || task.softDeadlineAt !== claimInput.softDeadlineAt
+    || task.leaseAcquiredAt !== claimInput.claimedAt
+    || task.leaseExpiresAt !== claimInput.leaseExpiresAt) {
+    throw repositoryUnavailable();
+  }
+  return Object.freeze({
+    outcome: 'claimed',
+    task,
+    fragment: matchingFragment(claim.fragment, event, claimInput),
+  });
 }
 
 function capturedAtValue(hint) {
@@ -170,6 +272,112 @@ function geoValue(hint) {
     throw invalidMedia();
   }
   return { lat: hint.lat, lng: hint.lng };
+}
+
+function validateFactHints(input) {
+  if (!hasExactKeys(input, FACT_HINT_KEYS)
+    || !(input.capturedAt === null
+      || hasExactKeys(input.capturedAt, CAPTURED_AT_HINT_KEYS))
+    || !(input.geo === null || hasExactKeys(input.geo, GEO_HINT_KEYS))) {
+    throw invalidMedia();
+  }
+  if (input.capturedAt !== null) capturedAtValue(input.capturedAt);
+  if (input.geo !== null) geoValue(input.geo);
+  return input;
+}
+
+function validateMetadataResult(input) {
+  if (!hasExactKeys(input, METADATA_RESULT_KEYS)) throw invalidMedia();
+  try {
+    const technicalMetadata = TechnicalMetadataSchema.parse(input.technicalMetadata);
+    const warningCodes = WarningCodesSchema.parse(input.warningCodes);
+    if (input.metadataStatus !== technicalMetadata.metadataStatus
+      || warningCodes.length !== technicalMetadata.warningCodes.length
+      || warningCodes.some((code, index) => code !== technicalMetadata.warningCodes[index])) {
+      throw invalidMedia();
+    }
+    return Object.freeze({
+      technicalMetadata,
+      factHints: validateFactHints(input.factHints),
+      metadataStatus: input.metadataStatus,
+      warningCodes,
+    });
+  } catch (error) {
+    if (error instanceof ProcessingError) throw error;
+    throw invalidMedia();
+  }
+}
+
+function validateImageResult(input) {
+  if (!hasExactKeys(input, IMAGE_RESULT_KEYS)) throw invalidMedia();
+  let warnings;
+  try {
+    warnings = WarningCodesSchema.parse(input.warnings);
+  } catch {
+    throw invalidMedia();
+  }
+
+  let thumbnail = null;
+  if (input.thumbnail !== null) {
+    if (!hasExactKeys(input.thumbnail, THUMBNAIL_KEYS)
+      || !Buffer.isBuffer(input.thumbnail.buffer)
+      || input.thumbnail.buffer.byteLength === 0
+      || input.thumbnail.contentType !== 'image/webp'
+      || !Number.isInteger(input.thumbnail.width)
+      || input.thumbnail.width <= 0
+      || input.thumbnail.width > 512
+      || !Number.isInteger(input.thumbnail.height)
+      || input.thumbnail.height <= 0
+      || input.thumbnail.height > 512) {
+      throw invalidMedia();
+    }
+    thumbnail = input.thumbnail;
+  }
+
+  let perceptualHash = null;
+  if (input.perceptualHash !== null) {
+    const hash = input.perceptualHash;
+    if (!hasExactKeys(hash, PERCEPTUAL_HASH_KEYS)
+      || typeof hash.value !== 'string'
+      || !/^[a-f0-9]{16}$/.test(hash.value)
+      || !Array.isArray(hash.bands)
+      || hash.bands.length !== 8
+      || hash.bands.some((band, index) => band !== `${index}:${hash.value.slice(
+        index * 2,
+        (index + 1) * 2,
+      )}`)) {
+      throw invalidMedia();
+    }
+    perceptualHash = hash;
+  }
+  return Object.freeze({ thumbnail, perceptualHash, warnings });
+}
+
+function validateDerivativeResult(input, expected) {
+  let derivative;
+  try {
+    derivative = ThumbnailDerivativeSchema.parse(input);
+  } catch {
+    throw invalidMedia();
+  }
+  let expectedPath;
+  try {
+    expectedPath = makeDerivativePath({
+      ownerId: expected.ownerId,
+      fragmentId: expected.fragmentId,
+      processorName: PROCESSOR_NAME,
+      processorVersion: PROCESSOR_VERSION,
+      inputHash: expected.inputHash,
+    });
+  } catch {
+    throw invalidMedia();
+  }
+  if (derivative.path !== expectedPath
+    || derivative.width !== expected.thumbnail.width
+    || derivative.height !== expected.thumbnail.height) {
+    throw invalidMedia();
+  }
+  return derivative;
 }
 
 function makeFactSuggestion({ key, hint, fragmentId, observedAt }) {
@@ -297,17 +505,23 @@ export function createDeterministicProcessor({
       };
       const claim = normalizeClaim(await repositoryCall(
         () => store.claimProcessingTask(event.uid, claimInput),
-      ));
+      ), event, claimInput);
       if (claim.outcome === 'terminal') return TERMINAL_NOOP;
       if (claim.outcome === 'busy') {
         throw retryableProcessingError('processing/task-busy');
       }
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), config.timeouts.softMs);
-      timeout.unref?.();
+      const remainingMs = Date.parse(claimInput.softDeadlineAt)
+        - Date.parse(readClock(clock));
+      if (remainingMs <= 0) controller.abort();
+      const timeout = remainingMs > 0
+        ? setTimeout(() => controller.abort(), remainingMs)
+        : null;
+      timeout?.unref?.();
       let cleanup = null;
       let terminalPersisted = false;
+      let primaryFailure = null;
       let technicalMetadata = null;
       let derivative = null;
       let perceptualHash = null;
@@ -320,7 +534,7 @@ export function createDeterministicProcessor({
 
       try {
         try {
-          assertActive(controller.signal);
+          assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
           const material = await storageCall(() => sourceMaterializer.materialize({
             sourceRevision: event.sourceRevision,
             expectedStorageFacts: claim.fragment.storage,
@@ -335,13 +549,14 @@ export function createDeterministicProcessor({
             || !HASH_PATTERN.test(material.inputHash)) {
             throw invalidMedia();
           }
+          assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
 
           const checkpointHash = claim.task.inputHash ?? null;
           if (checkpointHash !== null && checkpointHash !== material.inputHash) {
             throw invalidMedia();
           }
-          assertActive(controller.signal);
           if (checkpointHash === null) {
+            assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
             const registeredAt = readClock(clock);
             await repositoryCall(() => store.registerContentHash(event.uid, {
               taskId,
@@ -351,25 +566,25 @@ export function createDeterministicProcessor({
             }));
           }
 
-          assertActive(controller.signal);
-          const metadataResult = await mediaCall(() => metadata.read({
+          assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
+          const metadataResult = validateMetadataResult(await mediaCall(() => metadata.read({
             path: material.path,
             sourceType: claim.fragment.type,
             contentType: claim.fragment.storage.contentType,
             signal: controller.signal,
             deadlineAt: claimInput.softDeadlineAt,
-          }));
+          })));
           technicalMetadata = metadataResult.technicalMetadata;
           capabilityStatuses.metadata = metadataResult.metadataStatus;
           warningCodes = uniqueWarnings(warningCodes, metadataResult.warningCodes ?? []);
 
-          assertActive(controller.signal);
-          const imageResult = await mediaCall(() => image.process({
+          assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
+          const imageResult = validateImageResult(await mediaCall(() => image.process({
             path: material.path,
             contentType: claim.fragment.storage.contentType,
             signal: controller.signal,
             deadlineAt: claimInput.softDeadlineAt,
-          }));
+          })));
           perceptualHash = imageResult.perceptualHash;
           capabilityStatuses.perceptualHash = perceptualHash === null
             ? 'unsupported'
@@ -379,20 +594,30 @@ export function createDeterministicProcessor({
           if (imageResult.thumbnail === null) {
             capabilityStatuses.thumbnail = 'unsupported';
           } else {
-            assertActive(controller.signal);
-            derivative = await storageCall(() => derivatives.putThumbnail({
+            assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
+            const derivativeInput = {
               bucket: claim.fragment.storage.bucket,
               ownerId: event.uid,
               fragmentId: event.fragmentId,
               inputHash: material.inputHash,
-              thumbnail: imageResult.thumbnail,
-            }));
+              thumbnail: {
+                buffer: imageResult.thumbnail.buffer,
+                width: imageResult.thumbnail.width,
+                height: imageResult.thumbnail.height,
+              },
+              signal: controller.signal,
+              deadlineAt: claimInput.softDeadlineAt,
+            };
+            derivative = validateDerivativeResult(
+              await storageCall(() => derivatives.putThumbnail(derivativeInput)),
+              derivativeInput,
+            );
             capabilityStatuses.thumbnail = 'complete';
           }
 
           let nearMatches = [];
           if (perceptualHash !== null) {
-            assertActive(controller.signal);
+            assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
             const bandMatches = await repositoryCall(() => store.findNearDuplicateInputs(
               event.uid,
               { fragmentId: event.fragmentId, bands: perceptualHash.bands },
@@ -420,7 +645,7 @@ export function createDeterministicProcessor({
             }
           }
 
-          assertActive(controller.signal);
+          assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
           const completedAt = readClock(clock);
           const completion = {
             taskId,
@@ -451,6 +676,8 @@ export function createDeterministicProcessor({
           return SUCCEEDED;
         } catch (caught) {
           const error = caught instanceof ProcessingError ? caught : repositoryUnavailable();
+          primaryFailure = error;
+          if (error.code === 'processing/task-busy') throw error;
           if (!error.retryable) {
             const completedAt = readClock(clock);
             let completed;
@@ -510,10 +737,14 @@ export function createDeterministicProcessor({
           throw error;
         }
       } finally {
-        clearTimeout(timeout);
+        if (timeout !== null) clearTimeout(timeout);
         controller.abort();
         if (cleanup !== null) {
-          await storageCall(() => cleanup());
+          try {
+            await storageCall(() => cleanup());
+          } catch (error) {
+            if (primaryFailure === null) throw error;
+          }
         }
       }
     },

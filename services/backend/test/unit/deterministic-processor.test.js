@@ -654,7 +654,10 @@ test('projects the Task 9 thumbnail contract through the real derivative adapter
     storage,
     allowedBuckets: [STORAGE.bucket],
   });
-  const { processor, calls } = createHarness({ derivativeStore });
+  const { processor, calls } = createHarness({
+    derivativeStore,
+    clock: () => new Date().toISOString(),
+  });
 
   assert.deepEqual(await processor.handle(EVENT), { outcome: 'succeeded' });
   assert.equal(storageCalls.writes.length, 1);
