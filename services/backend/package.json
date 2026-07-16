@@ -15,8 +15,10 @@
   },
   "dependencies": {
     "@google/genai": "1.52.0",
+    "exifreader": "4.41.0",
     "fastify": "^5.10.0",
     "firebase-admin": "14.1.0",
+    "sharp": "0.35.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
