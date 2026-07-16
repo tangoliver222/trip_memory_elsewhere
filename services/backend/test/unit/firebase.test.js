@@ -21,7 +21,7 @@ test('test mode refuses a non-demo Firebase project', () => {
   }
 });
 
-test('Firebase initializer exposes Firestore, Auth and App Check managers', async (t) => {
+test('Firebase initializer exposes Firestore, Auth, App Check and Storage managers', async (t) => {
   const admin = createFirebaseAdmin({
     projectId: 'demo-elsewhere',
     appName: `firebase-unit-${process.pid}-${Date.now()}`,
@@ -31,4 +31,5 @@ test('Firebase initializer exposes Firestore, Auth and App Check managers', asyn
   assert.equal(typeof admin.db.doc, 'function');
   assert.equal(typeof admin.auth.verifyIdToken, 'function');
   assert.equal(typeof admin.appCheck.verifyToken, 'function');
+  assert.equal(typeof admin.storage.bucket, 'function');
 });
