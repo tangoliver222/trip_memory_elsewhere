@@ -139,6 +139,10 @@ export function deriveImportBatchState(uploads, previousCounters, processingSumm
   const processed = summary?.succeeded ?? previousCounters.processed;
   const processingFailed = summary?.failedTerminal ?? 0;
   const totalFailed = failed + processingFailed;
+  if (processed > saved) throw new TypeError('processed cannot exceed finalized uploads');
+  if (previousCounters.needsReview > processed) {
+    throw new TypeError('needsReview cannot exceed processed');
+  }
 
   let status;
   let uploadStatus;
