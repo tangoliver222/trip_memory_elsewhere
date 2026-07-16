@@ -917,8 +917,8 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
         processorName: 'deterministic-media',
         processorVersion: 'v2',
         eligible: 1,
-        running: 1,
-        succeeded: 0,
+        running: 0,
+        succeeded: 1,
         failedRetryable: 0,
         failedTerminal: 0,
         unsupportedCapabilities: 0,
@@ -926,7 +926,7 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
       },
     };
     const futureBatch = makePendingBatch({
-      counters: { saved: 0, processed: 0, failed: 0, needsReview: 1 },
+      counters: { saved: 0, processed: 1, failed: 0, needsReview: 1 },
       processingSummary: activeSummary,
     });
     const repository = await createRepository();

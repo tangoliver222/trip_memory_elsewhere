@@ -31,18 +31,45 @@ import { makeExactCandidateId } from '../processing/identity.js';
 
 const keyFor = (uid, id) => `${uid}/${id}`;
 
-function createStore(parse) {
-  const objects = new Map();
+const MEMORY_COLLECTIONS = Object.freeze([
+  'fragments',
+  'importBatches',
+  'processingTasks',
+  'contentHashes',
+  'duplicateCandidates',
+]);
+
+function createMemoryState() {
+  return Object.fromEntries(MEMORY_COLLECTIONS.map((collection) => [collection, new Map()]));
+}
+
+export function applyMemoryWrites(state, writes) {
+  const nextState = {};
+  for (const collection of MEMORY_COLLECTIONS) {
+    if (!(state?.[collection] instanceof Map)) throw new TypeError('Invalid memory state');
+    nextState[collection] = new Map(state[collection]);
+  }
+  for (const write of writes) {
+    if (!MEMORY_COLLECTIONS.includes(write?.collection)
+      || typeof write.key !== 'string'
+      || !write.key) {
+      throw new TypeError('Invalid memory write');
+    }
+    nextState[write.collection].set(write.key, structuredClone(write.value));
+  }
+  return nextState;
+}
+
+function createStore(collection, parse, readState, commitWrites) {
+  const objects = () => readState()[collection];
 
   function prepareWrite(uid, object) {
+    const parsed = parse(object);
     return Object.freeze({
-      key: keyFor(uid, object.id),
-      value: structuredClone(object),
+      collection,
+      key: keyFor(uid, parsed.id),
+      value: parsed,
     });
-  }
-
-  function commit(prepared) {
-    objects.set(prepared.key, prepared.value);
   }
 
   return {
@@ -51,37 +78,29 @@ function createStore(parse) {
 
       const parsed = parse(object);
       const key = keyFor(uid, parsed.id);
-      if (objects.has(key)) throw new RepositoryConflictError();
+      if (objects().has(key)) throw new RepositoryConflictError();
 
-      const stored = structuredClone(parsed);
-      objects.set(key, stored);
-      return structuredClone(stored);
+      commitWrites([prepareWrite(uid, parsed)]);
+      return structuredClone(parsed);
     },
 
     async get(uid, id) {
-      const stored = objects.get(keyFor(uid, id));
+      const stored = objects().get(keyFor(uid, id));
       return stored ? structuredClone(stored) : null;
     },
 
     read(uid, id) {
-      return objects.get(keyFor(uid, id)) ?? null;
+      return objects().get(keyFor(uid, id)) ?? null;
     },
 
     values(uid) {
       const prefix = `${uid}/`;
-      return [...objects.entries()]
+      return [...objects().entries()]
         .filter(([key]) => key.startsWith(prefix))
         .map(([, value]) => value);
     },
 
-    write(uid, object) {
-      const parsed = parse(object);
-      commit(prepareWrite(uid, parsed));
-      return parsed;
-    },
-
     prepareWrite,
-    commit,
   };
 }
 
@@ -94,21 +113,36 @@ function deepFreeze(value) {
 const cloneFrozen = (value) => deepFreeze(structuredClone(value));
 
 export function createMemoryRepository() {
-  const fragments = createStore(parseFragment);
-  const importBatches = createStore(parseImportBatch);
-  const processingTasks = createStore(parseProcessingTask);
-  const duplicateCandidates = createStore(parseDuplicateCandidate);
-  const contentHashes = new Map();
+  let state = createMemoryState();
+  const commitWrites = (writes) => {
+    state = applyMemoryWrites(state, writes);
+  };
+  const fragments = createStore('fragments', parseFragment, () => state, commitWrites);
+  const importBatches = createStore(
+    'importBatches',
+    parseImportBatch,
+    () => state,
+    commitWrites,
+  );
+  const processingTasks = createStore(
+    'processingTasks',
+    parseProcessingTask,
+    () => state,
+    commitWrites,
+  );
+  const duplicateCandidates = createStore(
+    'duplicateCandidates',
+    parseDuplicateCandidate,
+    () => state,
+    commitWrites,
+  );
 
   function prepareContentHashWrite(uid, sha256, input) {
     return Object.freeze({
+      collection: 'contentHashes',
       key: keyFor(uid, sha256),
-      value: structuredClone(parseContentHash(input)),
+      value: parseContentHash(input),
     });
-  }
-
-  function commitContentHash(prepared) {
-    contentHashes.set(prepared.key, prepared.value);
   }
 
   const cloneOutcome = (transition, storedFragment) => ({
@@ -128,8 +162,9 @@ export function createMemoryRepository() {
     }
     if (storedFragment) throw new RepositoryOriginalConflictError();
 
-    fragments.write(uid, normalized.fragment);
-    importBatches.write(uid, transition.batch);
+    const fragmentWrite = fragments.prepareWrite(uid, normalized.fragment);
+    const batchWrite = importBatches.prepareWrite(uid, transition.batch);
+    commitWrites([fragmentWrite, batchWrite]);
     return cloneOutcome(transition, normalized.fragment);
   }
 
@@ -142,7 +177,7 @@ export function createMemoryRepository() {
     if (transition.outcome === 'duplicate') return cloneOutcome(transition, storedFragment);
     if (storedFragment) throw new RepositoryOriginalConflictError();
 
-    importBatches.write(uid, transition.batch);
+    commitWrites([importBatches.prepareWrite(uid, transition.batch)]);
     return cloneOutcome(transition, null);
   }
 
@@ -162,9 +197,7 @@ export function createMemoryRepository() {
     const taskWrite = processingTasks.prepareWrite(uid, transition.task);
     const fragmentWrite = fragments.prepareWrite(uid, transition.fragment);
     const batchWrite = importBatches.prepareWrite(uid, transition.batch);
-    processingTasks.commit(taskWrite);
-    fragments.commit(fragmentWrite);
-    importBatches.commit(batchWrite);
+    commitWrites([taskWrite, fragmentWrite, batchWrite]);
     return cloneFrozen(transition);
   }
 
@@ -175,7 +208,7 @@ export function createMemoryRepository() {
       input,
     );
     const taskWrite = processingTasks.prepareWrite(uid, transition.task);
-    processingTasks.commit(taskWrite);
+    commitWrites([taskWrite]);
     return cloneFrozen(transition);
   }
 
@@ -189,8 +222,7 @@ export function createMemoryRepository() {
 
     const taskWrite = processingTasks.prepareWrite(uid, transition.task);
     const batchWrite = importBatches.prepareWrite(uid, transition.batch);
-    processingTasks.commit(taskWrite);
-    importBatches.commit(batchWrite);
+    commitWrites([taskWrite, batchWrite]);
     return cloneFrozen(transition);
   }
 
@@ -199,7 +231,7 @@ export function createMemoryRepository() {
     const storedFragment = storedTask
       ? fragments.read(uid, storedTask.fragmentId)
       : null;
-    const storedContentHash = contentHashes.get(keyFor(uid, input?.sha256)) ?? null;
+    const storedContentHash = state.contentHashes.get(keyFor(uid, input?.sha256)) ?? null;
     const storedCanonicalFragment = storedContentHash
       ? fragments.read(uid, storedContentHash.canonicalFragmentRef.id)
       : null;
@@ -229,10 +261,12 @@ export function createMemoryRepository() {
     const candidateWrite = transition.exactCandidate
       ? duplicateCandidates.prepareWrite(uid, transition.exactCandidate)
       : null;
-    processingTasks.commit(taskWrite);
-    fragments.commit(fragmentWrite);
-    commitContentHash(contentHashWrite);
-    if (candidateWrite) duplicateCandidates.commit(candidateWrite);
+    commitWrites([
+      taskWrite,
+      fragmentWrite,
+      contentHashWrite,
+      ...(candidateWrite ? [candidateWrite] : []),
+    ]);
     return cloneFrozen(transition.result);
   }
 
@@ -270,10 +304,7 @@ export function createMemoryRepository() {
     const candidateWrites = transition.candidates.map((candidate) => (
       duplicateCandidates.prepareWrite(uid, candidate)
     ));
-    processingTasks.commit(taskWrite);
-    fragments.commit(fragmentWrite);
-    importBatches.commit(batchWrite);
-    for (const candidateWrite of candidateWrites) duplicateCandidates.commit(candidateWrite);
+    commitWrites([taskWrite, fragmentWrite, batchWrite, ...candidateWrites]);
     return cloneFrozen(transition);
   }
 

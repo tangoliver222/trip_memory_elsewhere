@@ -162,6 +162,11 @@ test('processing summaries partition eligible work and bind every top-level coun
       pendingUploads,
       { processingSummary },
     )));
+    assert.throws(() => importBatchDomain.deriveImportBatchState(
+      pendingUploads,
+      { saved: 0, processed: 0, failed: 0, needsReview: 0 },
+      processingSummary,
+    ));
   }
 
   const finalizedUploads = makeUploads(2, (index) => ({

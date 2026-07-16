@@ -492,14 +492,14 @@ export function applyContentHashRegistration(
     throw targetError();
   }
 
-  const fragmentAlreadyRegistered = fragment.hashes.sha256 === registration.sha256;
   const canonicalFragmentRef = existingContentHash?.canonicalFragmentRef
     ?? fragmentReference(fragment.id);
+  const registrationExists = canonicalFragmentRef.id === fragment.id || candidateInput !== null;
   const contentHash = existingContentHash
     ? parseContentHash({
       ...existingContentHash,
-      fragmentCount: existingContentHash.fragmentCount + Number(!fragmentAlreadyRegistered),
-      updatedAt: fragmentAlreadyRegistered
+      fragmentCount: existingContentHash.fragmentCount + Number(!registrationExists),
+      updatedAt: registrationExists
         ? existingContentHash.updatedAt
         : registration.registeredAt,
     })
@@ -541,7 +541,8 @@ export function applyContentHashRegistration(
     currentStep: 'hash_registered',
     updatedAt: registration.registeredAt,
   });
-  const nextFragment = fragmentAlreadyRegistered ? fragment : parseFragment({
+  const hashPersisted = fragment.hashes.sha256 === registration.sha256;
+  const nextFragment = hashPersisted ? fragment : parseFragment({
     ...fragment,
     updatedAt: registration.registeredAt,
     hashes: {
@@ -597,7 +598,11 @@ export function applyNearDuplicateInputQuery(uid, fragmentInputs, input) {
     });
   }
   return deepFreeze([...unique.values()]
-    .sort((first, second) => first.fragmentId.localeCompare(second.fragmentId))
+    .sort((first, second) => (
+      first.fragmentId < second.fragmentId
+        ? -1
+        : Number(first.fragmentId > second.fragmentId)
+    ))
     .slice(0, 201));
 }
 
@@ -794,9 +799,16 @@ export function applyDeterministicCompletion(
   hasExactCandidate,
   input,
 ) {
-  const completion = normalizeCompletion(uid, input);
+  normalizeOwner(uid);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw targetError();
+  const taskId = normalizeId(input.taskId);
   const task = parseOwnedTask(uid, taskInput);
-  if (!task || task.id !== completion.taskId) throw new RepositoryLeaseOwnerError();
+  if (!task || task.id !== taskId) throw new RepositoryLeaseOwnerError();
+  if (TERMINAL_STATES.has(task.state)) {
+    return deepFreeze({ outcome: 'duplicate', task });
+  }
+
+  const completion = normalizeCompletion(uid, input);
   const fragment = parseFragment(fragmentInput);
   const batch = parseImportBatch(batchInput);
   if (fragment.ownerId !== uid || batch.ownerId !== uid) throw new RepositoryOwnerError();
@@ -811,19 +823,6 @@ export function applyDeterministicCompletion(
   if (existingCandidates.some((candidate) => candidate.ownerId !== uid)) {
     throw new RepositoryOwnerError();
   }
-  const taskNearCandidates = existingCandidates
-    .filter((candidate) => candidate.kind === 'near' && candidate.createdByTaskId === task.id)
-    .sort((first, second) => first.rank - second.rank);
-  if (TERMINAL_STATES.has(task.state)) {
-    return deepFreeze({
-      outcome: 'duplicate',
-      task,
-      fragment,
-      batch,
-      candidates: taskNearCandidates,
-    });
-  }
-
   assertCurrentLease(task, completion.leaseOwner, completion.completedAt);
   if (before(completion.completedAt, task.lastHeartbeatAt)) {
     throw new RepositoryLeaseOwnerError();
@@ -847,10 +846,7 @@ export function applyDeterministicCompletion(
     const candidate = nearCandidateFor(uid, task, match, completion.completedAt);
     const existing = existingById.get(candidate.id);
     if (!existing) return candidate;
-    if (!isDeepStrictEqual(existing.queryFragmentRef, candidate.queryFragmentRef)
-      || !isDeepStrictEqual(existing.matchedFragmentRef, candidate.matchedFragmentRef)) {
-      throw targetError();
-    }
+    if (!isDeepStrictEqual(existing, candidate)) throw targetError();
     return existing;
   });
 

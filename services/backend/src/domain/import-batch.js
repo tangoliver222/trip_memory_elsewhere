@@ -9,6 +9,36 @@ import { SourceDescriptorSchema, SourceTypeSchema } from './source-descriptor.js
 
 const CounterSchema = z.number().int().nonnegative();
 const MAX_ORIGINAL_BYTES = 50 * 1024 * 1024;
+const SUMMARY_STATE_FIELDS = [
+  'running',
+  'succeeded',
+  'failedRetryable',
+  'failedTerminal',
+];
+
+function processingSummaryInvariant(summary, inputCount) {
+  for (const field of ['eligible', ...SUMMARY_STATE_FIELDS, 'unsupportedCapabilities']) {
+    if (!Number.isInteger(summary[field]) || summary[field] < 0) {
+      return { field, message: `${field} must be a nonnegative integer` };
+    }
+  }
+  for (const field of ['eligible', ...SUMMARY_STATE_FIELDS]) {
+    if (summary[field] > inputCount) {
+      return { field, message: `${field} cannot exceed inputCount` };
+    }
+  }
+  const stateTotal = SUMMARY_STATE_FIELDS.reduce((total, field) => total + summary[field], 0);
+  if (stateTotal !== summary.eligible) {
+    return { field: 'eligible', message: 'Processing states must partition eligible work' };
+  }
+  if (summary.unsupportedCapabilities > summary.eligible * 3) {
+    return {
+      field: 'unsupportedCapabilities',
+      message: 'Unsupported capabilities cannot exceed three per eligible Fragment',
+    };
+  }
+  return null;
+}
 
 export const UploadManifestItemSchema = z.strictObject({
   fragmentId: IdSchema,
@@ -74,6 +104,10 @@ export function deriveImportBatchState(uploads, previousCounters, processingSumm
   }
 
   const summary = processingSummary?.deterministic ?? null;
+  const summaryInvariant = summary
+    ? processingSummaryInvariant(summary, items.length)
+    : null;
+  if (summaryInvariant) throw new TypeError(summaryInvariant.message);
   const processed = summary?.succeeded ?? previousCounters.processed;
   const processingFailed = summary?.failedTerminal ?? 0;
   const totalFailed = failed + processingFailed;
@@ -146,23 +180,25 @@ export const ImportBatchSchema = z.strictObject({
     }
   }
 
+  let summaryInvariant = null;
   if (batch.processingSummary !== null) {
     const summary = batch.processingSummary.deterministic;
-    for (const field of [
-      'eligible',
-      'running',
-      'succeeded',
-      'failedRetryable',
-      'failedTerminal',
-    ]) {
-      if (summary[field] > batch.inputCount) {
-        context.addIssue({
-          code: 'custom',
-          message: `${field} cannot exceed inputCount`,
-          path: ['processingSummary', 'deterministic', field],
-        });
-      }
+    summaryInvariant = processingSummaryInvariant(summary, batch.inputCount);
+    if (summaryInvariant) {
+      context.addIssue({
+        code: 'custom',
+        message: summaryInvariant.message,
+        path: ['processingSummary', 'deterministic', summaryInvariant.field],
+      });
     }
+  }
+
+  if (batch.counters.needsReview > batch.counters.processed) {
+    context.addIssue({
+      code: 'custom',
+      message: 'needsReview cannot exceed processed',
+      path: ['counters', 'needsReview'],
+    });
   }
 
   const entries = Object.entries(batch.uploads);
@@ -192,6 +228,8 @@ export const ImportBatchSchema = z.strictObject({
     }
   }
 
+  if (summaryInvariant) return;
+
   const derived = deriveImportBatchState(
     batch.uploads,
     batch.counters,
@@ -206,7 +244,7 @@ export const ImportBatchSchema = z.strictObject({
       });
     }
   }
-  for (const field of ['saved', 'failed']) {
+  for (const field of ['saved', 'processed', 'failed']) {
     if (batch.counters[field] !== derived.counters[field]) {
       context.addIssue({
         code: 'custom',
