@@ -53,6 +53,7 @@ function frozenCustomMetadata(overrides = {}) {
 
 function liveMetadata(overrides = {}) {
   return {
+    bucket: BUCKET,
     name: PATH,
     generation: '1740000000000001',
     metageneration: '1',
@@ -68,6 +69,8 @@ function createStorageFake({
   metadata = liveMetadata(),
   saveError = null,
   metadataError = null,
+  bucketError = null,
+  fileError = null,
 } = {}) {
   const calls = {
     buckets: [],
@@ -92,9 +95,11 @@ function createStorageFake({
   const storage = {
     bucket(bucketName) {
       calls.buckets.push(bucketName);
+      if (bucketError) throw bucketError;
       return {
         file(path) {
           calls.files.push(path);
+          if (fileError) throw fileError;
           return file;
         },
       };
@@ -152,12 +157,14 @@ test('creates the deterministic thumbnail path with generation zero precondition
 });
 
 test('returns frozen authoritative normalized object facts after creation', async () => {
+  const metadata = liveMetadata({
+    generation: 7,
+    metageneration: 3,
+    size: THUMBNAIL.buffer.byteLength,
+  });
+  delete metadata.bucket;
   const { storage, calls } = createStorageFake({
-    metadata: liveMetadata({
-      generation: 7,
-      metageneration: 3,
-      size: THUMBNAIL.buffer.byteLength,
-    }),
+    metadata,
   });
 
   const result = await putThumbnail(createStore(storage));
@@ -174,6 +181,28 @@ test('returns frozen authoritative normalized object facts after creation', asyn
     height: THUMBNAIL.height,
   });
   assert.equal(Object.isFrozen(result), true);
+});
+
+test('computes the production CRC32C for the standard vector on create and reuse', async (t) => {
+  const thumbnail = Object.freeze({
+    ...THUMBNAIL,
+    buffer: Buffer.from('123456789'),
+  });
+  const metadata = liveMetadata({
+    size: String(thumbnail.buffer.byteLength),
+    crc32c: '4waSgw==',
+  });
+
+  for (const saveError of [null, { code: 412 }]) {
+    await t.test(saveError === null ? 'create' : 'reuse', async () => {
+      const { storage } = createStorageFake({ metadata, saveError });
+
+      const result = await putThumbnail(createStore(storage), { thumbnail });
+
+      assert.equal(result.crc32c, '4waSgw==');
+      assert.equal(result.sizeBytes, 9);
+    });
+  }
 });
 
 test('a numeric or string 412 reuses only a byte-identical frozen derivative', async (t) => {
@@ -196,6 +225,7 @@ test('a numeric or string 412 reuses only a byte-identical frozen derivative', a
 
 test('a 412 with any frozen object fact mismatch is terminal conflict without overwrite', async (t) => {
   const mismatches = [
+    ['bucket', { bucket: 'other.appspot.com' }],
     ['path', { name: PATH.replace(OWNER_ID, 'user_beta') }],
     ['owner', { metadata: frozenCustomMetadata({ ownerId: 'user_beta' }) }],
     ['fragment', { metadata: frozenCustomMetadata({ fragmentId: 'frag_87654321' }) }],
@@ -237,15 +267,75 @@ test('a 412 with any frozen object fact mismatch is terminal conflict without ov
 });
 
 test('successful creation also rejects mismatched authoritative metadata', async () => {
-  const { storage, calls } = createStorageFake({
-    metadata: liveMetadata({ crc32c: crc32cBase64(Buffer.from('forged')) }),
-  });
+  for (const override of [
+    { bucket: 'other.appspot.com' },
+    { crc32c: crc32cBase64(Buffer.from('forged')) },
+  ]) {
+    const { storage, calls } = createStorageFake({
+      metadata: liveMetadata(override),
+    });
 
-  await assert.rejects(
-    () => putThumbnail(createStore(storage)),
-    (error) => assertStableError(error, 'processing/derivative-conflict', false),
-  );
-  assert.deepEqual(calls.order, ['save', 'getMetadata']);
+    await assert.rejects(
+      () => putThumbnail(createStore(storage)),
+      (error) => assertStableError(error, 'processing/derivative-conflict', false),
+    );
+    assert.deepEqual(calls.order, ['save', 'getMetadata']);
+  }
+});
+
+test('generation metageneration and size accept only canonical positive integer forms', async (t) => {
+  const invalidFacts = [
+    ['generation whitespace', { generation: ' 1' }],
+    ['generation plus', { generation: '+1' }],
+    ['generation minus', { generation: '-1' }],
+    ['generation zero string', { generation: '0' }],
+    ['generation zero number', { generation: 0 }],
+    ['generation fraction string', { generation: '1.5' }],
+    ['generation fraction number', { generation: 1.5 }],
+    ['generation exponent string', { generation: '1e2' }],
+    ['generation NaN', { generation: Number.NaN }],
+    ['generation Infinity', { generation: Number.POSITIVE_INFINITY }],
+    ['generation unsafe number', { generation: Number.MAX_SAFE_INTEGER + 1 }],
+    ['generation leading zero', { generation: '01' }],
+    ['metageneration leading zero', { metageneration: '01' }],
+    ['metageneration unsafe number', { metageneration: Number.MAX_SAFE_INTEGER + 1 }],
+    ['size leading zero', { size: `0${THUMBNAIL.buffer.byteLength}` }],
+    ['size exponent', { size: `${THUMBNAIL.buffer.byteLength}e0` }],
+    ['size unsafe number', { size: Number.MAX_SAFE_INTEGER + 1 }],
+  ];
+
+  for (const [name, override] of invalidFacts) {
+    await t.test(name, async () => {
+      const { storage } = createStorageFake({
+        saveError: { code: 412 },
+        metadata: liveMetadata(override),
+      });
+
+      await assert.rejects(
+        () => putThumbnail(createStore(storage)),
+        (error) => assertStableError(error, 'processing/derivative-conflict', false),
+      );
+    });
+  }
+});
+
+test('a definitive metadata 404 after create or reuse is terminal conflict by error code only', async (t) => {
+  for (const saveError of [null, { code: 412 }]) {
+    for (const code of [404, '404']) {
+      await t.test(`${saveError === null ? 'create' : 'reuse'} code ${JSON.stringify(code)}`, async () => {
+        const { storage, calls } = createStorageFake({
+          saveError,
+          metadataError: { code, message: 'secret definitive missing object' },
+        });
+
+        await assert.rejects(
+          () => putThumbnail(createStore(storage)),
+          (error) => assertStableError(error, 'processing/derivative-conflict', false),
+        );
+        assert.equal(calls.metadata, 1);
+      });
+    }
+  }
 });
 
 test('only a stable 412 code is reusable and transient provider failures are retryable and redacted', async (t) => {
@@ -254,11 +344,11 @@ test('only a stable 412 code is reusable and transient provider failures are ret
       saveError: { code: 500, message: 'secret save detail mentioning 412' },
     }, 0],
     ['metadata after create', {
-      metadataError: new Error('secret metadata detail'),
+      metadataError: { code: 500, message: 'secret metadata detail mentioning 404' },
     }, 1],
     ['metadata after 412', {
       saveError: { code: 412 },
-      metadataError: new Error('secret reuse metadata detail'),
+      metadataError: { code: 500, message: 'secret reuse metadata detail mentioning 404' },
     }, 1],
   ];
 
@@ -271,6 +361,24 @@ test('only a stable 412 code is reusable and transient provider failures are ret
       );
       assert.equal(calls.saves.length, 1);
       assert.equal(calls.metadata, expectedMetadataCalls);
+    });
+  }
+});
+
+test('a 412 while constructing a bucket or file handle never enters object reuse', async (t) => {
+  for (const setup of [
+    { bucketError: { code: 412, message: 'secret bucket construction failure' } },
+    { fileError: { code: '412', message: 'secret file construction failure' } },
+  ]) {
+    await t.test(setup.bucketError ? 'bucket' : 'file', async () => {
+      const { storage, calls } = createStorageFake(setup);
+
+      await assert.rejects(
+        () => putThumbnail(createStore(storage)),
+        (error) => assertStableError(error, 'processing/storage-unavailable', true),
+      );
+      assert.deepEqual(calls.saves, []);
+      assert.equal(calls.metadata, 0);
     });
   }
 });
