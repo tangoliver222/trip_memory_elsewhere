@@ -98,15 +98,17 @@ function normalizeInput(input, allowedBuckets) {
   });
 }
 
-function normalizeNonemptyStringOrNumber(value) {
-  if (typeof value === 'string' && value.length > 0) return value;
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+function normalizePositiveDecimal(value) {
+  if (typeof value === 'string' && /^[1-9][0-9]*$/.test(value)) return value;
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) {
+    return String(value);
+  }
   return null;
 }
 
 function normalizePositiveInteger(value) {
   if ((typeof value !== 'string' && typeof value !== 'number')
-    || (typeof value === 'string' && !/^[0-9]+$/.test(value))) return null;
+    || (typeof value === 'string' && !/^[1-9][0-9]*$/.test(value))) return null;
   const normalized = Number(value);
   return Number.isSafeInteger(normalized) && normalized > 0 ? normalized : null;
 }
@@ -117,10 +119,11 @@ function exactCustomMetadata(actual, expected) {
 }
 
 function normalizeLiveFacts(metadata, expected) {
-  const generation = normalizeNonemptyStringOrNumber(metadata?.generation);
-  const metageneration = normalizeNonemptyStringOrNumber(metadata?.metageneration);
+  const generation = normalizePositiveDecimal(metadata?.generation);
+  const metageneration = normalizePositiveDecimal(metadata?.metageneration);
   const sizeBytes = normalizePositiveInteger(metadata?.size);
-  if (metadata?.name !== expected.path
+  if ((metadata?.bucket !== undefined && metadata.bucket !== expected.bucket)
+    || metadata?.name !== expected.path
     || generation === null
     || metageneration === null
     || metadata?.contentType !== CONTENT_TYPE
@@ -146,7 +149,10 @@ async function readLiveFacts(file, expected) {
   let response;
   try {
     response = await file.getMetadata();
-  } catch {
+  } catch (error) {
+    // Cloud Storage reads are strongly consistent, so a coded 404 after either create or
+    // precondition failure means the immutable object cannot be authoritatively reused.
+    if (error?.code === 404 || error?.code === '404') throw derivativeConflict();
     throw storageUnavailable();
   }
   if (!Array.isArray(response) || response.length === 0) throw derivativeConflict();
@@ -172,6 +178,10 @@ export function createFirebaseDerivativeStore({ storage, allowedBuckets } = {}) 
       let file;
       try {
         file = storage.bucket(expected.bucket).file(expected.path);
+      } catch {
+        throw storageUnavailable();
+      }
+      try {
         await file.save(expected.buffer, {
           resumable: false,
           preconditionOpts: { ifGenerationMatch: 0 },
