@@ -47,6 +47,7 @@ function sourceRevision(overrides = {}) {
 
 function createStorageFake({
   metadata = {},
+  metadataAction,
   chunks = [SOURCE_BYTES],
   metadataError,
   metadataGate,
@@ -69,6 +70,7 @@ function createStorageFake({
   const file = {
     async getMetadata() {
       calls.metadata += 1;
+      if (metadataAction) return metadataAction(completeMetadata);
       if (metadataGate) await metadataGate;
       if (metadataError) throw metadataError;
       return [completeMetadata];
@@ -337,6 +339,28 @@ test('cancels unresolved metadata promptly and keeps timeout authoritative', asy
     assert.deepEqual(await readdir(tempRoot), []);
   }
   assert.deepEqual(unhandled, []);
+});
+
+test('expired metadata failure remains a soft timeout before its timer callback', async (t) => {
+  const tempRoot = await createTempRoot(t);
+  const { storage, calls } = createStorageFake({
+    metadataAction() {
+      const blockedUntil = Date.now() + 30;
+      while (Date.now() < blockedUntil) {
+        // Simulate a synchronous provider failure that prevents the timer callback from running.
+      }
+      throw new Error(`late raw provider failure ${OBJECT_NAME}`);
+    },
+  });
+
+  await assert.rejects(
+    () => materialize(createMaterializer(storage, tempRoot), {
+      deadlineAt: new Date(Date.now() + 5).toISOString(),
+    }),
+    { code: 'processing/soft-timeout', retryable: true },
+  );
+  assert.equal(calls.streams.length, 0);
+  assert.deepEqual(await readdir(tempRoot), []);
 });
 
 test('cancellation during temporary filesystem setup opens no source stream', async (t) => {
