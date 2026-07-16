@@ -7,3 +7,8 @@ export {
 export { ProvenanceSchema, parseProvenance } from './provenance.js';
 export { FragmentSchema, parseFragment } from './fragment.js';
 export { ImportBatchSchema, parseImportBatch } from './import-batch.js';
+export {
+  SourceDescriptorSchema,
+  SourceTypeSchema,
+  parseSourceDescriptor,
+} from './source-descriptor.js';
