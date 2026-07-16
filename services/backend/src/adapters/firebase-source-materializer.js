@@ -118,8 +118,9 @@ async function removeMaterial(directory) {
 }
 
 function stableFailure(error, aborted) {
-  if (error instanceof ProcessingError) return error;
+  if (error instanceof ProcessingError && !error.retryable) return error;
   if (aborted) return softTimeout();
+  if (error instanceof ProcessingError) return error;
   return storageUnavailable();
 }
 
@@ -226,6 +227,7 @@ export function createFirebaseSourceMaterializer({
           );
         } catch (error) {
           if (error instanceof ProcessingError) throw error;
+          cancellation.throwIfCancelled();
           throw storageUnavailable();
         }
         cancellation.throwIfCancelled();
