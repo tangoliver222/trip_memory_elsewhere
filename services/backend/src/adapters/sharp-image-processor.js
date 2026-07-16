@@ -1,14 +1,12 @@
 import { stat } from 'node:fs/promises';
-import { Worker } from 'node:worker_threads';
 import sharp from 'sharp';
 import { encodeDHash, splitDHashBands } from '../processing/dhash.js';
 import {
   retryableProcessingError,
   terminalProcessingError,
 } from '../processing/errors.js';
-import { runIsolatedWorker } from './worker-lifecycle.js';
+import { runSharpImageWorker } from './sharp-image-worker-client.js';
 
-const WORKER_URL = new URL('./sharp-image-worker.js', import.meta.url);
 const MAX_THUMBNAIL_BYTES = (512 * 512 * 4) + 65_536;
 const HARD_LIMITS = Object.freeze({
   maxInputBytes: 52_428_800,
@@ -31,13 +29,20 @@ function runtimeFormat(format, direction, transport) {
   return sharp.format[format]?.[direction]?.[transport] === true;
 }
 
+function runtimeInputSuffix(format, suffix) {
+  const input = sharp.format[format]?.input;
+  return input?.file === true
+    && Array.isArray(input.fileSuffix)
+    && input.fileSuffix.includes(suffix);
+}
+
 const CAPABILITY_REPORT = Object.freeze({
   decode: Object.freeze({
     jpeg: runtimeFormat('jpeg', 'input', 'file'),
     png: runtimeFormat('png', 'input', 'file'),
     webp: runtimeFormat('webp', 'input', 'file'),
-    heic: runtimeFormat('heif', 'input', 'file'),
-    heif: runtimeFormat('heif', 'input', 'file'),
+    heic: runtimeInputSuffix('heif', '.heic'),
+    heif: runtimeInputSuffix('heif', '.heif'),
   }),
   encode: Object.freeze({
     webp: runtimeFormat('webp', 'output', 'buffer'),
@@ -193,31 +198,17 @@ export function createSharpImageProcessor({ limits: rawLimits } = {}) {
 
       const active = operationSignal(signal, deadline);
       try {
-        let message;
-        try {
-          message = await runIsolatedWorker({
-            signal: active.signal,
-            createWorker: () => new Worker(WORKER_URL, {
-              workerData: {
-                path,
-                expectedFormat,
-                limits: {
-                  maxInputPixels: limits.maxInputPixels,
-                  maxImageWidth: limits.maxImageWidth,
-                  maxImageHeight: limits.maxImageHeight,
-                  maxPageCount: limits.maxPageCount,
-                },
-              },
-              stdout: true,
-              stderr: true,
-            }),
-          });
-        } catch (error) {
-          if (active.signal.aborted || error?.name === 'AbortError') {
-            throw retryableProcessingError('processing/soft-timeout');
-          }
-          throw terminalProcessingError('processing/invalid-media');
-        }
+        const message = await runSharpImageWorker({
+          path,
+          expectedFormat,
+          limits: {
+            maxInputPixels: limits.maxInputPixels,
+            maxImageWidth: limits.maxImageWidth,
+            maxImageHeight: limits.maxImageHeight,
+            maxPageCount: limits.maxPageCount,
+          },
+          signal: active.signal,
+        });
         checkActive(active.signal, deadline);
         if (message?.kind !== 'result') {
           throw terminalProcessingError('processing/invalid-media');
