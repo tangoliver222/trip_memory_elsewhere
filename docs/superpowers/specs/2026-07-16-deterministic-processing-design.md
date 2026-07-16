@@ -2,7 +2,7 @@
 
 **日期：** 2026-07-16
 
-**状态：** 已完成设计冻结，等待书面审阅
+**状态：** 已批准并冻结
 
 **实施方式：** 先在 Firebase Emulator 建立完整闭环，再进入任何真实云部署
 
@@ -56,8 +56,7 @@ Storage finalized event / Eventarc retry
 → derive source revision identity
 → ensure + transactional claim ProcessingTask
 → generation-pinned materialize + streaming SHA-256
-→ checkpoint inputHash
-→ register owner-scoped content hash
+→ transactionally checkpoint inputHash + register owner-scoped content hash
 → extract supported metadata
 → generate supported thumbnail and dHash
 → idempotently create/reuse derivative
@@ -712,7 +711,6 @@ Repository 增加独立 ports：
 ```text
 claimProcessingTask(uid, claim)
 heartbeatProcessingTask(uid, heartbeat)
-checkpointProcessingHash(uid, checkpoint)
 registerContentHash(uid, registration)
 findNearDuplicateInputs(uid, query)
 completeDeterministicProcessing(uid, completion)
@@ -722,7 +720,8 @@ failDeterministicProcessing(uid, failure)
 推荐 transaction 切分：
 
 1. claim transaction：Task + Fragment processing/running + batch running summary；
-2. hash registration transaction：Task checkpoint + Fragment sha + ContentHash + exact candidate；
+2. hash registration transaction：`registerContentHash` 原子写 Task checkpoint + Fragment sha +
+   ContentHash + exact candidate，不保留第二个重复 checkpoint port；
 3. terminal transaction：Task terminal + Fragment current outputs + near candidates + versioned batch
    summary/counters；
 4. retryable failure transaction：只更新持有 lease 的 Task 和 batch versioned summary；
