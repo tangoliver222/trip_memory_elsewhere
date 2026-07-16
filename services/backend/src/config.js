@@ -13,7 +13,24 @@ const EnvSchema = z.object({
   ELSE_MODEL_FAST: z.string().default('gemini-flash-latest'),
   ELSE_MODEL_DEEP: z.string().optional(),
   ELSE_CORS_ORIGIN: z.string().default('*'),
+  ELSEWHERE_SERVICE_MODE: z.enum(['api', 'ingestion']).default('api'),
+  FIREBASE_PROJECT_ID: z.string().trim().default(''),
+  ELSEWHERE_ALLOWED_APP_IDS: z.string().optional(),
+  ELSEWHERE_STORAGE_BUCKETS: z.string().optional(),
 });
+
+const invalidConfiguration = (fields) => (
+  new Error(`Invalid backend configuration: ${fields.join(', ')}`)
+);
+
+function parseList(raw, fallback, field) {
+  if (raw === undefined) return Object.freeze([...fallback]);
+  const values = raw.split(',').map((value) => value.trim());
+  if (values.some((value) => !value) || new Set(values).size !== values.length) {
+    throw invalidConfiguration([field]);
+  }
+  return Object.freeze(values);
+}
 
 export function loadConfig(env = process.env) {
   const parsed = EnvSchema.safeParse(env);
@@ -23,6 +40,29 @@ export function loadConfig(env = process.env) {
   }
 
   const value = parsed.data;
+  const isProduction = value.NODE_ENV === 'production';
+  const firebaseProjectId = value.FIREBASE_PROJECT_ID
+    || (isProduction ? '' : 'demo-elsewhere');
+  const allowedAppIds = parseList(
+    value.ELSEWHERE_ALLOWED_APP_IDS,
+    isProduction ? [] : ['elsewhere-web-local'],
+    'ELSEWHERE_ALLOWED_APP_IDS',
+  );
+  const storageBuckets = parseList(
+    value.ELSEWHERE_STORAGE_BUCKETS,
+    isProduction ? [] : ['demo-elsewhere.appspot.com'],
+    'ELSEWHERE_STORAGE_BUCKETS',
+  );
+  const missing = [];
+  if (!firebaseProjectId) missing.push('FIREBASE_PROJECT_ID');
+  if (value.ELSEWHERE_SERVICE_MODE === 'api' && allowedAppIds.length === 0) {
+    missing.push('ELSEWHERE_ALLOWED_APP_IDS');
+  }
+  if (value.ELSEWHERE_SERVICE_MODE === 'ingestion' && storageBuckets.length === 0) {
+    missing.push('ELSEWHERE_STORAGE_BUCKETS');
+  }
+  if (missing.length > 0) throw invalidConfiguration(missing);
+
   return Object.freeze({
     nodeEnv: value.NODE_ENV,
     host: value.HOST,
@@ -38,6 +78,10 @@ export function loadConfig(env = process.env) {
       DEEP_REASONING: value.ELSE_MODEL_DEEP || value.ELSE_MODEL_FAST,
     }),
     corsOrigin: value.ELSE_CORS_ORIGIN,
+    serviceMode: value.ELSEWHERE_SERVICE_MODE,
+    firebaseProjectId,
+    allowedAppIds,
+    storageBuckets,
     evidenceLimit: 40,
     maxQuestionLength: 500,
   });

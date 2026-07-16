@@ -1,7 +1,7 @@
-import { createApp } from './app.js';
+import { createRuntimeApp } from './composition/runtime.js';
 import { config } from './config.js';
 
-const app = createApp();
+const app = createRuntimeApp(config);
 
 const close = async (signal) => {
   app.log.info({ signal }, 'shutting down');
