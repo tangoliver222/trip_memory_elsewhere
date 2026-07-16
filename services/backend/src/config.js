@@ -17,6 +17,20 @@ const EnvSchema = z.object({
   FIREBASE_PROJECT_ID: z.string().trim().default(''),
   ELSEWHERE_ALLOWED_APP_IDS: z.string().optional(),
   ELSEWHERE_STORAGE_BUCKETS: z.string().optional(),
+  PROCESSING_SOFT_TIMEOUT_MS: z.coerce.number().int().positive().default(180000),
+  PROCESSING_LEASE_MS: z.coerce.number().int().positive().default(240000),
+  CLOUD_RUN_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(300000),
+  PROCESSING_CLEANUP_MARGIN_MS: z.coerce.number().int().positive().default(30000),
+  MAX_INPUT_BYTES: z.coerce.number().int().positive().max(52428800).default(52428800),
+  MAX_INPUT_PIXELS: z.coerce.number().int().positive().max(60000000).default(60000000),
+  MAX_IMAGE_WIDTH: z.coerce.number().int().positive().max(20000).default(20000),
+  MAX_IMAGE_HEIGHT: z.coerce.number().int().positive().max(20000).default(20000),
+  MAX_PAGE_COUNT: z.coerce.number().int().positive().max(100).default(100),
+  MAX_METADATA_DECOMPRESSED_BYTES: z.coerce.number()
+    .int()
+    .positive()
+    .max(16777216)
+    .default(16777216),
 });
 
 const invalidConfiguration = (fields) => (
@@ -63,6 +77,35 @@ export function loadConfig(env = process.env) {
   }
   if (missing.length > 0) throw invalidConfiguration(missing);
 
+  if (value.PROCESSING_SOFT_TIMEOUT_MS >= value.PROCESSING_LEASE_MS) {
+    throw invalidConfiguration(['PROCESSING_SOFT_TIMEOUT_MS', 'PROCESSING_LEASE_MS']);
+  }
+  if (value.PROCESSING_LEASE_MS
+    > value.CLOUD_RUN_REQUEST_TIMEOUT_MS - value.PROCESSING_CLEANUP_MARGIN_MS) {
+    throw invalidConfiguration([
+      'PROCESSING_LEASE_MS',
+      'CLOUD_RUN_REQUEST_TIMEOUT_MS',
+      'PROCESSING_CLEANUP_MARGIN_MS',
+    ]);
+  }
+
+  const processing = Object.freeze({
+    timeouts: Object.freeze({
+      softMs: value.PROCESSING_SOFT_TIMEOUT_MS,
+      leaseMs: value.PROCESSING_LEASE_MS,
+      requestMs: value.CLOUD_RUN_REQUEST_TIMEOUT_MS,
+      cleanupMarginMs: value.PROCESSING_CLEANUP_MARGIN_MS,
+    }),
+    limits: Object.freeze({
+      maxInputBytes: value.MAX_INPUT_BYTES,
+      maxInputPixels: value.MAX_INPUT_PIXELS,
+      maxImageWidth: value.MAX_IMAGE_WIDTH,
+      maxImageHeight: value.MAX_IMAGE_HEIGHT,
+      maxPageCount: value.MAX_PAGE_COUNT,
+      maxMetadataDecompressedBytes: value.MAX_METADATA_DECOMPRESSED_BYTES,
+    }),
+  });
+
   return Object.freeze({
     nodeEnv: value.NODE_ENV,
     host: value.HOST,
@@ -82,6 +125,7 @@ export function loadConfig(env = process.env) {
     firebaseProjectId,
     allowedAppIds,
     storageBuckets,
+    processing,
     evidenceLimit: 40,
     maxQuestionLength: 500,
   });
