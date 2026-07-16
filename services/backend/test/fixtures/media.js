@@ -211,15 +211,15 @@ export function corruptExifJpegBytes() {
 
 export function pngWithCompressedMetadataBytes(expandedBytes = 256) {
   const png = alphaPngBytes();
-  const iendOffset = png.length - 12;
+  const metadataOffset = 33;
   const compressedText = Buffer.concat([
-    Buffer.from('Comment\0\0', 'ascii'),
+    Buffer.from('Raw profile type exif\0\0', 'ascii'),
     deflateSync(Buffer.alloc(expandedBytes, 0x41)),
   ]);
   return Buffer.concat([
-    png.subarray(0, iendOffset),
+    png.subarray(0, metadataOffset),
     pngChunk('zTXt', compressedText),
-    png.subarray(iendOffset),
+    png.subarray(metadataOffset),
   ]);
 }
 
