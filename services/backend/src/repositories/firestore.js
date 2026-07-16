@@ -21,11 +21,9 @@ import {
   applyProcessingClaim,
   applyProcessingHeartbeat,
   applyRetryableProcessingFailure,
+  deriveProposedNearCandidateIds,
 } from './processing-outcome.js';
-import {
-  makeExactCandidateId,
-  makeNearCandidateId,
-} from '../processing/identity.js';
+import { makeExactCandidateId } from '../processing/identity.js';
 
 const isConflict = (error) => (
   error?.code === 6
@@ -235,11 +233,8 @@ export function createFirestoreRepository({ db }) {
       const batchRef = task ? document(uid, 'importBatches', task.batchId) : null;
       const fragmentSnapshot = fragmentRef ? await transaction.get(fragmentRef) : null;
       const batchSnapshot = batchRef ? await transaction.get(batchRef) : null;
-      const matchedIds = Array.isArray(input?.nearMatches)
-        ? [...new Set(input.nearMatches
-          .map((match) => match?.fragmentId)
-          .filter((fragmentId) => typeof fragmentId === 'string'))]
-        : [];
+      const proposedCandidateIds = deriveProposedNearCandidateIds(uid, task, input);
+      const matchedIds = input.nearMatches.map((match) => match.fragmentId);
       const matchedSnapshots = [];
       for (const fragmentId of matchedIds) {
         matchedSnapshots.push(await transaction.get(document(uid, 'fragments', fragmentId)));
@@ -248,13 +243,6 @@ export function createFirestoreRepository({ db }) {
         ? await transaction.get(collection(uid, 'duplicateCandidates')
           .where('createdByTaskId', '==', task.id))
         : null;
-      const proposedCandidateIds = task
-        ? matchedIds.map((matchedFragmentId) => makeNearCandidateId({
-          algorithmVersion: 'v1',
-          queryFragmentId: task.fragmentId,
-          matchedFragmentId,
-        }))
-        : [];
       const proposedCandidateSnapshots = [];
       for (const candidateId of proposedCandidateIds) {
         proposedCandidateSnapshots.push(await transaction.get(

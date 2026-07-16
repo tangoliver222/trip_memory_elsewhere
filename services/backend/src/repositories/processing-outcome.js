@@ -674,6 +674,29 @@ function normalizeNearMatches(input) {
   });
 }
 
+export function deriveProposedNearCandidateIds(uid, taskInput, input) {
+  normalizeOwner(uid);
+  const task = parseOwnedTask(uid, taskInput);
+  if (task && TERMINAL_STATES.has(task.state)) return deepFreeze([]);
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw targetError();
+  const taskId = normalizeId(input.taskId);
+  if (!task || task.id !== taskId) throw new RepositoryLeaseOwnerError();
+  const nearMatches = normalizeNearMatches(input.nearMatches);
+  if (nearMatches.some((match) => match.fragmentId === task.fragmentId)) {
+    throw targetError();
+  }
+  try {
+    return deepFreeze(nearMatches.map((match) => makeNearCandidateId({
+      algorithmVersion: 'v1',
+      queryFragmentId: task.fragmentId,
+      matchedFragmentId: match.fragmentId,
+    })));
+  } catch (error) {
+    if (error instanceof TypeError) throw targetError();
+    throw error;
+  }
+}
+
 function normalizeCompletion(uid, input) {
   normalizeOwner(uid);
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw targetError();
