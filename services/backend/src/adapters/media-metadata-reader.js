@@ -1,13 +1,14 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { brotliDecompressSync, inflateSync } from 'node:zlib';
-import ExifReader from 'exifreader';
+import { Worker } from 'node:worker_threads';
 import sharp from 'sharp';
 import { TechnicalMetadataSchema } from '../domain/processing-result.js';
+import { getUploadPolicy } from '../imports/upload-policy.js';
 import {
   retryableProcessingError,
   terminalProcessingError,
 } from '../processing/errors.js';
+import { runAbortableOperation } from './abortable-operation.js';
 
 const HARD_LIMITS = Object.freeze({
   maxInputBytes: 52_428_800,
@@ -28,24 +29,7 @@ const CONTENT_FORMATS = Object.freeze({
   'text/plain': 'text',
 });
 
-const SOURCE_TYPES = new Set(['photo', 'receipt', 'ticket', 'screenshot', 'menu', 'text']);
-const EXIF_TAGS = Object.freeze([
-  'Orientation',
-  'Make',
-  'Model',
-  'DateTimeOriginal',
-  'OffsetTimeOriginal',
-  'LensModel',
-  'FocalLength',
-  'FNumber',
-  'ISOSpeedRatings',
-  'PhotographicSensitivity',
-  'ExposureTime',
-  'GPSLatitudeRef',
-  'GPSLatitude',
-  'GPSLongitudeRef',
-  'GPSLongitude',
-]);
+const METADATA_WORKER_URL = new URL('./media-metadata-worker.js', import.meta.url);
 
 function validateLimits(input) {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
@@ -100,8 +84,6 @@ function createEmitter(warningSink) {
 }
 
 function formatFor(contentType) {
-  if (typeof contentType !== 'string') return null;
-  if (contentType.startsWith('text/plain;')) return 'text';
   return CONTENT_FORMATS[contentType] ?? null;
 }
 
@@ -142,147 +124,106 @@ function freezeResult(technicalMetadata, factHints) {
   });
 }
 
-function stringTag(tag, maxLength = 256) {
-  const value = typeof tag?.computed === 'string'
-    ? tag.computed
-    : (typeof tag?.description === 'string' ? tag.description : null);
-  if (value === null) return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 && trimmed.length <= maxLength ? trimmed : null;
+function waitForWorker(worker) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      worker.off('message', onMessage);
+      worker.off('error', onError);
+      worker.off('exit', onExit);
+    };
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      callback(value);
+    };
+    const onMessage = (message) => finish(resolve, message);
+    const onError = () => finish(reject, new Error('Metadata worker failed'));
+    const onExit = () => finish(reject, new Error('Metadata worker exited'));
+    worker.on('message', onMessage);
+    worker.on('error', onError);
+    worker.on('exit', onExit);
+  });
 }
 
-function positiveNumberTag(tag, max) {
-  const value = typeof tag?.computed === 'number' ? tag.computed : null;
-  return Number.isFinite(value) && value > 0 && value <= max ? value : null;
-}
-
-function integerTag(tag, max) {
-  const value = positiveNumberTag(tag, max);
-  return value !== null && Number.isInteger(value) ? value : null;
-}
-
-function parseLocalDateTime(value) {
-  const match = /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(value ?? '');
-  if (!match) return null;
-  const [, year, month, day, hour, minute, second] = match.map(Number);
-  const local = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-  if (local.getUTCFullYear() !== year
-    || local.getUTCMonth() !== month - 1
-    || local.getUTCDate() !== day
-    || local.getUTCHours() !== hour
-    || local.getUTCMinutes() !== minute
-    || local.getUTCSeconds() !== second) {
-    return null;
+function normalizeWorkerMessage(message) {
+  if (message?.kind === 'parser-error') {
+    return {
+      error: true,
+      limitExceeded: message.limitExceeded === true,
+      parserPartial: false,
+      technicalExif: {},
+      capturedAt: null,
+      geo: null,
+    };
   }
-  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`
-    + `-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}`
-    + `:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
-}
-
-function parseOffsetMinutes(value) {
-  const match = /^([+-])(\d{2}):(\d{2})$/.exec(value ?? '');
-  if (!match) return null;
-  const hours = Number(match[2]);
-  const minutes = Number(match[3]);
-  if (hours > 14 || minutes > 59 || (hours === 14 && minutes !== 0)) return null;
-  return (match[1] === '-' ? -1 : 1) * ((hours * 60) + minutes);
-}
-
-function capturedAtHint(exif) {
-  const localDateTime = parseLocalDateTime(stringTag(exif?.DateTimeOriginal));
-  if (localDateTime === null) return null;
-  const offsetMinutes = parseOffsetMinutes(stringTag(exif?.OffsetTimeOriginal));
-  const instant = offsetMinutes === null
-    ? null
-    : new Date(Date.parse(`${localDateTime}Z`) - (offsetMinutes * 60_000)).toISOString();
+  if (message?.kind !== 'result') return null;
+  const technical = message.technicalExif ?? {};
   return {
-    localDateTime,
-    offsetMinutes,
-    zoneId: null,
-    instant,
-    sourceType: 'exif',
-    status: offsetMinutes === null ? 'unresolved' : 'suggested',
+    error: false,
+    limitExceeded: message.limitExceeded === true,
+    parserPartial: message.parserPartial === true,
+    technicalExif: {
+      orientation: technical.orientation ?? null,
+      cameraMake: technical.cameraMake ?? null,
+      cameraModel: technical.cameraModel ?? null,
+      lensModel: technical.lensModel ?? null,
+      focalLengthMm: technical.focalLengthMm ?? null,
+      apertureFNumber: technical.apertureFNumber ?? null,
+      isoEquivalent: technical.isoEquivalent ?? null,
+      exposureTimeSeconds: technical.exposureTimeSeconds ?? null,
+    },
+    capturedAt: message.capturedAt ?? null,
+    geo: message.geo ?? null,
   };
 }
 
-function geoHint(gps) {
-  const lat = gps?.Latitude;
-  const lng = gps?.Longitude;
-  if (!Number.isFinite(lat) || lat < -90 || lat > 90
-    || !Number.isFinite(lng) || lng < -180 || lng > 180) {
-    return null;
-  }
-  return {
-    lat: Math.round(lat * 1_000_000) / 1_000_000,
-    lng: Math.round(lng * 1_000_000) / 1_000_000,
-    sourceType: 'gps',
-    status: 'suggested',
+async function readExif(path, limits, signal) {
+  let worker;
+  let termination;
+  const terminate = () => {
+    if (!worker) return Promise.resolve();
+    if (!termination) termination = worker.terminate().catch(() => undefined);
+    return termination;
   };
-}
 
-function exifMetadata(tags) {
-  const exif = tags?.exif ?? {};
-  return {
-    orientation: integerTag(exif.Orientation, 8),
-    cameraMake: stringTag(exif.Make),
-    cameraModel: stringTag(exif.Model),
-    lensModel: stringTag(exif.LensModel),
-    focalLengthMm: positiveNumberTag(exif.FocalLength, 100_000),
-    apertureFNumber: positiveNumberTag(exif.FNumber, 1_000),
-    isoEquivalent: integerTag(
-      exif.PhotographicSensitivity ?? exif.ISOSpeedRatings,
-      10_000_000,
-    ),
-    exposureTimeSeconds: positiveNumberTag(exif.ExposureTime, 86_400),
-  };
-}
-
-function createBoundedDecompressors(maxOutputLength, state) {
-  const bounded = (operation) => (input) => {
-    try {
-      return operation(input, { maxOutputLength });
-    } catch (error) {
-      if (error?.code === 'ERR_BUFFER_TOO_LARGE') state.limitExceeded = true;
-      throw error;
-    }
-  };
-  return {
-    deflate: bounded(inflateSync),
-    brotli: bounded(brotliDecompressSync),
-    maxDecompressedSize: maxOutputLength,
-  };
-}
-
-async function readExif(path, limits) {
-  const state = { limitExceeded: false };
   try {
-    const tags = await ExifReader.load(path, {
-      length: 'auto',
-      expanded: true,
-      includeOffsets: true,
-      async: true,
-      computed: true,
-      includeUnknown: false,
-      includeTags: {
-        exif: EXIF_TAGS,
-        gps: true,
-        png: ['Raw profile type exif'],
+    const message = await runAbortableOperation({
+      signal,
+      start: () => {
+        worker = new Worker(METADATA_WORKER_URL, {
+          workerData: {
+            path,
+            maxMetadataDecompressedBytes: limits.maxMetadataDecompressedBytes,
+          },
+        });
+        return waitForWorker(worker);
       },
-      excludeTags: {
-        makerNotes: true,
-        mpf: true,
-        thumbnail: true,
-        xmp: true,
-        icc: true,
-      },
-      decompress: createBoundedDecompressors(
-        limits.maxMetadataDecompressedBytes,
-        state,
-      ),
+      cancel: terminate,
     });
-    return { tags, limitExceeded: state.limitExceeded, error: null };
-  } catch {
-    return { tags: null, limitExceeded: state.limitExceeded, error: true };
+    return normalizeWorkerMessage(message) ?? {
+      error: true,
+      limitExceeded: false,
+      parserPartial: false,
+      technicalExif: {},
+      capturedAt: null,
+      geo: null,
+    };
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw retryableProcessingError('processing/soft-timeout');
+    }
+    return {
+      error: true,
+      limitExceeded: false,
+      parserPartial: false,
+      technicalExif: {},
+      capturedAt: null,
+      geo: null,
+    };
+  } finally {
+    await terminate();
   }
 }
 
@@ -316,15 +257,19 @@ export function createMediaMetadataReader({ limits: rawLimits, warningSink } = {
     async read({ path, sourceType, contentType, signal, deadlineAt }) {
       const deadline = Date.parse(deadlineAt);
       if (typeof path !== 'string' || path.length === 0
-        || !SOURCE_TYPES.has(sourceType)
         || !Number.isFinite(deadline)
-        || signal === null
-        || typeof signal !== 'object') {
+        || !(signal instanceof AbortSignal)) {
+        throw new TypeError('Valid media read input is required');
+      }
+      let policy;
+      try {
+        policy = getUploadPolicy(sourceType);
+      } catch {
         throw new TypeError('Valid media read input is required');
       }
       checkActive(signal, deadline);
       const format = formatFor(contentType);
-      if (format === null || (sourceType === 'text') !== (format === 'text')) {
+      if (!policy.allowedContentTypes.includes(contentType) || format === null) {
         throw terminalProcessingError('processing/invalid-media');
       }
 
@@ -355,8 +300,7 @@ export function createMediaMetadataReader({ limits: rawLimits, warningSink } = {
           return freezeResult(emptyMetadata('text'), { capturedAt: null, geo: null });
         }
 
-        const exifRead = await readExif(path, limits);
-        checkActive(active.signal, deadline);
+        const exifRead = await readExif(path, limits, active.signal);
         if (exifRead.limitExceeded) {
           emit('processing/media-limits-exceeded', 'exifreader', 'error');
           throw terminalProcessingError('processing/media-limits-exceeded');
@@ -370,8 +314,8 @@ export function createMediaMetadataReader({ limits: rawLimits, warningSink } = {
             );
           }
           const hints = {
-            capturedAt: capturedAtHint(exifRead.tags.exif),
-            geo: geoHint(exifRead.tags.gps),
+            capturedAt: exifRead.capturedAt,
+            geo: exifRead.geo,
           };
           const hasHints = hints.capturedAt !== null || hints.geo !== null;
           return freezeResult(
@@ -381,17 +325,27 @@ export function createMediaMetadataReader({ limits: rawLimits, warningSink } = {
         }
 
         let image;
+        let pipeline;
         try {
-          image = await sharp(path, {
-            limitInputPixels: HARD_LIMITS.maxInputPixels,
-            failOn: 'error',
-            pages: 1,
-          }).metadata();
-        } catch {
+          image = await runAbortableOperation({
+            signal: active.signal,
+            start: () => {
+              pipeline = sharp(path, {
+                limitInputPixels: HARD_LIMITS.maxInputPixels,
+                failOn: 'error',
+                pages: 1,
+              });
+              return pipeline.metadata();
+            },
+            cancel: () => pipeline?.destroy(),
+          });
+        } catch (error) {
+          if (error?.name === 'AbortError') {
+            throw retryableProcessingError('processing/soft-timeout');
+          }
           emit('processing/invalid-media', 'sharp', 'error');
           throw terminalProcessingError('processing/invalid-media');
         }
-        checkActive(active.signal, deadline);
 
         const width = Number.isInteger(image.width) && image.width > 0 ? image.width : null;
         const height = Number.isInteger(image.height) && image.height > 0 ? image.height : null;
@@ -404,13 +358,9 @@ export function createMediaMetadataReader({ limits: rawLimits, warningSink } = {
           throw terminalProcessingError('processing/media-limits-exceeded');
         }
 
-        const claimedExif = exifRead.tags?.metadataRange?.blocks?.some(
-          ({ type }) => type === 'exif',
-        ) ?? false;
-        const parserPartial = exifRead.error
-          || (claimedExif && Object.keys(exifRead.tags?.exif ?? {}).length === 0);
+        const parserPartial = exifRead.error || exifRead.parserPartial;
         if (parserPartial) emit('processing/invalid-media', 'exifreader', 'warning');
-        const extracted = exifMetadata(exifRead.tags);
+        const extracted = exifRead.technicalExif;
         const technicalMetadata = {
           ...emptyMetadata(format, parserPartial ? 'partial' : 'complete'),
           width,
@@ -430,8 +380,8 @@ export function createMediaMetadataReader({ limits: rawLimits, warningSink } = {
           exposureTimeSeconds: extracted.exposureTimeSeconds,
         };
         return freezeResult(technicalMetadata, {
-          capturedAt: capturedAtHint(exifRead.tags?.exif),
-          geo: geoHint(exifRead.tags?.gps),
+          capturedAt: exifRead.capturedAt,
+          geo: exifRead.geo,
         });
       } finally {
         active.clear();
