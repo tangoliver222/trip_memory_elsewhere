@@ -99,7 +99,7 @@ export function applyOriginalOutcome(uid, batch, input, state) {
       failureCode: state === 'failed' ? input.failureCode : null,
     },
   };
-  const derived = deriveImportBatchState(uploads, batch.counters);
+  const derived = deriveImportBatchState(uploads, batch.counters, batch.processingSummary);
   const nextBatch = parseImportBatch({
     ...batch,
     ...derived,

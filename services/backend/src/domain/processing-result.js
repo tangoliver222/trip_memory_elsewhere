@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { IdSchema, IsoDateTimeSchema } from './common.js';
+import {
+  IdSchema,
+  IsoDateTimeSchema,
+  ProcessorVersionSchema,
+} from './common.js';
 
 export const CapabilityStatusSchema = z.enum([
   'complete',
@@ -13,6 +17,7 @@ export const NullableCapabilityStatusSchema = CapabilityStatusSchema.nullable();
 export const PROCESSING_WARNING_CODES = Object.freeze([
   'processing/page-count-unsupported',
   'processing/near-scan-truncated',
+  'processing/fact-conflict',
 ]);
 
 export const ProcessingWarningCodeSchema = z.enum(PROCESSING_WARNING_CODES);
@@ -40,7 +45,7 @@ export const TechnicalMetadataSchema = z.strictObject({
   exposureTimeSeconds: NullablePositiveNumberSchema,
   metadataStatus: CapabilityStatusSchema,
   warningCodes: WarningCodesSchema,
-  processorVersion: z.literal('v1'),
+  processorVersion: ProcessorVersionSchema,
 }).superRefine((metadata, context) => {
   if (metadata.format !== 'pdf') return;
   if (metadata.pageCount !== null) {
@@ -73,7 +78,7 @@ export const ThumbnailDerivativeSchema = z.strictObject({
 export const DeterministicFragmentProcessingSchema = z.strictObject({
   taskId: IdSchema,
   processorName: z.literal('deterministic-media'),
-  processorVersion: z.literal('v1'),
+  processorVersion: ProcessorVersionSchema,
   state: z.enum([
     'pending',
     'running',

@@ -9,6 +9,13 @@ const PROCESSING_LEASE_METHODS = [
   'failDeterministicProcessing',
 ];
 
+const PROCESSING_METHODS = [
+  ...PROCESSING_LEASE_METHODS,
+  'registerContentHash',
+  'findNearDuplicateInputs',
+  'completeDeterministicProcessing',
+];
+
 const METHODS = [
   'createFragment',
   'getFragment',
@@ -32,6 +39,10 @@ export const assertImportBatchRepository = (repository) => (
 
 export const assertProcessingLeaseRepository = (repository) => (
   assertMethods(repository, PROCESSING_LEASE_METHODS)
+);
+
+export const assertProcessingRepository = (repository) => (
+  assertMethods(repository, PROCESSING_METHODS)
 );
 
 export const assertRepository = (repository) => assertMethods(repository, METHODS);

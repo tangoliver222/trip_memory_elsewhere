@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { CommonFields, IdSchema, IsoDateTimeSchema } from './common.js';
+import {
+  CommonFields,
+  IdSchema,
+  IsoDateTimeSchema,
+  ProcessorVersionSchema,
+} from './common.js';
 import { SourceDescriptorSchema, SourceTypeSchema } from './source-descriptor.js';
 
 const CounterSchema = z.number().int().nonnegative();
@@ -57,7 +62,7 @@ const UploadsSchema = z.record(IdSchema, UploadManifestItemSchema).refine((uploa
   return count >= 1 && count <= 50;
 }, 'Import batch must contain between 1 and 50 uploads');
 
-export function deriveImportBatchState(uploads, previousCounters) {
+export function deriveImportBatchState(uploads, previousCounters, processingSummary = null) {
   const items = Object.values(uploads);
   if (items.length === 0) throw new TypeError('Import batch must contain uploads');
 
@@ -68,20 +73,29 @@ export function deriveImportBatchState(uploads, previousCounters) {
     throw new TypeError('Unknown upload item state');
   }
 
+  const summary = processingSummary?.deterministic ?? null;
+  const processed = summary?.succeeded ?? previousCounters.processed;
+  const processingFailed = summary?.failedTerminal ?? 0;
+  const totalFailed = failed + processingFailed;
+
   let status;
   let uploadStatus;
   if (pending > 0) {
     status = 'open';
     uploadStatus = 'pending';
-  } else if (saved === items.length) {
-    status = 'processing';
-    uploadStatus = 'complete';
   } else if (failed === items.length) {
     status = 'failed';
     uploadStatus = 'complete_with_errors';
   } else {
-    status = 'processing';
-    uploadStatus = 'complete_with_errors';
+    uploadStatus = failed === 0 ? 'complete' : 'complete_with_errors';
+    const terminal = summary ? summary.succeeded + summary.failedTerminal : 0;
+    if (!summary || summary.eligible !== saved || terminal < summary.eligible) {
+      status = 'processing';
+    } else if (failed > 0 || summary.failedTerminal > 0) {
+      status = 'completed_with_errors';
+    } else {
+      status = 'completed';
+    }
   }
 
   return Object.freeze({
@@ -89,8 +103,8 @@ export function deriveImportBatchState(uploads, previousCounters) {
     uploadStatus,
     counters: Object.freeze({
       saved,
-      processed: previousCounters.processed,
-      failed,
+      processed,
+      failed: totalFailed,
       needsReview: previousCounters.needsReview,
     }),
   });
@@ -110,7 +124,7 @@ export const ImportBatchSchema = z.strictObject({
   processingSummary: z.strictObject({
     deterministic: z.strictObject({
       processorName: z.literal('deterministic-media'),
-      processorVersion: z.literal('v1'),
+      processorVersion: ProcessorVersionSchema,
       eligible: CounterSchema,
       running: CounterSchema,
       succeeded: CounterSchema,
@@ -178,7 +192,11 @@ export const ImportBatchSchema = z.strictObject({
     }
   }
 
-  const derived = deriveImportBatchState(batch.uploads, batch.counters);
+  const derived = deriveImportBatchState(
+    batch.uploads,
+    batch.counters,
+    batch.processingSummary,
+  );
   for (const field of ['status', 'uploadStatus']) {
     if (batch[field] !== derived[field]) {
       context.addIssue({

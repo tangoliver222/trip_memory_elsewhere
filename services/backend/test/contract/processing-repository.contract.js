@@ -780,8 +780,9 @@ export function runProcessingRepositoryContract({ name, createRepository }) {
       createPreCallFailureFactory(createRepository),
     );
     const failingClaim = claimInput();
-    const running = await failingRepository.claimProcessingTask(UID, failingClaim);
+    await failingRepository.claimProcessingTask(UID, failingClaim);
     await failingRepository.registerContentHash(UID, registrationInputFor(failingClaim));
+    const running = await failingRepository.claimProcessingTask(UID, failingClaim);
     const beforeFragment = await failingRepository.getFragment(UID, fragment.id);
     const beforeBatch = await failingRepository.getImportBatch(UID, batch.id);
     await assert.rejects(

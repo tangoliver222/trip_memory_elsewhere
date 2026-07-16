@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { CommonFields, IdSchema, IsoDateTimeSchema } from './common.js';
+import {
+  CommonFields,
+  IdSchema,
+  IsoDateTimeSchema,
+  ProcessorVersionSchema,
+} from './common.js';
 import {
   NullableCapabilityStatusSchema,
   WarningCodesSchema,
@@ -43,7 +48,7 @@ export const ProcessingTaskSchema = z.strictObject({
   fragmentId: IdSchema,
   batchId: IdSchema,
   processorName: z.literal('deterministic-media'),
-  processorVersion: z.literal('v1'),
+  processorVersion: ProcessorVersionSchema,
   sourceRevision: z.strictObject({
     bucket: z.string().trim().min(1),
     objectName: z.string().min(1),

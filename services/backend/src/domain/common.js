@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const IdSchema = z.string().regex(/^[A-Za-z0-9_-]{8,128}$/);
 export const IsoDateTimeSchema = z.string().datetime({ offset: true });
+export const ProcessorVersionSchema = z.string().regex(/^v[1-9][0-9]*$/);
 
 export const ReferenceSchema = z.strictObject({
   type: z.enum([

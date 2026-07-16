@@ -131,9 +131,15 @@ test('processing summary records active processor name and version', () => {
   };
   assert.deepEqual(parseImportBatch(makePendingBatch({ processingSummary })).processingSummary,
     processingSummary);
+  const futureSummary = {
+    deterministic: { ...processingSummary.deterministic, processorVersion: 'v2' },
+  };
+  assert.deepEqual(parseImportBatch(makePendingBatch({
+    processingSummary: futureSummary,
+  })).processingSummary, futureSummary);
   assert.throws(() => parseImportBatch(makePendingBatch({
     processingSummary: {
-      deterministic: { ...processingSummary.deterministic, processorVersion: 'v2' },
+      deterministic: { ...processingSummary.deterministic, processorVersion: 'version-2' },
     },
   })));
   assert.throws(() => parseImportBatch(makePendingBatch({
@@ -185,6 +191,7 @@ test('processing warning codes use the frozen v1 vocabulary', () => {
   const expected = [
     'processing/page-count-unsupported',
     'processing/near-scan-truncated',
+    'processing/fact-conflict',
   ];
   assert.deepEqual(domain.PROCESSING_WARNING_CODES, expected);
   assert.equal(Object.isFrozen(domain.PROCESSING_WARNING_CODES), true);
@@ -194,4 +201,19 @@ test('processing warning codes use the frozen v1 vocabulary', () => {
       outputs: { ...task.outputs, warningCodes: [warningCode] },
     }).outputs.warningCodes, [warningCode]);
   }
+});
+
+test('content hash is a strict persisted core document', () => {
+  assert.equal(typeof domain.parseContentHash, 'function');
+  const contentHash = {
+    algorithm: 'sha256',
+    algorithmVersion: 'v1',
+    canonicalFragmentRef: { type: 'fragment', id: 'frag_12345678' },
+    fragmentCount: 2,
+    createdAt: '2026-07-16T00:02:00.000Z',
+    updatedAt: '2026-07-16T00:02:10.000Z',
+  };
+  assert.deepEqual(domain.parseContentHash(contentHash), contentHash);
+  assert.throws(() => domain.parseContentHash({ ...contentHash, unvalidated: true }));
+  assert.throws(() => domain.parseContentHash({ ...contentHash, fragmentCount: 0 }));
 });

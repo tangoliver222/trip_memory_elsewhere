@@ -1,9 +1,11 @@
 export {
   IdSchema,
   IsoDateTimeSchema,
+  ProcessorVersionSchema,
   ReferenceSchema,
   parseReference,
 } from './common.js';
+export { ContentHashSchema, parseContentHash } from './content-hash.js';
 export { ProvenanceSchema, parseProvenance } from './provenance.js';
 export { FragmentSchema, parseFragment } from './fragment.js';
 export {
@@ -15,11 +17,13 @@ export {
   parseProcessingTask,
 } from './processing-task.js';
 export {
+  CapabilityStatusSchema,
   PROCESSING_WARNING_CODES,
   DeterministicFragmentProcessingSchema,
   ProcessingWarningCodeSchema,
   TechnicalMetadataSchema,
   ThumbnailDerivativeSchema,
+  WarningCodesSchema,
 } from './processing-result.js';
 export { DuplicateCandidateSchema, parseDuplicateCandidate } from './duplicate-candidate.js';
 export {
