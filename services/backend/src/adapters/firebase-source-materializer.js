@@ -34,6 +34,10 @@ function normalizeSourceRevision(input, allowedBuckets) {
 
 function normalizeExpectedFacts(input) {
   if (!input
+    || typeof input.bucket !== 'string'
+    || input.bucket.length === 0
+    || typeof input.originalPath !== 'string'
+    || input.originalPath.length === 0
     || typeof input.generation !== 'string'
     || input.generation.length === 0
     || !Number.isSafeInteger(input.sizeBytes)
@@ -45,11 +49,21 @@ function normalizeExpectedFacts(input) {
     throw invalidMedia();
   }
   return Object.freeze({
+    bucket: input.bucket,
+    originalPath: input.originalPath,
     generation: input.generation,
     sizeBytes: input.sizeBytes,
     contentType: input.contentType,
     crc32c: input.crc32c,
   });
+}
+
+function assertSourceIdentity(sourceRevision, expectedFacts) {
+  if (expectedFacts.bucket !== sourceRevision.bucket
+    || expectedFacts.originalPath !== sourceRevision.objectName
+    || expectedFacts.generation !== sourceRevision.generation) {
+    throw invalidMedia();
+  }
 }
 
 function normalizeDeadline(deadlineAt) {
@@ -109,6 +123,48 @@ function stableFailure(error, aborted) {
   return storageUnavailable();
 }
 
+function createCancellationGate({ sourceSignal, deadline }) {
+  const operationController = new AbortController();
+  let cancelled = false;
+  let timeout = null;
+  let rejectCancellation;
+  const cancellation = new Promise((_resolve, reject) => {
+    rejectCancellation = reject;
+  });
+  cancellation.catch(() => {});
+
+  const cancel = () => {
+    if (cancelled) return;
+    cancelled = true;
+    operationController.abort();
+    rejectCancellation(softTimeout());
+  };
+  sourceSignal.addEventListener('abort', cancel, { once: true });
+  const remaining = deadline - Date.now();
+  if (sourceSignal.aborted || remaining <= 0) cancel();
+  else timeout = setTimeout(cancel, remaining);
+
+  return Object.freeze({
+    signal: operationController.signal,
+    race(operation) {
+      return Promise.race([operation, cancellation]);
+    },
+    throwIfCancelled() {
+      if (sourceSignal.aborted || cancelled || Date.now() >= deadline) {
+        cancel();
+        throw softTimeout();
+      }
+    },
+    isCancelled() {
+      return sourceSignal.aborted || cancelled || Date.now() >= deadline;
+    },
+    dispose() {
+      if (timeout !== null) clearTimeout(timeout);
+      sourceSignal.removeEventListener('abort', cancel);
+    },
+  });
+}
+
 export function createFirebaseSourceMaterializer({
   storage,
   allowedBuckets,
@@ -135,52 +191,56 @@ export function createFirebaseSourceMaterializer({
     } = {}) {
       const sourceRevision = normalizeSourceRevision(sourceRevisionInput, allowed);
       const expectedFacts = normalizeExpectedFacts(expectedStorageFactsInput);
+      assertSourceIdentity(sourceRevision, expectedFacts);
       if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw invalidMedia();
-      if (!signal || typeof signal.addEventListener !== 'function') throw invalidMedia();
+      if (!signal
+        || typeof signal.addEventListener !== 'function'
+        || typeof signal.removeEventListener !== 'function') throw invalidMedia();
       const deadline = normalizeDeadline(deadlineAt);
       if (signal.aborted || Date.now() >= deadline) throw softTimeout();
 
       const byteLimit = Math.min(maxBytes, HARD_MAX_BYTES);
       if (expectedFacts.sizeBytes > byteLimit) throw mediaLimitsExceeded();
 
-      let file;
-      try {
-        file = storage
-          .bucket(sourceRevision.bucket)
-          .file(sourceRevision.objectName, { generation: sourceRevision.generation });
-      } catch {
-        throw storageUnavailable();
-      }
-
-      let metadata;
-      try {
-        [metadata] = await file.getMetadata();
-      } catch {
-        throw storageUnavailable();
-      }
-      assertMetadata(metadata, sourceRevision, expectedFacts);
-      if (signal.aborted || Date.now() >= deadline) throw softTimeout();
-
       let directory = null;
       let sourceStream = null;
       let destinationStream = null;
-      let timeout = null;
-      const operationController = new AbortController();
-      const abortOperation = () => operationController.abort();
-      signal.addEventListener('abort', abortOperation, { once: true });
-      if (signal.aborted) abortOperation();
+      const cancellation = createCancellationGate({ sourceSignal: signal, deadline });
 
       try {
-        if (operationController.signal.aborted) throw softTimeout();
-        const remaining = deadline - Date.now();
-        if (remaining <= 0) throw softTimeout();
-        timeout = setTimeout(abortOperation, remaining);
+        cancellation.throwIfCancelled();
+        let file;
+        try {
+          file = storage
+            .bucket(sourceRevision.bucket)
+            .file(sourceRevision.objectName, { generation: sourceRevision.generation });
+        } catch {
+          throw storageUnavailable();
+        }
+        cancellation.throwIfCancelled();
+
+        let metadata;
+        try {
+          [metadata] = await cancellation.race(
+            Promise.resolve().then(() => file.getMetadata()),
+          );
+        } catch (error) {
+          if (error instanceof ProcessingError) throw error;
+          throw storageUnavailable();
+        }
+        cancellation.throwIfCancelled();
+        assertMetadata(metadata, sourceRevision, expectedFacts);
+        cancellation.throwIfCancelled();
 
         directory = await mkdtemp(join(tempRoot, MATERIAL_DIRECTORY_PREFIX));
+        cancellation.throwIfCancelled();
         await chmod(directory, 0o700);
+        cancellation.throwIfCancelled();
         const path = join(directory, MATERIAL_FILE_NAME);
+        cancellation.throwIfCancelled();
         destinationStream = createWriteStream(path, { flags: 'wx', mode: 0o600 });
-        sourceStream = file.createReadStream({ validation: false });
+        cancellation.throwIfCancelled();
+        sourceStream = file.createReadStream({ validation: 'crc32c', decompress: false });
 
         const hash = createHash('sha256');
         const bounded = createBoundedHashTransform({
@@ -189,14 +249,13 @@ export function createFirebaseSourceMaterializer({
           hash,
         });
         await pipeline(sourceStream, bounded.stream, destinationStream, {
-          signal: operationController.signal,
+          signal: cancellation.signal,
         });
 
-        let cleaned = false;
-        const cleanup = async () => {
-          if (cleaned) return;
-          await removeMaterial(directory);
-          cleaned = true;
+        let cleanupPromise = null;
+        const cleanup = () => {
+          cleanupPromise ??= removeMaterial(directory);
+          return cleanupPromise;
         };
         return Object.freeze({
           path,
@@ -219,11 +278,10 @@ export function createFirebaseSourceMaterializer({
         }
         throw cleanupError ?? stableFailure(
           error,
-          operationController.signal.aborted || signal.aborted || Date.now() >= deadline,
+          cancellation.isCancelled(),
         );
       } finally {
-        if (timeout !== null) clearTimeout(timeout);
-        signal.removeEventListener('abort', abortOperation);
+        cancellation.dispose();
       }
     },
   });
