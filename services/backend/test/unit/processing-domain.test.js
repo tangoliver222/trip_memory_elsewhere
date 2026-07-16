@@ -10,7 +10,11 @@ import {
   parseImportBatch,
   parseProcessingTask,
 } from '../../src/domain/index.js';
-import { makePendingBatch, makeUploadedFragment } from '../fixtures/import.js';
+import {
+  makePendingBatch,
+  makeUploadItem,
+  makeUploadedFragment,
+} from '../fixtures/import.js';
 import {
   SHA256,
   makeExactDuplicateCandidate,
@@ -129,24 +133,31 @@ test('processing summary records active processor name and version', () => {
       updatedAt: '2026-07-16T00:01:00.000Z',
     },
   };
-  assert.deepEqual(parseImportBatch(makePendingBatch({ processingSummary })).processingSummary,
+  const finalizedUpload = makeUploadItem({
+    state: 'finalized',
+    finalizedGeneration: '1740000000000001',
+    failureCode: null,
+  });
+  const batchWithSummary = (summary) => makePendingBatch({
+    status: 'processing',
+    uploadStatus: 'complete',
+    counters: { saved: 1, processed: 0, failed: 0, needsReview: 0 },
+    processingSummary: summary,
+    uploads: { [finalizedUpload.fragmentId]: finalizedUpload },
+  });
+  assert.deepEqual(parseImportBatch(batchWithSummary(processingSummary)).processingSummary,
     processingSummary);
   const futureSummary = {
     deterministic: { ...processingSummary.deterministic, processorVersion: 'v2' },
   };
-  assert.deepEqual(parseImportBatch(makePendingBatch({
-    processingSummary: futureSummary,
-  })).processingSummary, futureSummary);
-  assert.throws(() => parseImportBatch(makePendingBatch({
-    processingSummary: {
+  assert.deepEqual(parseImportBatch(batchWithSummary(futureSummary)).processingSummary,
+    futureSummary);
+  assert.throws(() => parseImportBatch(batchWithSummary({
       deterministic: { ...processingSummary.deterministic, processorVersion: 'version-2' },
-    },
-  })));
-  assert.throws(() => parseImportBatch(makePendingBatch({
-    processingSummary: {
+    })));
+  assert.throws(() => parseImportBatch(batchWithSummary({
       deterministic: { ...processingSummary.deterministic, running: 2 },
-    },
-  })));
+    })));
 });
 
 test('PDF technical metadata keeps pageCount null and the unsupported warning', () => {

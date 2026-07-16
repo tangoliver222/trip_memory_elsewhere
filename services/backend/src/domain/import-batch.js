@@ -40,6 +40,27 @@ function processingSummaryInvariant(summary, inputCount) {
   return null;
 }
 
+function processingSourceInvariant(summary, {
+  finalized,
+  uploadFailed,
+  inputCount,
+  needsReview,
+}) {
+  if (uploadFailed + summary.failedTerminal > inputCount) {
+    return 'Upload and processing terminal failures cannot exceed inputCount';
+  }
+  if (needsReview > summary.succeeded) {
+    return 'needsReview cannot exceed succeeded processing';
+  }
+  if (summary.succeeded + summary.failedTerminal > finalized) {
+    return 'Processed and terminal contributions require finalized uploads';
+  }
+  if (summary.eligible > finalized) {
+    return 'eligible cannot exceed finalized uploads';
+  }
+  return null;
+}
+
 export const UploadManifestItemSchema = z.strictObject({
   fragmentId: IdSchema,
   sourceType: SourceTypeSchema,
@@ -108,6 +129,13 @@ export function deriveImportBatchState(uploads, previousCounters, processingSumm
     ? processingSummaryInvariant(summary, items.length)
     : null;
   if (summaryInvariant) throw new TypeError(summaryInvariant.message);
+  const sourceInvariant = summary ? processingSourceInvariant(summary, {
+    finalized: saved,
+    uploadFailed: failed,
+    inputCount: items.length,
+    needsReview: previousCounters.needsReview,
+  }) : null;
+  if (sourceInvariant) throw new TypeError(sourceInvariant);
   const processed = summary?.succeeded ?? previousCounters.processed;
   const processingFailed = summary?.failedTerminal ?? 0;
   const totalFailed = failed + processingFailed;
@@ -230,11 +258,21 @@ export const ImportBatchSchema = z.strictObject({
 
   if (summaryInvariant) return;
 
-  const derived = deriveImportBatchState(
-    batch.uploads,
-    batch.counters,
-    batch.processingSummary,
-  );
+  let derived;
+  try {
+    derived = deriveImportBatchState(
+      batch.uploads,
+      batch.counters,
+      batch.processingSummary,
+    );
+  } catch (error) {
+    context.addIssue({
+      code: 'custom',
+      message: error instanceof Error ? error.message : 'Invalid processing source bounds',
+      path: ['processingSummary', 'deterministic'],
+    });
+    return;
+  }
   for (const field of ['status', 'uploadStatus']) {
     if (batch[field] !== derived[field]) {
       context.addIssue({
