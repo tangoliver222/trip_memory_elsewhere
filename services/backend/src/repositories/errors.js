@@ -13,3 +13,19 @@ export class RepositoryOwnerError extends Error {
     this.code = 'repository/owner-mismatch';
   }
 }
+
+export class RepositoryUnregisteredOriginalError extends Error {
+  constructor(message = 'Original is not registered in this import batch') {
+    super(message);
+    this.name = 'RepositoryUnregisteredOriginalError';
+    this.code = 'repository/unregistered-original';
+  }
+}
+
+export class RepositoryOriginalConflictError extends Error {
+  constructor(message = 'Original generation conflicts with stored outcome') {
+    super(message);
+    this.name = 'RepositoryOriginalConflictError';
+    this.code = 'repository/original-conflict';
+  }
+}

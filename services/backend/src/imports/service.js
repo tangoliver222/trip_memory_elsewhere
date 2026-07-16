@@ -7,7 +7,7 @@ import {
   SourceTypeSchema,
   parseImportBatch,
 } from '../domain/index.js';
-import { assertRepository } from '../repositories/contract.js';
+import { assertImportBatchRepository } from '../repositories/contract.js';
 import { ImportServiceError } from './errors.js';
 import { validateDeclaredUpload } from './upload-policy.js';
 
@@ -67,7 +67,7 @@ export function createImportService({
   randomUUID = nodeRandomUUID,
   clock = defaultClock,
 }) {
-  const store = assertRepository(repository);
+  const store = assertImportBatchRepository(repository);
   if (typeof randomUUID !== 'function') throw new TypeError('randomUUID must be a function');
   if (typeof clock !== 'function') throw new TypeError('clock must be a function');
 
