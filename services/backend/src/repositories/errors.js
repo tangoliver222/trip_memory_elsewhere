@@ -29,3 +29,19 @@ export class RepositoryOriginalConflictError extends Error {
     this.code = 'repository/original-conflict';
   }
 }
+
+export class RepositoryProcessingTargetError extends Error {
+  constructor(message = 'Processing task does not match the stored source revision') {
+    super(message);
+    this.name = 'RepositoryProcessingTargetError';
+    this.code = 'repository/processing-target-mismatch';
+  }
+}
+
+export class RepositoryLeaseOwnerError extends Error {
+  constructor(message = 'Processing lease is not held by this execution') {
+    super(message);
+    this.name = 'RepositoryLeaseOwnerError';
+    this.code = 'repository/lease-owner-mismatch';
+  }
+}

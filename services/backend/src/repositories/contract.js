@@ -3,6 +3,12 @@ const IMPORT_BATCH_METHODS = [
   'getImportBatch',
 ];
 
+const PROCESSING_LEASE_METHODS = [
+  'claimProcessingTask',
+  'heartbeatProcessingTask',
+  'failDeterministicProcessing',
+];
+
 const METHODS = [
   'createFragment',
   'getFragment',
@@ -22,6 +28,10 @@ function assertMethods(repository, methods) {
 
 export const assertImportBatchRepository = (repository) => (
   assertMethods(repository, IMPORT_BATCH_METHODS)
+);
+
+export const assertProcessingLeaseRepository = (repository) => (
+  assertMethods(repository, PROCESSING_LEASE_METHODS)
 );
 
 export const assertRepository = (repository) => assertMethods(repository, METHODS);
