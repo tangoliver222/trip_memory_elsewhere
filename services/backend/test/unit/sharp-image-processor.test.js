@@ -266,13 +266,18 @@ test('abort or deadline terminates an actual in-flight Sharp worker', async (t) 
 
 test('reports HEIC capability from the actual runtime instead of the extension', () => {
   const report = getImageCapabilityReport();
+  const heifSuffixes = sharp.format.heif.input.fileSuffix ?? [];
+  const hasHeicEvidence = sharp.format.heif.input.file === true
+    && heifSuffixes.includes('.heic');
+  const hasHeifEvidence = sharp.format.heif.input.file === true
+    && heifSuffixes.includes('.heif');
   const expected = {
     decode: {
       jpeg: sharp.format.jpeg.input.file === true,
       png: sharp.format.png.input.file === true,
       webp: sharp.format.webp.input.file === true,
-      heic: sharp.format.heif.input.file === true,
-      heif: sharp.format.heif.input.file === true,
+      heic: hasHeicEvidence,
+      heif: hasHeifEvidence,
     },
     encode: { webp: sharp.format.webp.output.buffer === true },
     versions: {
@@ -289,6 +294,29 @@ test('reports HEIC capability from the actual runtime instead of the extension',
   assert.equal(Object.isFrozen(report.encode), true);
   assert.equal(Object.isFrozen(report.versions), true);
   assert.equal(JSON.stringify(report).includes('.heic'), false);
+  assert.deepEqual(heifSuffixes, ['.avif']);
+  assert.equal(report.decode.heic, false);
+  assert.equal(report.decode.heif, false);
+});
+
+test('AVIF-only generic HEIF support leaves phone HEIC and HEIF unsupported before I/O', async () => {
+  const report = getImageCapabilityReport();
+  const processor = createSharpImageProcessor({ limits: SAFE_LIMITS });
+
+  assert.equal(report.decode.heic, false);
+  assert.equal(report.decode.heif, false);
+  for (const contentType of ['image/heic', 'image/heif']) {
+    const result = await processor.process(activeInput('/does/not/exist/private-phone-media', {
+      contentType,
+    }));
+    assert.deepEqual(result, {
+      thumbnail: null,
+      perceptualHash: null,
+      warnings: [],
+    });
+    assert.equal(Object.isFrozen(result), true);
+    assert.equal(Object.isFrozen(result.warnings), true);
+  }
 });
 
 test('returns frozen unsupported capabilities for PDF and text before native decode', async () => {
