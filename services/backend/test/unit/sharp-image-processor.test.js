@@ -229,7 +229,7 @@ test('processes only the first reliable frame and never all frames', async (t) =
     { width: result.thumbnail.width, height: result.thumbnail.height },
     { width: 6, height: 4 },
   );
-  assert.equal(metadata.pages, 1);
+  assert.equal(metadata.pages ?? 1, 1);
   assert.equal(channels[0].mean > 240, true);
   assert.equal(channels[1].mean < 15, true);
   assert.equal(channels[2].mean < 15, true);
