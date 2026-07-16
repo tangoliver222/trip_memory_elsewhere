@@ -318,6 +318,32 @@ for (const scenario of sourceBoundCases) {
   });
 }
 
+for (const scenario of [
+  {
+    name: 'processed work before any upload is finalized',
+    counters: { saved: 0, processed: 1, failed: 0, needsReview: 0 },
+  },
+  {
+    name: 'review work above processed before summary initialization',
+    counters: { saved: 0, processed: 0, failed: 0, needsReview: 1 },
+  },
+]) {
+  test(`null-summary parser rejects ${scenario.name}`, () => {
+    assert.throws(() => importBatchDomain.parseImportBatch(makePendingBatch({
+      counters: scenario.counters,
+      processingSummary: null,
+    })));
+  });
+
+  test(`null-summary derivation rejects ${scenario.name}`, () => {
+    assert.throws(() => importBatchDomain.deriveImportBatchState(
+      makePendingBatch().uploads,
+      scenario.counters,
+      null,
+    ));
+  });
+}
+
 test('fragment requires authoritative storage facts and complete source descriptor', () => {
   const fragment = makeUploadedFragment();
   assert.deepEqual(parseFragment(fragment), fragment);
