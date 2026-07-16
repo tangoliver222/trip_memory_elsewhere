@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { readdirSync } from 'node:fs';
 import {
   mkdtemp,
   readFile,
@@ -24,6 +25,8 @@ const SOURCE_BYTES = new TextEncoder().encode('elsewhere-original');
 
 function expectedStorageFacts(overrides = {}) {
   return {
+    bucket: BUCKET,
+    originalPath: OBJECT_NAME,
     generation: GENERATION,
     sizeBytes: SOURCE_BYTES.byteLength,
     contentType: CONTENT_TYPE,
@@ -110,6 +113,29 @@ function materialize(materializer, overrides = {}) {
   });
 }
 
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+async function settleWithin(operation, milliseconds = 200) {
+  return Promise.race([
+    operation.then(
+      (value) => ({ status: 'fulfilled', value }),
+      (error) => ({ status: 'rejected', error }),
+    ),
+    wait(milliseconds).then(() => ({ status: 'timeout' })),
+  ]);
+}
+
+function abortSignalWhenDirectoryAppears(directory) {
+  const signal = new AbortController().signal;
+  return new Proxy(signal, {
+    get(target, property) {
+      if (property === 'aborted') return readdirSync(directory).length > 0;
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 test('pins bucket object and generation and computes streaming SHA-256', async (t) => {
   const tempRoot = await createTempRoot(t);
   const { storage, calls } = createStorageFake({
@@ -124,7 +150,7 @@ test('pins bucket object and generation and computes streaming SHA-256', async (
     options: { generation: GENERATION },
   }]);
   assert.equal(calls.metadata, 1);
-  assert.equal(calls.streams.length, 1);
+  assert.deepEqual(calls.streams, [{ validation: 'crc32c', decompress: false }]);
   assert.equal(result.sizeBytes, SOURCE_BYTES.byteLength);
   assert.equal(
     result.inputHash,
@@ -159,6 +185,33 @@ test('revalidates generation size content type and crc32c before byte streaming'
   });
   assert.equal(result.sizeBytes, SOURCE_BYTES.byteLength);
   await result.cleanup();
+});
+
+test('rejects mismatched source identity before any Storage access', async (t) => {
+  const tempRoot = await createTempRoot(t);
+  const mismatches = [
+    { bucket: 'other.appspot.com' },
+    { originalPath: 'users/user_alpha/originals/batch_other/frag_other' },
+    { generation: '1740000000000002' },
+    { bucket: undefined },
+    { originalPath: undefined },
+  ];
+
+  for (const override of mismatches) {
+    const { storage, calls } = createStorageFake();
+    await assert.rejects(
+      () => materialize(createMaterializer(storage, tempRoot), {
+        expectedStorageFacts: expectedStorageFacts(override),
+      }),
+      { code: 'processing/invalid-media', retryable: false },
+    );
+    assert.deepEqual(calls, {
+      buckets: [],
+      files: [],
+      metadata: 0,
+      streams: [],
+    });
+  }
 });
 
 test('creates a random 0700 directory and a 0600 non-user-named file', async (t) => {
@@ -255,6 +308,53 @@ test('aborts the source stream at deadline or AbortSignal', async (t) => {
   assert.equal(duringMetadata.calls.streams.length, 0);
 });
 
+test('cancels unresolved metadata promptly and keeps timeout authoritative', async (t) => {
+  const tempRoot = await createTempRoot(t);
+  const unhandled = [];
+  const recordUnhandled = (error) => unhandled.push(error);
+  process.on('unhandledRejection', recordUnhandled);
+  t.after(() => process.off('unhandledRejection', recordUnhandled));
+
+  for (const useDeadline of [false, true]) {
+    const gate = Promise.withResolvers();
+    const { storage, calls } = createStorageFake({ metadataGate: gate.promise });
+    const controller = new AbortController();
+    const operation = materialize(createMaterializer(storage, tempRoot), {
+      signal: controller.signal,
+      deadlineAt: new Date(Date.now() + (useDeadline ? 20 : 5_000)).toISOString(),
+    });
+    if (!useDeadline) setTimeout(() => controller.abort(), 20);
+
+    const outcome = await settleWithin(operation);
+    gate.reject(new Error(`late raw provider failure ${OBJECT_NAME}`));
+    await operation.catch(() => {});
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(outcome.status, 'rejected');
+    assert.equal(outcome.error?.code, 'processing/soft-timeout');
+    assert.equal(outcome.error?.retryable, true);
+    assert.equal(calls.streams.length, 0);
+    assert.deepEqual(await readdir(tempRoot), []);
+  }
+  assert.deepEqual(unhandled, []);
+});
+
+test('cancellation during temporary filesystem setup opens no source stream', async (t) => {
+  const tempRoot = await createTempRoot(t);
+  const { storage, calls } = createStorageFake();
+  const operation = materialize(createMaterializer(storage, tempRoot), {
+    signal: abortSignalWhenDirectoryAppears(tempRoot),
+  });
+  const outcome = await settleWithin(operation);
+  if (outcome.status === 'fulfilled') await outcome.value.cleanup();
+
+  assert.equal(outcome.status, 'rejected');
+  assert.equal(outcome.error?.code, 'processing/soft-timeout');
+  assert.equal(outcome.error?.retryable, true);
+  assert.equal(calls.streams.length, 0);
+  assert.deepEqual(await readdir(tempRoot), []);
+});
+
 test('cleans partial material after stream and filesystem failures', async (t) => {
   const tempRoot = await createTempRoot(t);
   const rawStreamFailure = new Error('raw provider path users/private/original.jpg');
@@ -287,8 +387,11 @@ test('cleanup is idempotent and removes successful material', async (t) => {
   const result = await materialize(createMaterializer(storage, tempRoot));
   const materialDirectory = join(result.path, '..');
 
-  await result.cleanup();
-  await result.cleanup();
+  const firstCleanup = result.cleanup();
+  const concurrentCleanup = result.cleanup();
+  assert.equal(concurrentCleanup, firstCleanup);
+  await Promise.all([firstCleanup, concurrentCleanup]);
+  assert.equal(result.cleanup(), firstCleanup);
 
   await assert.rejects(() => stat(materialDirectory), { code: 'ENOENT' });
   assert.deepEqual(await readdir(tempRoot), []);
