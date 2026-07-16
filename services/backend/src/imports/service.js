@@ -116,6 +116,7 @@ export function createImportService({
         uploadStatus: 'pending',
         inputCount: request.items.length,
         counters: { saved: 0, processed: 0, failed: 0, needsReview: 0 },
+        processingSummary: null,
         uploads,
         createdAt: timestamp,
         updatedAt: timestamp,

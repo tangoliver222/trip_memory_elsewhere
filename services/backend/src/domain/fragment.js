@@ -1,7 +1,23 @@
 import { z } from 'zod';
 import { CommonFields, IdSchema } from './common.js';
 import { ProvenanceSchema } from './provenance.js';
+import {
+  DeterministicFragmentProcessingSchema,
+  TechnicalMetadataSchema,
+  ThumbnailDerivativeSchema,
+} from './processing-result.js';
 import { SourceDescriptorSchema, SourceTypeSchema } from './source-descriptor.js';
+
+const PerceptualHashBandsSchema = z.tuple([
+  z.string().regex(/^0:[a-f0-9]{2}$/),
+  z.string().regex(/^1:[a-f0-9]{2}$/),
+  z.string().regex(/^2:[a-f0-9]{2}$/),
+  z.string().regex(/^3:[a-f0-9]{2}$/),
+  z.string().regex(/^4:[a-f0-9]{2}$/),
+  z.string().regex(/^5:[a-f0-9]{2}$/),
+  z.string().regex(/^6:[a-f0-9]{2}$/),
+  z.string().regex(/^7:[a-f0-9]{2}$/),
+]);
 
 export const FragmentSchema = z.strictObject({
   ...CommonFields,
@@ -9,6 +25,7 @@ export const FragmentSchema = z.strictObject({
   type: SourceTypeSchema,
   status: z.enum(['uploaded', 'processing', 'placed', 'unresolved', 'failed']),
   storage: z.strictObject({
+    bucket: z.string().trim().min(1),
     originalPath: z.string().min(1),
     generation: z.string().trim().min(1),
     contentType: z.string().trim().min(1),
@@ -18,8 +35,18 @@ export const FragmentSchema = z.strictObject({
   }),
   source: SourceDescriptorSchema,
   hashes: z.strictObject({
-    sha256: z.string().regex(/^[a-f0-9]{64}$/i).optional(),
-    perceptualHash: z.string().min(1).optional(),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+    perceptualHash: z.string().regex(/^[a-f0-9]{16}$/).nullable(),
+    perceptualHashAlgorithm: z.literal('dhash').nullable(),
+    perceptualHashVersion: z.literal('v1').nullable(),
+    perceptualHashBands: PerceptualHashBandsSchema.nullable(),
+  }),
+  technicalMetadata: TechnicalMetadataSchema.nullable(),
+  derivatives: z.strictObject({
+    thumbnail: ThumbnailDerivativeSchema.nullable(),
+  }),
+  processing: z.strictObject({
+    deterministic: DeterministicFragmentProcessingSchema.nullable(),
   }),
   facts: z.record(z.string(), ProvenanceSchema),
   journeyId: IdSchema.nullable(),
@@ -32,6 +59,21 @@ export const FragmentSchema = z.strictObject({
       code: 'custom',
       message: 'Original path must be scoped to the fragment owner and batch',
       path: ['storage', 'originalPath'],
+    });
+  }
+
+  const perceptualFields = [
+    fragment.hashes.perceptualHash,
+    fragment.hashes.perceptualHashAlgorithm,
+    fragment.hashes.perceptualHashVersion,
+    fragment.hashes.perceptualHashBands,
+  ];
+  const populatedPerceptualFields = perceptualFields.filter((value) => value !== null).length;
+  if (populatedPerceptualFields !== 0 && populatedPerceptualFields !== perceptualFields.length) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Perceptual hash fields must be null or complete',
+      path: ['hashes', 'perceptualHash'],
     });
   }
 });

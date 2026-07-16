@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CommonFields, IdSchema } from './common.js';
+import { CommonFields, IdSchema, IsoDateTimeSchema } from './common.js';
 import { SourceDescriptorSchema, SourceTypeSchema } from './source-descriptor.js';
 
 const CounterSchema = z.number().int().nonnegative();
@@ -107,6 +107,19 @@ export const ImportBatchSchema = z.strictObject({
     failed: CounterSchema,
     needsReview: CounterSchema,
   }),
+  processingSummary: z.strictObject({
+    deterministic: z.strictObject({
+      processorName: z.literal('deterministic-media'),
+      processorVersion: z.literal('v1'),
+      eligible: CounterSchema,
+      running: CounterSchema,
+      succeeded: CounterSchema,
+      failedRetryable: CounterSchema,
+      failedTerminal: CounterSchema,
+      unsupportedCapabilities: CounterSchema,
+      updatedAt: IsoDateTimeSchema,
+    }),
+  }).nullable(),
   uploads: UploadsSchema,
 }).superRefine((batch, context) => {
   for (const [name, count] of Object.entries(batch.counters)) {
@@ -116,6 +129,25 @@ export const ImportBatchSchema = z.strictObject({
         message: `${name} cannot exceed inputCount`,
         path: ['counters', name],
       });
+    }
+  }
+
+  if (batch.processingSummary !== null) {
+    const summary = batch.processingSummary.deterministic;
+    for (const field of [
+      'eligible',
+      'running',
+      'succeeded',
+      'failedRetryable',
+      'failedTerminal',
+    ]) {
+      if (summary[field] > batch.inputCount) {
+        context.addIssue({
+          code: 'custom',
+          message: `${field} cannot exceed inputCount`,
+          path: ['processingSummary', 'deterministic', field],
+        });
+      }
     }
   }
 

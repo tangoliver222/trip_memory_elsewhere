@@ -7,6 +7,18 @@ export {
 export { ProvenanceSchema, parseProvenance } from './provenance.js';
 export { FragmentSchema, parseFragment } from './fragment.js';
 export {
+  PROCESSING_STEPS,
+  PROCESSING_TASK_STATES,
+  ProcessingTaskSchema,
+  parseProcessingTask,
+} from './processing-task.js';
+export {
+  DeterministicFragmentProcessingSchema,
+  TechnicalMetadataSchema,
+  ThumbnailDerivativeSchema,
+} from './processing-result.js';
+export { DuplicateCandidateSchema, parseDuplicateCandidate } from './duplicate-candidate.js';
+export {
   ImportBatchSchema,
   UploadManifestItemSchema,
   deriveImportBatchState,
