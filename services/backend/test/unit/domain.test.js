@@ -42,6 +42,7 @@ test('fragment original path must stay inside its owner', () => {
   const fragment = makeUploadedFragment();
 
   assert.equal(parseFragment(fragment).ownerId, 'user_alpha');
+  assert.equal(parseFragment(fragment).storage.bucket, 'demo-elsewhere.appspot.com');
   assert.throws(() => parseFragment({
     ...fragment,
     storage: {
@@ -55,6 +56,7 @@ test('import batch counters cannot exceed the declared input count', () => {
   const batch = makePendingBatch();
 
   assert.equal(parseImportBatch(batch).counters.saved, 0);
+  assert.equal(parseImportBatch(batch).processingSummary, null);
   assert.throws(() => parseImportBatch({
     ...batch,
     counters: { ...batch.counters, saved: 2 },

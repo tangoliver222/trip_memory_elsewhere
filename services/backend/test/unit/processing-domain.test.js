@@ -1,0 +1,140 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  PROCESSING_STEPS,
+  PROCESSING_TASK_STATES,
+  TechnicalMetadataSchema,
+  parseDuplicateCandidate,
+  parseFragment,
+  parseImportBatch,
+  parseProcessingTask,
+} from '../../src/domain/index.js';
+import { makePendingBatch, makeUploadedFragment } from '../fixtures/import.js';
+import {
+  SHA256,
+  makeExactDuplicateCandidate,
+  makeNearDuplicateCandidate,
+  makePdfTechnicalMetadata,
+  makeProcessingTask,
+} from '../fixtures/processing.js';
+
+test('task identity fields exclude inputHash and require a complete source revision', () => {
+  assert.equal(Object.isFrozen(PROCESSING_TASK_STATES), true);
+  assert.equal(Object.isFrozen(PROCESSING_STEPS), true);
+  assert.equal(parseProcessingTask(makeProcessingTask()).inputHash, null);
+  assert.equal(parseProcessingTask(makeProcessingTask({ inputHash: SHA256 })).inputHash, SHA256);
+
+  for (const field of ['bucket', 'generation']) {
+    const task = makeProcessingTask();
+    const sourceRevision = { ...task.sourceRevision };
+    delete sourceRevision[field];
+    assert.throws(() => parseProcessingTask({ ...task, sourceRevision }));
+  }
+  assert.throws(() => parseProcessingTask(makeProcessingTask({ identityInputHash: SHA256 })));
+});
+
+test('task states enforce lease deadline step and completion invariants', () => {
+  assert.equal(parseProcessingTask(makeProcessingTask()).state, 'running');
+
+  assert.throws(() => parseProcessingTask(makeProcessingTask({ leaseOwner: null })));
+  assert.throws(() => parseProcessingTask(makeProcessingTask({
+    softDeadlineAt: '2026-07-16T00:05:00.000Z',
+  })));
+  assert.throws(() => parseProcessingTask(makeProcessingTask({ currentStep: 'extracting' })));
+  assert.throws(() => parseProcessingTask(makeProcessingTask({
+    state: 'failed_terminal',
+    currentStep: 'complete',
+    leaseOwner: null,
+    leaseExpiresAt: null,
+    completedAt: null,
+    lastErrorCode: 'processing/decode-failed',
+  })));
+  assert.throws(() => parseProcessingTask(makeProcessingTask({
+    state: 'failed_retryable',
+    leaseOwner: null,
+    leaseExpiresAt: null,
+    completedAt: '2026-07-16T00:03:30.000Z',
+    lastErrorCode: 'processing/deadline-exceeded',
+  })));
+});
+
+test('fragment processing fields use null rather than empty or forged values', () => {
+  const fragment = makeUploadedFragment();
+  assert.deepEqual(parseFragment(fragment), fragment);
+  assert.throws(() => parseFragment({
+    ...fragment,
+    hashes: { ...fragment.hashes, sha256: '' },
+  }));
+  assert.throws(() => parseFragment({
+    ...fragment,
+    hashes: {
+      ...fragment.hashes,
+      perceptualHash: '0123456789abcde',
+      perceptualHashAlgorithm: 'dhash',
+      perceptualHashVersion: 'v1',
+      perceptualHashBands: ['0:01', '1:23', '2:45', '3:67', '4:89', '5:ab', '6:cd', '7:ef'],
+    },
+  }));
+  assert.throws(() => parseFragment({
+    ...fragment,
+    technicalMetadata: {},
+  }));
+});
+
+test('near candidate keeps directional roles and sorted pairRefs', () => {
+  const candidate = makeNearDuplicateCandidate();
+  assert.deepEqual(parseDuplicateCandidate(candidate), candidate);
+  assert.throws(() => parseDuplicateCandidate({
+    ...candidate,
+    pairRefs: [...candidate.pairRefs].reverse(),
+  }));
+  assert.throws(() => parseDuplicateCandidate({
+    ...candidate,
+    queryFragmentRef: candidate.matchedFragmentRef,
+  }));
+});
+
+test('exact candidate keeps canonical and candidate roles', () => {
+  const candidate = makeExactDuplicateCandidate();
+  assert.deepEqual(parseDuplicateCandidate(candidate), candidate);
+  assert.throws(() => parseDuplicateCandidate({ ...candidate, rank: 1 }));
+  assert.throws(() => parseDuplicateCandidate({
+    ...candidate,
+    canonicalFragmentRef: candidate.candidateFragmentRef,
+  }));
+});
+
+test('processing summary records active processor name and version', () => {
+  const processingSummary = {
+    deterministic: {
+      processorName: 'deterministic-media',
+      processorVersion: 'v1',
+      eligible: 1,
+      running: 1,
+      succeeded: 0,
+      failedRetryable: 0,
+      failedTerminal: 0,
+      unsupportedCapabilities: 2,
+      updatedAt: '2026-07-16T00:01:00.000Z',
+    },
+  };
+  assert.deepEqual(parseImportBatch(makePendingBatch({ processingSummary })).processingSummary,
+    processingSummary);
+  assert.throws(() => parseImportBatch(makePendingBatch({
+    processingSummary: {
+      deterministic: { ...processingSummary.deterministic, processorVersion: 'v2' },
+    },
+  })));
+  assert.throws(() => parseImportBatch(makePendingBatch({
+    processingSummary: {
+      deterministic: { ...processingSummary.deterministic, running: 2 },
+    },
+  })));
+});
+
+test('PDF technical metadata keeps pageCount null and the unsupported warning', () => {
+  const metadata = makePdfTechnicalMetadata();
+  assert.deepEqual(TechnicalMetadataSchema.parse(metadata), metadata);
+  assert.throws(() => TechnicalMetadataSchema.parse({ ...metadata, pageCount: 1 }));
+  assert.throws(() => TechnicalMetadataSchema.parse({ ...metadata, warningCodes: [] }));
+});

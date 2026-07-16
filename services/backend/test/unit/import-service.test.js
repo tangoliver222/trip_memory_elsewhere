@@ -65,6 +65,7 @@ test('creates IDs, paths, policies and counters only on the server', async () =>
   assert.deepEqual(storedItem.source, makeLocalFileSource());
   assert.equal(storedItem.originalPath, result.uploads[0].originalPath);
   assert.equal(storedItem.state, 'pending');
+  assert.equal(stored.processingSummary, null);
   assert.equal(stored.createdAt, fixedClock());
 });
 

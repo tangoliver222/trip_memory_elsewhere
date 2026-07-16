@@ -141,7 +141,7 @@ test('fragment requires authoritative storage facts and complete source descript
   const fragment = makeUploadedFragment();
   assert.deepEqual(parseFragment(fragment), fragment);
 
-  for (const field of ['generation', 'sizeBytes', 'crc32c']) {
+  for (const field of ['bucket', 'generation', 'sizeBytes', 'crc32c']) {
     const storage = { ...fragment.storage };
     delete storage[field];
     assert.throws(() => parseFragment({ ...fragment, storage }));

@@ -63,6 +63,7 @@ export function makePendingBatch(overrides = {}) {
     uploadStatus: 'pending',
     inputCount: 1,
     counters: { saved: 0, processed: 0, failed: 0, needsReview: 0 },
+    processingSummary: null,
     uploads: { [item.fragmentId]: item },
     ...overrides,
   };
@@ -84,6 +85,7 @@ export function makeUploadedFragment(overrides = {}) {
     type: 'photo',
     status: 'uploaded',
     storage: {
+      bucket: 'demo-elsewhere.appspot.com',
       originalPath: `users/${ownerId}/originals/${batchId}/${id}`,
       generation: '1740000000000001',
       contentType: 'image/jpeg',
@@ -92,7 +94,16 @@ export function makeUploadedFragment(overrides = {}) {
       md5Hash: null,
     },
     source: makeLocalFileSource(),
-    hashes: {},
+    hashes: {
+      sha256: null,
+      perceptualHash: null,
+      perceptualHashAlgorithm: null,
+      perceptualHashVersion: null,
+      perceptualHashBands: null,
+    },
+    technicalMetadata: null,
+    derivatives: { thumbnail: null },
+    processing: { deterministic: null },
     facts: {},
     journeyId: null,
     sceneId: null,

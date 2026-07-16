@@ -189,6 +189,7 @@ test('anonymous user saves one original through Auth, Firestore and Storage Emul
   const fragment = await repository.getFragment(uid, upload.fragmentId);
   assert.deepEqual(fragment.source, source);
   assert.deepEqual(fragment.storage, {
+    bucket: bucketName,
     originalPath,
     generation: metadata.generation,
     contentType: 'image/jpeg',
@@ -196,7 +197,16 @@ test('anonymous user saves one original through Auth, Firestore and Storage Emul
     crc32c: metadata.crc32c,
     md5Hash: metadata.md5Hash ?? null,
   });
-  assert.deepEqual(fragment.hashes, {});
+  assert.deepEqual(fragment.hashes, {
+    sha256: null,
+    perceptualHash: null,
+    perceptualHashAlgorithm: null,
+    perceptualHashVersion: null,
+    perceptualHashBands: null,
+  });
+  assert.equal(fragment.technicalMetadata, null);
+  assert.deepEqual(fragment.derivatives, { thumbnail: null });
+  assert.deepEqual(fragment.processing, { deterministic: null });
   assert.deepEqual(fragment.facts, {});
 
   const fragments = await admin.db.collection(`users/${uid}/fragments`).get();

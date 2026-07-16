@@ -80,11 +80,21 @@ test('passes exact manifest policy to inspector and creates one uploaded Fragmen
   assert.equal(fragment.status, 'uploaded');
   assert.equal(fragment.type, 'photo');
   assert.deepEqual(fragment.storage, {
+    bucket: event.bucket,
     originalPath: event.objectName,
     ...storageFacts,
   });
   assert.equal(fragment.source.originalName, 'IMG_1842.JPG');
-  assert.deepEqual(fragment.hashes, {});
+  assert.deepEqual(fragment.hashes, {
+    sha256: null,
+    perceptualHash: null,
+    perceptualHashAlgorithm: null,
+    perceptualHashVersion: null,
+    perceptualHashBands: null,
+  });
+  assert.equal(fragment.technicalMetadata, null);
+  assert.deepEqual(fragment.derivatives, { thumbnail: null });
+  assert.deepEqual(fragment.processing, { deterministic: null });
   assert.deepEqual(fragment.facts, {});
   assert.equal(fragment.journeyId, null);
   assert.equal(fragment.createdAt, fixedClock());
