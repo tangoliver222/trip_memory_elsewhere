@@ -1102,7 +1102,9 @@ test('Storage Firestore and soft-timeout failures persist retryable state and th
   }
 });
 
-test('the soft timeout timer uses only the absolute deadline remaining after claim', async () => {
+test('the soft timeout timer uses only the absolute deadline remaining after claim', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let now = CLAIMED_AT;
   const config = Object.freeze({
     ...PROCESSING_CONFIG,
     timeouts: Object.freeze({
@@ -1113,19 +1115,42 @@ test('the soft timeout timer uses only the absolute deadline remaining after cla
     }),
   });
   const { processor, calls } = createHarness({
-    claimDelayMs: 60,
     materializeWaitForAbort: true,
     processingConfig: config,
-    clock: () => new Date().toISOString(),
+    clock: () => now,
+    claimHook: (claim) => {
+      now = new Date(Date.parse(claim.claimedAt) + 60).toISOString();
+    },
   });
-  const startedAt = Date.now();
-
-  await assert.rejects(
-    () => processor.handle(EVENT),
-    (error) => assertStableError(error, 'processing/soft-timeout', true),
+  const operation = processor.handle(EVENT);
+  let settled = false;
+  void operation.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
   );
 
-  assert.ok(Date.now() - startedAt < 125, 'deadline must not restart after claim');
+  for (let attempt = 0; attempt < 20 && calls.materialize.length === 0; attempt += 1) {
+    await Promise.resolve();
+  }
+
+  const remainingMs = Date.parse(calls.claim[0].input.softDeadlineAt) - Date.parse(now);
+  assert.equal(remainingMs, 20);
+  assert.equal(calls.materialize.length, 1);
+
+  t.mock.timers.tick(19);
+  await Promise.resolve();
+  assert.equal(settled, false);
+  assert.equal(calls.fail.length, 0);
+
+  t.mock.timers.tick(1);
+  await assert.rejects(
+    operation,
+    (error) => assertStableError(error, 'processing/soft-timeout', true),
+  );
   assert.deepEqual(calls.order, ['claim', 'materialize', 'fail']);
 });
 
