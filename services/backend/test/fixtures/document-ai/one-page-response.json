@@ -1,0 +1,73 @@
+{
+  "text": "COMMON GROUNDS\nAmericano 90.00\n",
+  "pages": [
+    {
+      "pageNumber": 1,
+      "dimension": { "width": 800, "height": 1200, "unit": "pixel" },
+      "layout": {
+        "textAnchor": { "textSegments": [{ "startIndex": "0", "endIndex": "31" }] },
+        "confidence": 0.96
+      },
+      "blocks": [
+        {
+          "layout": {
+            "textAnchor": { "textSegments": [{ "startIndex": "0", "endIndex": "31" }] },
+            "confidence": 0.95
+          }
+        }
+      ],
+      "paragraphs": [
+        {
+          "layout": {
+            "textAnchor": { "textSegments": [{ "startIndex": "0", "endIndex": "14" }] },
+            "confidence": 0.97
+          }
+        },
+        {
+          "layout": {
+            "textAnchor": { "textSegments": [{ "startIndex": "14", "endIndex": "31" }] },
+            "confidence": 0.93
+          }
+        }
+      ],
+      "lines": [
+        {
+          "layout": {
+            "textAnchor": { "textSegments": [{ "startIndex": "0", "endIndex": "14" }] },
+            "confidence": 0.97
+          }
+        },
+        {
+          "layout": {
+            "textAnchor": { "textSegments": [{ "startIndex": "14", "endIndex": "31" }] },
+            "confidence": 0.93
+          }
+        }
+      ],
+      "tokens": [
+        {
+          "layout": {
+            "textAnchor": { "textSegments": [{ "startIndex": "0", "endIndex": "6" }] },
+            "confidence": 0.98
+          }
+        },
+        {
+          "layout": {
+            "textAnchor": { "textSegments": [{ "startIndex": "7", "endIndex": "14" }] },
+            "confidence": 0.97
+          }
+        }
+      ],
+      "detectedLanguages": [
+        { "languageCode": "th", "confidence": 0.12 },
+        { "languageCode": "en", "confidence": 0.98 }
+      ],
+      "imageQualityScores": {
+        "qualityScore": 0.91,
+        "detectedDefects": [
+          { "type": "quality/defect_blurry", "confidence": 0.08 }
+        ]
+      }
+    }
+  ]
+}
