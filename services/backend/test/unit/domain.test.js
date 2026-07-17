@@ -7,6 +7,7 @@ import {
   parseReference,
 } from '../../src/domain/index.js';
 import { makePendingBatch, makeUploadedFragment } from '../fixtures/import.js';
+import { makeCapabilitySummary } from '../fixtures/capabilities.js';
 
 const now = '2026-07-16T00:00:00.000Z';
 
@@ -16,6 +17,11 @@ test('reference accepts one canonical type/id shape', () => {
     id: 'frag_12345678',
   });
   assert.throws(() => parseReference({ type: 'fragment', from: 'x' }));
+  assert.deepEqual(parseReference({
+    type: 'capabilityResult', id: 'result_12345678',
+  }), {
+    type: 'capabilityResult', id: 'result_12345678',
+  });
 });
 
 test('provenance requires source, processor, confidence and status', () => {
@@ -57,8 +63,25 @@ test('import batch counters cannot exceed the declared input count', () => {
 
   assert.equal(parseImportBatch(batch).counters.saved, 0);
   assert.equal(parseImportBatch(batch).processingSummary, null);
+  assert.equal(parseImportBatch(batch).capabilitySummary, null);
   assert.throws(() => parseImportBatch({
     ...batch,
     counters: { ...batch.counters, saved: 2 },
+  }));
+});
+
+test('capability summary partitions current eligible work without changing batch state', () => {
+  const summary = makeCapabilitySummary({
+    eligible: 2,
+    completed: 1,
+    unsupported: 1,
+    failed: 0,
+  });
+  const batch = makePendingBatch({ capabilitySummary: summary });
+  assert.deepEqual(parseImportBatch(batch).capabilitySummary, summary);
+  assert.equal(parseImportBatch(batch).counters.failed, 0);
+  assert.throws(() => parseImportBatch({
+    ...batch,
+    capabilitySummary: { ...summary, failed: 1 },
   }));
 });
