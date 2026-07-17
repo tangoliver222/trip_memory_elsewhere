@@ -148,6 +148,13 @@ function createStore(storage, allowedBuckets = [BUCKET]) {
   return createFirebaseDerivativeStore({ storage, allowedBuckets });
 }
 
+async function waitForInFlightUpload(calls) {
+  for (let attempt = 0; attempt < 40 && calls.saves.length === 0; attempt += 1) {
+    await Promise.resolve();
+  }
+  assert.equal(calls.saves.length, 1);
+}
+
 function putThumbnail(store, overrides = {}) {
   return store.putThumbnail({
     bucket: BUCKET,
@@ -473,28 +480,55 @@ test('pre-aborted signals and expired absolute deadlines stop before Storage acc
 });
 
 test('abort and deadline destroy an in-flight create-only upload without metadata read', async (t) => {
-  for (const mode of ['signal', 'deadline']) {
-    await t.test(mode, async () => {
-      const controller = new AbortController();
-      const { storage, calls } = createStorageFake({ holdUpload: true });
-      const deadlineAt = mode === 'deadline'
-        ? new Date(Date.now() + 15).toISOString()
-        : FUTURE_DEADLINE;
-      const operation = putThumbnail(createStore(storage), {
-        signal: controller.signal,
-        deadlineAt,
-      });
-      if (mode === 'signal') setImmediate(() => controller.abort());
-
-      await assert.rejects(
-        () => operation,
-        (error) => assertStableError(error, 'processing/soft-timeout', true),
-      );
-      assert.equal(calls.saves.length, 1);
-      assert.equal(calls.destroyed, 1);
-      assert.equal(calls.metadata, 0);
+  await t.test('signal', async () => {
+    const controller = new AbortController();
+    const { storage, calls } = createStorageFake({ holdUpload: true });
+    const operation = putThumbnail(createStore(storage), {
+      signal: controller.signal,
+      deadlineAt: FUTURE_DEADLINE,
     });
-  }
+
+    await waitForInFlightUpload(calls);
+    assert.equal(calls.destroyed, 0);
+    controller.abort();
+
+    await assert.rejects(
+      operation,
+      (error) => assertStableError(error, 'processing/soft-timeout', true),
+    );
+    assert.equal(calls.destroyed, 1);
+    assert.equal(calls.metadata, 0);
+  });
+
+  await t.test('deadline', async (subtest) => {
+    const now = new Date('2026-07-17T00:00:00.000Z');
+    subtest.mock.timers.enable({ apis: ['Date', 'setTimeout'], now });
+    const controller = new AbortController();
+    const { storage, calls } = createStorageFake({ holdUpload: true });
+    const operation = putThumbnail(createStore(storage), {
+      signal: controller.signal,
+      deadlineAt: new Date(now.getTime() + 15).toISOString(),
+    });
+    let settled = false;
+    void operation.then(
+      () => { settled = true; },
+      () => { settled = true; },
+    );
+
+    await waitForInFlightUpload(calls);
+    subtest.mock.timers.tick(14);
+    await Promise.resolve();
+    assert.equal(calls.destroyed, 0);
+    assert.equal(settled, false);
+
+    subtest.mock.timers.tick(1);
+    await assert.rejects(
+      operation,
+      (error) => assertStableError(error, 'processing/soft-timeout', true),
+    );
+    assert.equal(calls.destroyed, 1);
+    assert.equal(calls.metadata, 0);
+  });
 });
 
 test('metadata read is deadline-bound and observes a late provider rejection', async () => {
