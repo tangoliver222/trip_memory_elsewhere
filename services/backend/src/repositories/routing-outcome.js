@@ -1,4 +1,6 @@
 import {
+  parseBudgetReservation,
+  parseCapabilityExecution,
   parseEscalationRequest,
   parseImportBatch,
   parseRoutePlan,
@@ -6,8 +8,16 @@ import {
   parseRoutingHead,
   routePlanImmutablePayload,
 } from '../domain/index.js';
-import { reserveRoutePlanBudget } from '../routing/budget.js';
-import { makeRoutingHeadId } from '../routing/identity.js';
+import {
+  releaseReservation,
+  reserveRoutePlanBudget,
+  settleReservation,
+} from '../routing/budget.js';
+import {
+  makeBudgetReservationId,
+  makeCapabilityExecutionId,
+  makeRoutingHeadId,
+} from '../routing/identity.js';
 import {
   RepositoryConflictError,
   RepositoryOwnerError,
@@ -326,4 +336,326 @@ export function assertApprovedPlanMutation(previous, next) {
   if (!same(routePlanImmutablePayload(previous), routePlanImmutablePayload(next))) {
     throw new RepositoryConflictError();
   }
+}
+
+function includesVersion(values, version) {
+  return Array.isArray(values) && values.includes(version);
+}
+
+function capabilityTargetError() {
+  throw new RepositoryRoutingTargetError('Capability is not authorized by the current plan');
+}
+
+function parseExecutionForOwner(uid, executionInput, executionId) {
+  if (!executionInput) capabilityTargetError();
+  const execution = parseCapabilityExecution(executionInput);
+  assertOwner(uid, execution);
+  if (execution.id !== executionId) capabilityTargetError();
+  return execution;
+}
+
+export function applyCapabilityClaim({
+  uid,
+  routePlan: routePlanInput,
+  head: headInput,
+  reservation: reservationInput,
+  executions: executionInputs,
+  input,
+}) {
+  if (!routePlanInput || !headInput || !reservationInput || !Array.isArray(executionInputs)) {
+    capabilityTargetError();
+  }
+  const routePlan = parseRoutePlan(routePlanInput);
+  const head = parseRoutingHead(headInput);
+  const reservation = parseBudgetReservation(reservationInput);
+  assertOwner(uid, routePlan);
+  assertOwner(uid, head);
+  assertOwner(uid, reservation);
+  const executions = executionInputs.map((value) => parseCapabilityExecution(value));
+  if (executions.some(({ ownerId }) => ownerId !== uid)) throw new RepositoryOwnerError();
+  const executionId = makeCapabilityExecutionId({
+    routePlanId: routePlan.id,
+    capability: input?.capability,
+    idempotencyKey: input?.idempotencyKey,
+  });
+  if (executions.some(({ id }) => id === executionId)) throw new RepositoryConflictError();
+  const decision = routePlan.capabilities[input?.capability];
+  const versions = input?.supportedVersions;
+  const expectedReservationId = makeBudgetReservationId({
+    routePlanId: routePlan.id,
+    capability: input?.capability,
+  });
+  if (!['approved', 'executing'].includes(routePlan.state)
+    || head.currentPlanRef.id !== routePlan.id
+    || head.currentRevision !== routePlan.revision
+    || !same(head.sourceRevision, routePlan.sourceRevision)
+    || !same(input?.sourceRevision, routePlan.sourceRevision)
+    || decision?.decision !== 'approved'
+    || decision.executorClass !== input?.executorClass
+    || !includesVersion(versions?.router, routePlan.router.version)
+    || !includesVersion(versions?.policy, routePlan.router.policyVersion)
+    || !includesVersion(versions?.costModel, routePlan.router.costModelVersion)
+    || !includesVersion(versions?.executors?.[decision.executorClass], input?.executorVersion)
+    || reservation.id !== expectedReservationId
+    || reservation.routePlanRef.id !== routePlan.id
+    || reservation.capability !== input.capability
+    || reservation.state !== 'reserved'
+    || reservation.costModelVersion !== routePlan.router.costModelVersion) {
+    capabilityTargetError();
+  }
+
+  const attempts = executions
+    .filter(({ routePlanRef, capability }) => (
+      routePlanRef.id === routePlan.id && capability === input.capability
+    ))
+    .reduce((total, execution) => total + execution.billableAttempts, 0);
+  if (attempts >= reservation.maxBillableAttempts) throw new RepositoryConflictError();
+
+  const nextPlan = routePlan.state === 'approved'
+    ? parseRoutePlan({ ...routePlan, state: 'executing', updatedAt: input.claimedAt })
+    : routePlan;
+  assertApprovedPlanMutation(routePlan, nextPlan);
+  const execution = parseCapabilityExecution({
+    id: executionId,
+    ownerId: uid,
+    schemaVersion: 1,
+    createdAt: input.claimedAt,
+    updatedAt: input.claimedAt,
+    deletedAt: null,
+    routePlanRef: ref('routePlan', routePlan.id),
+    reservationRef: ref('budgetReservation', reservation.id),
+    capability: input.capability,
+    executorName: decision.executorClass,
+    executorVersion: input.executorVersion,
+    idempotencyKey: input.idempotencyKey,
+    state: 'claimed',
+    billableAttempts: 1,
+    receipt: null,
+    resultRef: null,
+    errorCode: null,
+    startedAt: input.claimedAt,
+    completedAt: null,
+  });
+  return {
+    outcome: 'claimed',
+    routePlan: nextPlan,
+    execution,
+    authorization: {
+      routePlanId: routePlan.id,
+      capability: input.capability,
+      executorClass: decision.executorClass,
+      scope: decision.scope,
+      idempotencyKey: input.idempotencyKey,
+      ceilingMicros: reservation.ceilingMicros,
+    },
+  };
+}
+
+export function applyCapabilityCalling(uid, executionInput, input) {
+  const execution = parseExecutionForOwner(uid, executionInput, input?.executionId);
+  if (execution.state === 'calling') return { outcome: 'duplicate', execution };
+  if (execution.state !== 'claimed') throw new RepositoryConflictError();
+  return {
+    outcome: 'applied',
+    execution: parseCapabilityExecution({
+      ...execution,
+      state: 'calling',
+      updatedAt: input.calledAt,
+    }),
+  };
+}
+
+export function applyCapabilityReceipt(uid, executionInput, input) {
+  const execution = parseExecutionForOwner(uid, executionInput, input?.executionId);
+  const receipt = {
+    providerRequestId: input.providerRequestId,
+    usage: input.usage,
+    actualCostMicros: input.actualCostMicros,
+    receivedAt: input.receivedAt,
+  };
+  if (execution.state === 'provider_succeeded') {
+    if (same(execution.receipt, receipt) && same(execution.resultRef, input.resultRef)) {
+      return { outcome: 'duplicate', execution };
+    }
+    throw new RepositoryConflictError();
+  }
+  if (execution.state !== 'calling') throw new RepositoryConflictError();
+  return {
+    outcome: 'applied',
+    execution: parseCapabilityExecution({
+      ...execution,
+      state: 'provider_succeeded',
+      receipt,
+      resultRef: input.resultRef,
+      updatedAt: input.receivedAt,
+    }),
+  };
+}
+
+const TERMINAL_EXECUTION_STATES = new Set(['completed', 'failed', 'billing_uncertain']);
+
+function completePlan({ plan, executions, escalations, now }) {
+  if (!['approved', 'executing'].includes(plan.state)) return plan;
+  const approved = CAPABILITIES.filter((capability) => (
+    plan.capabilities[capability].decision === 'approved'
+  ));
+  const allTerminal = approved.every((capability) => executions.some((execution) => (
+    execution.routePlanRef.id === plan.id
+      && execution.capability === capability
+      && TERMINAL_EXECUTION_STATES.has(execution.state)
+  )));
+  const pendingEscalation = escalations.some((request) => (
+    request.fromRoutePlanRef.id === plan.id && request.state === 'pending'
+  ));
+  if (!allTerminal || pendingEscalation) return plan;
+  const completed = parseRoutePlan({
+    ...plan,
+    state: 'completed',
+    updatedAt: now,
+    completedAt: now,
+  });
+  assertApprovedPlanMutation(plan, completed);
+  return completed;
+}
+
+function completionState({ batch, plan, plans, heads, executions, escalations, now }) {
+  const nextPlan = completePlan({ plan, executions, escalations, now });
+  const nextPlans = plans.map((value) => (value.id === nextPlan.id ? nextPlan : value));
+  const nextBatch = parseImportBatch({
+    ...batch,
+    routingSummary: deriveRoutingSummary(batch, nextPlans, heads, now),
+    updatedAt: now,
+  });
+  return { routePlan: nextPlan, batch: nextBatch };
+}
+
+export function applyCapabilitySettlement({
+  uid,
+  batch: batchInput,
+  routePlan: routePlanInput,
+  reservation: reservationInput,
+  ledgers,
+  execution: executionInput,
+  executions: executionInputs,
+  plans: planInputs,
+  heads,
+  escalations,
+  input,
+}) {
+  if (!batchInput || !routePlanInput || !reservationInput
+    || !Array.isArray(ledgers) || !Array.isArray(executionInputs)
+    || !Array.isArray(planInputs) || !Array.isArray(heads) || !Array.isArray(escalations)) {
+    capabilityTargetError();
+  }
+  const batch = parseImportBatch(batchInput);
+  const routePlan = parseRoutePlan(routePlanInput);
+  const reservation = parseBudgetReservation(reservationInput);
+  const execution = parseExecutionForOwner(uid, executionInput, input?.executionId);
+  assertOwner(uid, batch);
+  assertOwner(uid, routePlan);
+  assertOwner(uid, reservation);
+  if (execution.routePlanRef.id !== routePlan.id
+    || execution.reservationRef.id !== reservation.id) capabilityTargetError();
+  if (input?.outcome === 'completed') {
+    if (execution.state === 'completed') return { outcome: 'duplicate' };
+    if (execution.state !== 'provider_succeeded') throw new RepositoryConflictError();
+  } else if (input?.outcome === 'failed') {
+    if (execution.state === 'failed') {
+      if (execution.errorCode === input.errorCode) return { outcome: 'duplicate' };
+      throw new RepositoryConflictError();
+    }
+    if (!['claimed', 'calling'].includes(execution.state)) throw new RepositoryConflictError();
+  } else {
+    throw new RepositoryConflictError();
+  }
+
+  const budget = input.outcome === 'completed'
+    ? settleReservation({
+      reservation,
+      ledgers,
+      actualCostMicros: execution.receipt.actualCostMicros,
+      now: input.settledAt,
+    })
+    : releaseReservation({
+      reservation,
+      ledgers,
+      reasonCode: input.errorCode,
+      now: input.settledAt,
+    });
+  const settling = input.outcome === 'completed'
+    ? parseCapabilityExecution({ ...execution, state: 'settling', updatedAt: input.settledAt })
+    : execution;
+  const nextExecution = parseCapabilityExecution({
+    ...settling,
+    state: input.outcome,
+    errorCode: input.outcome === 'failed' ? input.errorCode : null,
+    updatedAt: input.settledAt,
+    completedAt: input.settledAt,
+  });
+  const executions = executionInputs.map((value) => (
+    value.id === nextExecution.id ? nextExecution : parseCapabilityExecution(value)
+  ));
+  const completion = completionState({
+    batch,
+    plan: routePlan,
+    plans: planInputs.map((value) => parseRoutePlan(value)),
+    heads,
+    executions,
+    escalations,
+    now: input.settledAt,
+  });
+  return {
+    outcome: 'applied',
+    execution: nextExecution,
+    reservation: budget.reservation,
+    ledgers: budget.ledgers,
+    ...completion,
+  };
+}
+
+export function applyCapabilityBillingUncertain({
+  uid,
+  batch: batchInput,
+  routePlan: routePlanInput,
+  execution: executionInput,
+  executions: executionInputs,
+  plans: planInputs,
+  heads,
+  escalations,
+  input,
+}) {
+  if (!batchInput || !routePlanInput || !Array.isArray(executionInputs)
+    || !Array.isArray(planInputs) || !Array.isArray(heads) || !Array.isArray(escalations)) {
+    capabilityTargetError();
+  }
+  const batch = parseImportBatch(batchInput);
+  const routePlan = parseRoutePlan(routePlanInput);
+  const execution = parseExecutionForOwner(uid, executionInput, input?.executionId);
+  assertOwner(uid, batch);
+  assertOwner(uid, routePlan);
+  if (execution.state === 'billing_uncertain') {
+    if (execution.errorCode === input.errorCode) return { outcome: 'duplicate' };
+    throw new RepositoryConflictError();
+  }
+  if (execution.state !== 'calling') throw new RepositoryConflictError();
+  const nextExecution = parseCapabilityExecution({
+    ...execution,
+    state: 'billing_uncertain',
+    errorCode: input.errorCode,
+    updatedAt: input.completedAt,
+    completedAt: input.completedAt,
+  });
+  const executions = executionInputs.map((value) => (
+    value.id === nextExecution.id ? nextExecution : parseCapabilityExecution(value)
+  ));
+  const completion = completionState({
+    batch,
+    plan: routePlan,
+    plans: planInputs.map((value) => parseRoutePlan(value)),
+    heads,
+    executions,
+    escalations,
+    now: input.completedAt,
+  });
+  return { outcome: 'applied', execution: nextExecution, ...completion };
 }

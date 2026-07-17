@@ -38,6 +38,11 @@ import {
 } from './processing-outcome.js';
 import { makeExactCandidateId } from '../processing/identity.js';
 import {
+  applyCapabilityBillingUncertain,
+  applyCapabilityCalling,
+  applyCapabilityClaim,
+  applyCapabilityReceipt,
+  applyCapabilitySettlement,
   applyEscalationSubmission,
   applyRoutingApproval,
   applyRoutingDraftSave,
@@ -457,6 +462,12 @@ export function createMemoryRepository() {
     const escalations = escalationRequests.values(uid)
       .filter(({ fromRoutePlanRef }) => planIds.has(fromRoutePlanRef.id))
       .sort((left, right) => left.id.localeCompare(right.id));
+    const reservations = budgetReservations.values(uid)
+      .filter(({ routePlanRef }) => planIds.has(routePlanRef.id))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const executions = capabilityExecutions.values(uid)
+      .filter(({ routePlanRef }) => planIds.has(routePlanRef.id))
+      .sort((left, right) => left.id.localeCompare(right.id));
     return cloneFrozen({
       batch,
       fragments: snapshotFragments,
@@ -465,6 +476,8 @@ export function createMemoryRepository() {
       routePlans: plans,
       routingHeads: heads,
       routingCohorts: cohorts,
+      budgetReservations: reservations,
+      capabilityExecutions: executions,
       escalationRequests: escalations,
     });
   }
@@ -519,9 +532,103 @@ export function createMemoryRepository() {
     return cloneFrozen(transition);
   }
 
-  const capabilityLifecyclePending = async () => {
-    throw new RepositoryRoutingTargetError('Capability authorization is not implemented');
-  };
+  async function claimCapabilityExecution(uid, input) {
+    const routePlan = routePlans.read(uid, input?.routePlanId);
+    const head = routingHeads.values(uid)
+      .find(({ currentPlanRef }) => currentPlanRef.id === routePlan?.id) ?? null;
+    const reservation = budgetReservations.values(uid).find((value) => (
+      value.routePlanRef.id === routePlan?.id && value.capability === input?.capability
+    )) ?? null;
+    const transition = applyCapabilityClaim({
+      uid,
+      routePlan,
+      head,
+      reservation,
+      executions: capabilityExecutions.values(uid),
+      input,
+    });
+    commitWrites([
+      routePlans.prepareWrite(uid, transition.routePlan),
+      capabilityExecutions.prepareWrite(uid, transition.execution),
+    ]);
+    return cloneFrozen(transition);
+  }
+
+  async function markCapabilityCalling(uid, input) {
+    const stored = capabilityExecutions.read(uid, input?.executionId);
+    const transition = applyCapabilityCalling(uid, stored, input);
+    if (transition.outcome === 'applied') {
+      commitWrites([capabilityExecutions.prepareWrite(uid, transition.execution)]);
+    }
+    return cloneFrozen(transition);
+  }
+
+  async function recordCapabilityReceipt(uid, input) {
+    const stored = capabilityExecutions.read(uid, input?.executionId);
+    const transition = applyCapabilityReceipt(uid, stored, input);
+    if (transition.outcome === 'applied') {
+      commitWrites([capabilityExecutions.prepareWrite(uid, transition.execution)]);
+    }
+    return cloneFrozen(transition);
+  }
+
+  function capabilityState(uid, executionId) {
+    const execution = capabilityExecutions.read(uid, executionId);
+    const routePlan = routePlans.read(uid, execution?.routePlanRef.id);
+    const batch = importBatches.read(uid, routePlan?.batchRef.id);
+    const reservation = budgetReservations.read(uid, execution?.reservationRef.id);
+    const plans = routePlans.values(uid).filter(({ batchRef }) => batch && batchRef.id === batch.id);
+    const planIds = new Set(plans.map(({ id }) => id));
+    return {
+      execution,
+      routePlan,
+      batch,
+      reservation,
+      plans,
+      executions: capabilityExecutions.values(uid).filter(({ routePlanRef }) => (
+        planIds.has(routePlanRef.id)
+      )),
+      heads: routingHeads.values(uid).filter(({ currentPlanRef }) => (
+        planIds.has(currentPlanRef.id)
+      )),
+      escalations: escalationRequests.values(uid).filter(({ fromRoutePlanRef }) => (
+        planIds.has(fromRoutePlanRef.id)
+      )),
+    };
+  }
+
+  async function settleCapabilityExecution(uid, input) {
+    const current = capabilityState(uid, input?.executionId);
+    const transition = applyCapabilitySettlement({
+      uid,
+      ...current,
+      ledgers: current.reservation?.ledgerRefs.map(({ id }) => (
+        budgetLedgers.read(uid, id)
+      )).filter(Boolean) ?? [],
+      input,
+    });
+    if (transition.outcome === 'duplicate') return cloneFrozen(transition);
+    commitWrites([
+      capabilityExecutions.prepareWrite(uid, transition.execution),
+      budgetReservations.prepareWrite(uid, transition.reservation),
+      ...transition.ledgers.map((ledger) => budgetLedgers.prepareWrite(uid, ledger)),
+      routePlans.prepareWrite(uid, transition.routePlan),
+      importBatches.prepareWrite(uid, transition.batch),
+    ]);
+    return cloneFrozen(transition);
+  }
+
+  async function markCapabilityBillingUncertain(uid, input) {
+    const current = capabilityState(uid, input?.executionId);
+    const transition = applyCapabilityBillingUncertain({ uid, ...current, input });
+    if (transition.outcome === 'duplicate') return cloneFrozen(transition);
+    commitWrites([
+      capabilityExecutions.prepareWrite(uid, transition.execution),
+      routePlans.prepareWrite(uid, transition.routePlan),
+      importBatches.prepareWrite(uid, transition.batch),
+    ]);
+    return cloneFrozen(transition);
+  }
 
   const repository = assertRepository({
     createFragment: fragments.create,
@@ -540,11 +647,11 @@ export function createMemoryRepository() {
     loadRoutingSnapshot,
     commitRoutingApproval,
     submitEscalationRequest,
-    claimCapabilityExecution: capabilityLifecyclePending,
-    markCapabilityCalling: capabilityLifecyclePending,
-    recordCapabilityReceipt: capabilityLifecyclePending,
-    settleCapabilityExecution: capabilityLifecyclePending,
-    markCapabilityBillingUncertain: capabilityLifecyclePending,
+    claimCapabilityExecution,
+    markCapabilityCalling,
+    recordCapabilityReceipt,
+    settleCapabilityExecution,
+    markCapabilityBillingUncertain,
   });
   assertProcessingRepository(repository);
   return assertRoutingRepository(repository);
