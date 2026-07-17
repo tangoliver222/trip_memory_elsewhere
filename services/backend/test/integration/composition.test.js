@@ -80,6 +80,7 @@ test('ingestion composition exposes only public probes and the finalized receive
     repository: createMemoryRepository(),
     objectInspector: { async inspectOriginal() { throw new Error('not reached'); } },
     allowedBuckets: ['demo-elsewhere.appspot.com'],
+    deterministicProcessor: { async handle() { throw new Error('not reached'); } },
     clock: () => '2026-07-16T05:30:00.000Z',
   });
   t.after(() => app.close());
@@ -107,10 +108,12 @@ test('ingestion composition exposes only public probes and the finalized receive
     payload: requestBody(),
   })).statusCode, 404);
   assert.equal((await app.inject({ url: '/protected' })).statusCode, 404);
+  assert.equal((await app.inject({ url: '/v1/processing' })).statusCode, 404);
 });
 
 test('runtime selects one mode and builds exactly one Firebase dependency graph', async (t) => {
   const calls = [];
+  const processingCalls = [];
   const firebaseFactory = (input) => {
     calls.push(input);
     return {
@@ -124,6 +127,32 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
     assert.deepEqual(db, {});
     return createMemoryRepository();
   };
+  const processingFactories = {
+    objectInspectorFactory(input) {
+      processingCalls.push(['objectInspector', input]);
+      return { async inspectOriginal() { throw new Error('not reached'); } };
+    },
+    sourceMaterializerFactory(input) {
+      processingCalls.push(['materializer', input]);
+      return { async materialize() { throw new Error('not reached'); } };
+    },
+    metadataReaderFactory(input) {
+      processingCalls.push(['metadata', input]);
+      return { async read() { throw new Error('not reached'); } };
+    },
+    imageProcessorFactory(input) {
+      processingCalls.push(['image', input]);
+      return { async process() { throw new Error('not reached'); } };
+    },
+    derivativeStoreFactory(input) {
+      processingCalls.push(['derivative', input]);
+      return { async putThumbnail() { throw new Error('not reached'); } };
+    },
+    deterministicProcessorFactory(input) {
+      processingCalls.push(['processor', input]);
+      return { async handle() { throw new Error('not reached'); } };
+    },
+  };
 
   const api = createRuntimeApp({
     ...appConfig,
@@ -131,7 +160,7 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
     firebaseProjectId: 'demo-elsewhere',
     allowedAppIds: ['elsewhere-web-test'],
     storageBuckets: [],
-  }, { firebaseFactory, repositoryFactory });
+  }, { firebaseFactory, repositoryFactory, ...processingFactories });
   t.after(() => api.close());
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
@@ -139,6 +168,7 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
     appName: 'elsewhere-api',
   });
   assert.equal((await api.inject({ url: '/events/storage-finalized' })).statusCode, 404);
+  assert.deepEqual(processingCalls, []);
 
   calls.length = 0;
   const ingestion = createRuntimeApp({
@@ -147,7 +177,7 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
     firebaseProjectId: 'demo-elsewhere',
     allowedAppIds: [],
     storageBuckets: ['demo-elsewhere.appspot.com'],
-  }, { firebaseFactory, repositoryFactory });
+  }, { firebaseFactory, repositoryFactory, ...processingFactories });
   t.after(() => ingestion.close());
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
@@ -158,6 +188,16 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
     method: 'POST',
     url: '/v1/import-batches',
   })).statusCode, 404);
+  assert.deepEqual(processingCalls.map(([name]) => name), [
+    'objectInspector',
+    'materializer',
+    'metadata',
+    'image',
+    'derivative',
+    'processor',
+  ]);
+  assert.equal(processingCalls[0][1].storage, processingCalls[1][1].storage);
+  assert.equal(processingCalls[1][1].storage, processingCalls[4][1].storage);
 });
 
 test('production composition sources do not import test helpers', async () => {

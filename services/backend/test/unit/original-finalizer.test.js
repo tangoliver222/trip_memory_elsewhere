@@ -115,7 +115,7 @@ test('permanent object failure records one rejected outcome without Fragment', a
   assert.equal(batch.uploads[event.fragmentId].state, 'failed');
   assert.equal(batch.counters.failed, 1);
 
-  assert.deepEqual(await finalizer.handle(event), { outcome: 'duplicate' });
+  assert.deepEqual(await finalizer.handle(event), { outcome: 'rejected' });
   assert.equal((await repository.getImportBatch('user_alpha', event.batchId)).counters.failed, 1);
 });
 

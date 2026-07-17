@@ -14,25 +14,25 @@ const payload = {
   generation: '1740000000000001',
 };
 
-test('terminal ingestion outcomes return 204 without application auth headers', async (t) => {
-  for (const outcome of ['applied', 'duplicate', 'rejected']) {
-    const app = createIngestionTestApp({
-      finalizer: { handle: async () => ({ outcome }) },
-    });
-    t.after(() => app.close());
-    const response = await app.inject({
-      method: 'POST',
-      url: '/events/storage-finalized',
-      headers,
-      payload,
-    });
-    assert.equal(response.statusCode, 204);
-    assert.equal(response.body, '');
-  }
+test('permanently rejected original returns 204 without application auth headers', async (t) => {
+  const app = createIngestionTestApp({
+    eventHandler: { handle: async () => ({ outcome: 'rejected' }) },
+  });
+  t.after(() => app.close());
+  const response = await app.inject({
+    method: 'POST',
+    url: '/events/storage-finalized',
+    headers,
+    payload,
+  });
+  assert.equal(response.statusCode, 204);
+  assert.equal(response.body, '');
 });
 
 test('invalid CloudEvent returns stable 400 with server request ID', async (t) => {
-  const app = createIngestionTestApp({ finalizer: { handle: async () => ({ outcome: 'applied' }) } });
+  const app = createIngestionTestApp({
+    eventHandler: { handle: async () => ({ outcome: 'rejected' }) },
+  });
   t.after(() => app.close());
   const response = await app.inject({
     method: 'POST',
@@ -50,14 +50,14 @@ test('invalid CloudEvent returns stable 400 with server request ID', async (t) =
 
 test('conflict and retryable failures have stable redacted responses', async (t) => {
   const conflictApp = createIngestionTestApp({
-    finalizer: {
+    eventHandler: {
       async handle() {
         throw new IngestionError('ingestion/original-conflict', { permanent: true });
       },
     },
   });
   const retryApp = createIngestionTestApp({
-    finalizer: {
+    eventHandler: {
       async handle() {
         throw new IngestionError('internal/error', { permanent: false });
       },

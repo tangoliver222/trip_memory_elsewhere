@@ -3,10 +3,10 @@ import { registerIngestionRoutes } from '../../src/ingestion/routes.js';
 
 const appConfig = { nodeEnv: 'test', bodyLimit: 32 * 1024, logLevel: 'silent' };
 
-export function createIngestionTestApp({ finalizer }) {
+export function createIngestionTestApp({ eventHandler }) {
   const app = createApp({ appConfig });
   registerIngestionRoutes(app, {
-    finalizer,
+    finalizer: eventHandler,
     allowedBuckets: ['demo-elsewhere.appspot.com'],
   });
   return app;
