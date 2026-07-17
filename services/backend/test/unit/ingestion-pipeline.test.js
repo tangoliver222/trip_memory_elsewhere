@@ -61,6 +61,12 @@ function createPipeline(
         return { outcome: routingOutcome };
       },
     },
+    capabilityScheduler: {
+      async handle(received) {
+        calls.push(['scheduler', received]);
+        return { outcome: 'queued' };
+      },
+    },
   });
 }
 
@@ -73,6 +79,7 @@ test('applied original continues into deterministic processing with server-deriv
     ['finalizer', event],
     ['processor', processorEvent],
     ['router', processorEvent],
+    ['scheduler', { uid: event.uid, batchId: event.batchId }],
   ]);
 });
 
@@ -90,6 +97,7 @@ test('same-generation successful duplicate still ensures deterministic processin
     ['finalizer', event],
     ['processor', processorEvent],
     ['router', processorEvent],
+    ['scheduler', { uid: event.uid, batchId: event.batchId }],
   ]);
 });
 
@@ -151,6 +159,9 @@ test('a concurrent rejection wins over a successful inspection without creating 
         return { outcome: 'approved' };
       },
     },
+    capabilityScheduler: {
+      async handle() { throw new Error('scheduler must not run'); },
+    },
   });
   const rejectingPipeline = createStorageFinalizedPipeline({
     originalFinalizer: rejectingFinalizer,
@@ -160,6 +171,9 @@ test('a concurrent rejection wins over a successful inspection without creating 
         processorCalls.push(['router', received]);
         return { outcome: 'approved' };
       },
+    },
+    capabilityScheduler: {
+      async handle() { throw new Error('scheduler must not run'); },
     },
   });
 
@@ -203,6 +217,9 @@ test('retryable processing propagates instead of acknowledging the event', async
     authoritativeRouter: {
       async handle() { throw new Error('router must not run'); },
     },
+    capabilityScheduler: {
+      async handle() { throw new Error('scheduler must not run'); },
+    },
   });
 
   await assert.rejects(() => pipeline.handle(event), (error) => error === expected);
@@ -213,16 +230,19 @@ test('malformed finalizer and processor outcomes cannot be acknowledged', async 
     originalFinalizer: { async handle() { return { outcome: 'applied', forged: true }; } },
     deterministicProcessor: { async handle() { return { outcome: 'succeeded' }; } },
     authoritativeRouter: { async handle() { return { outcome: 'approved' }; } },
+    capabilityScheduler: { async handle() { return { outcome: 'queued' }; } },
   });
   const malformedProcessor = createStorageFinalizedPipeline({
     originalFinalizer: { async handle() { return { outcome: 'applied' }; } },
     deterministicProcessor: { async handle() { return { outcome: 'busy' }; } },
     authoritativeRouter: { async handle() { return { outcome: 'approved' }; } },
+    capabilityScheduler: { async handle() { return { outcome: 'queued' }; } },
   });
   const malformedRouter = createStorageFinalizedPipeline({
     originalFinalizer: { async handle() { return { outcome: 'applied' }; } },
     deterministicProcessor: { async handle() { return { outcome: 'succeeded' }; } },
     authoritativeRouter: { async handle() { return { outcome: 'suggested' }; } },
+    capabilityScheduler: { async handle() { return { outcome: 'queued' }; } },
   });
 
   await assert.rejects(
@@ -256,6 +276,7 @@ test('every deterministic terminal outcome routes exactly once before acknowledg
       ['finalizer', event],
       ['processor', processorEvent],
       ['router', processorEvent],
+      ['scheduler', { uid: event.uid, batchId: event.batchId }],
     ]);
   }
 });
@@ -269,7 +290,28 @@ test('routing failure propagates and is never converted into an acknowledgement'
     originalFinalizer: { async handle() { return { outcome: 'applied' }; } },
     deterministicProcessor: { async handle() { return { outcome: 'succeeded' }; } },
     authoritativeRouter: { async handle() { throw expected; } },
+    capabilityScheduler: {
+      async handle() { throw new Error('scheduler must not run'); },
+    },
   });
 
   await assert.rejects(() => pipeline.handle(event), (error) => error === expected);
+});
+
+test('router no-op still scans persisted current approved OCR plans', async () => {
+  const calls = [];
+  const pipeline = createStorageFinalizedPipeline({
+    originalFinalizer: { async handle() { return { outcome: 'duplicate' }; } },
+    deterministicProcessor: { async handle() { return { outcome: 'terminal_noop' }; } },
+    authoritativeRouter: { async handle() { return { outcome: 'terminal_noop' }; } },
+    capabilityScheduler: {
+      async handle(input) {
+        calls.push(input);
+        return { outcome: 'queued' };
+      },
+    },
+  });
+
+  assert.deepEqual(await pipeline.handle(event), { outcome: 'terminal_noop' });
+  assert.deepEqual(calls, [{ uid: event.uid, batchId: event.batchId }]);
 });
