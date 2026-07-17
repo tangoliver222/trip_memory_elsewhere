@@ -16,6 +16,12 @@ const TERMINAL_PROCESSING_OUTCOMES = new Set([
   'failed_terminal',
   'terminal_noop',
 ]);
+const ROUTING_OUTCOMES = new Set([
+  'drafted',
+  'approved',
+  'completed',
+  'terminal_noop',
+]);
 
 function requireHandler(port, name) {
   if (typeof port?.handle !== 'function') {
@@ -83,9 +89,11 @@ function toProcessorEvent(event) {
 export function createStorageFinalizedPipeline({
   originalFinalizer,
   deterministicProcessor,
+  authoritativeRouter,
 } = {}) {
   const finalizer = requireHandler(originalFinalizer, 'Original finalizer');
   const processor = requireHandler(deterministicProcessor, 'Deterministic processor');
+  const router = requireHandler(authoritativeRouter, 'Authoritative router');
 
   return Object.freeze({
     async handle(eventInput) {
@@ -98,11 +106,15 @@ export function createStorageFinalizedPipeline({
         return Object.freeze({ outcome: 'rejected' });
       }
 
-      const processingOutcome = normalizeOutcome(
+      normalizeOutcome(
         await processor.handle(toProcessorEvent(event)),
         TERMINAL_PROCESSING_OUTCOMES,
       );
-      return Object.freeze({ outcome: processingOutcome });
+      const routingOutcome = normalizeOutcome(
+        await router.handle(toProcessorEvent(event)),
+        ROUTING_OUTCOMES,
+      );
+      return Object.freeze({ outcome: routingOutcome });
     },
   });
 }

@@ -21,8 +21,9 @@ const errorResponse = (error, requestId) => Object.freeze({
 
 const ACKNOWLEDGED_OUTCOMES = new Set([
   'rejected',
-  'succeeded',
-  'failed_terminal',
+  'drafted',
+  'approved',
+  'completed',
   'terminal_noop',
 ]);
 

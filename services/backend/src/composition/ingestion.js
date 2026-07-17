@@ -8,6 +8,7 @@ export function createIngestionComposition({
   repository,
   objectInspector,
   deterministicProcessor,
+  authoritativeRouter,
   allowedBuckets,
   clock,
 }) {
@@ -16,6 +17,7 @@ export function createIngestionComposition({
   const eventHandler = createStorageFinalizedPipeline({
     originalFinalizer: finalizer,
     deterministicProcessor,
+    authoritativeRouter,
   });
   registerIngestionRoutes(app, { eventHandler, allowedBuckets });
   return app;
