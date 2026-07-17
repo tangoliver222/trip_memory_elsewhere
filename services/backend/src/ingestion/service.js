@@ -139,7 +139,11 @@ export function createOriginalFinalizer({
           updatedAt: timestamp,
           fragment,
         });
-        return Object.freeze({ outcome: finalized.outcome });
+        return Object.freeze({
+          outcome: finalized.outcome === 'duplicate' && !finalized.fragment
+            ? 'rejected'
+            : finalized.outcome,
+        });
       } catch (error) {
         throw mapRepositoryError(error);
       }

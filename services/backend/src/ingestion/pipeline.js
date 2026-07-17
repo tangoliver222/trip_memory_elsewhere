@@ -1,5 +1,15 @@
+import { IdSchema } from '../domain/index.js';
 import { retryableIngestionError } from './errors.js';
 
+const EVENT_KEYS = Object.freeze([
+  'batchId',
+  'bucket',
+  'eventId',
+  'fragmentId',
+  'generation',
+  'objectName',
+  'uid',
+]);
 const FINALIZER_OUTCOMES = new Set(['applied', 'duplicate', 'rejected']);
 const TERMINAL_PROCESSING_OUTCOMES = new Set([
   'succeeded',
@@ -26,6 +36,37 @@ function normalizeOutcome(result, allowed) {
   return result.outcome;
 }
 
+function normalizeEvent(input) {
+  if (!input
+    || typeof input !== 'object'
+    || Array.isArray(input)
+    || Object.keys(input).sort().join('\0') !== EVENT_KEYS.join('\0')
+    || !IdSchema.safeParse(input.uid).success
+    || !IdSchema.safeParse(input.batchId).success
+    || !IdSchema.safeParse(input.fragmentId).success
+    || typeof input.eventId !== 'string'
+    || input.eventId.length === 0
+    || input.eventId !== input.eventId.trim()
+    || typeof input.bucket !== 'string'
+    || input.bucket.length === 0
+    || input.bucket !== input.bucket.trim()
+    || typeof input.generation !== 'string'
+    || input.generation.length === 0
+    || input.generation !== input.generation.trim()
+    || input.objectName !== `users/${input.uid}/originals/${input.batchId}/${input.fragmentId}`) {
+    throw retryableIngestionError();
+  }
+  return Object.freeze({
+    eventId: input.eventId,
+    bucket: input.bucket,
+    objectName: input.objectName,
+    generation: input.generation,
+    uid: input.uid,
+    batchId: input.batchId,
+    fragmentId: input.fragmentId,
+  });
+}
+
 function toProcessorEvent(event) {
   return Object.freeze({
     uid: event.uid,
@@ -47,7 +88,8 @@ export function createStorageFinalizedPipeline({
   const processor = requireHandler(deterministicProcessor, 'Deterministic processor');
 
   return Object.freeze({
-    async handle(event) {
+    async handle(eventInput) {
+      const event = normalizeEvent(eventInput);
       const finalizerOutcome = normalizeOutcome(
         await finalizer.handle(event),
         FINALIZER_OUTCOMES,
