@@ -49,6 +49,7 @@ const WORK = {
     contentType: 'image/jpeg',
     sizeBytes: 2_048,
     crc32c: 'Y3JjIQ==',
+    md5Hash: null,
   },
   ocrInput: {
     format: 'jpeg',

@@ -5,6 +5,7 @@ import {
   IsoDateTimeSchema,
   ProcessorVersionSchema,
   ProviderReceiptSchema,
+  RoutingSourceRevisionSchema,
 } from '../domain/index.js';
 
 const CodeSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{1,63}$/);
@@ -58,6 +59,38 @@ const AuthorizationSchema = z.strictObject({
   idempotencyKey: IdSchema,
   ceilingMicros: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
 });
+const StorageFactsSchema = z.strictObject({
+  bucket: z.string().trim().min(1),
+  originalPath: z.string().min(1),
+  generation: z.string().trim().min(1),
+  contentType: z.string().trim().min(1),
+  sizeBytes: z.number().int().positive(),
+  crc32c: z.string().trim().min(1),
+  md5Hash: z.string().trim().min(1).nullable(),
+});
+const OcrInputSchema = z.strictObject({
+  format: z.enum(['jpeg', 'png', 'webp', 'heic', 'heif', 'pdf', 'text']),
+  mimeType: z.string().trim().min(1),
+  sizeBytes: z.number().int().positive(),
+  width: z.number().int().positive().nullable(),
+  height: z.number().int().positive().nullable(),
+});
+const ClaimWorkSchema = z.strictObject({
+  executionState: z.enum(['claimed', 'provider_succeeded']),
+  sourceRevision: RoutingSourceRevisionSchema,
+  storageFacts: StorageFactsSchema,
+  ocrInput: OcrInputSchema,
+  result: CapabilityResultSchema.nullable(),
+}).superRefine((work, context) => {
+  if ((work.executionState === 'provider_succeeded') !== (work.result !== null)) {
+    context.addIssue({ code: 'custom', message: 'Claim work result does not match state' });
+  }
+});
+const ClaimResultSchema = z.strictObject({
+  outcome: z.enum(['claimed', 'duplicate', 'resume']),
+  authorization: AuthorizationSchema,
+  work: ClaimWorkSchema,
+});
 
 const METHODS = [
   'claimCapabilityExecution',
@@ -101,7 +134,11 @@ export function createCapabilityAuthorizer({ repository, supportedVersions, cloc
         leaseExpiresAt: value.leaseExpiresAt,
         supportedVersions: versions,
       });
-      return parse(AuthorizationSchema, result?.authorization, 'authorization');
+      return parse(ClaimResultSchema, {
+        outcome: result?.outcome,
+        authorization: result?.authorization,
+        work: result?.work,
+      }, 'claim result');
     },
 
     async markCalling(input) {

@@ -122,6 +122,32 @@ function authorization(execution, reservation) {
   };
 }
 
+function claimWork(execution, fragment, resultInput) {
+  const result = resultInput ? parseCapabilityResult(resultInput) : null;
+  const metadata = fragment.technicalMetadata;
+  return {
+    executionState: execution.state,
+    sourceRevision: execution.sourceRevision,
+    storageFacts: {
+      bucket: fragment.storage.bucket,
+      originalPath: fragment.storage.originalPath,
+      generation: fragment.storage.generation,
+      contentType: fragment.storage.contentType,
+      sizeBytes: fragment.storage.sizeBytes,
+      crc32c: fragment.storage.crc32c,
+      md5Hash: fragment.storage.md5Hash,
+    },
+    ocrInput: {
+      format: metadata?.format ?? 'text',
+      mimeType: fragment.storage.contentType,
+      sizeBytes: fragment.storage.sizeBytes,
+      width: metadata?.width ?? null,
+      height: metadata?.height ?? null,
+    },
+    result,
+  };
+}
+
 function requireLease(execution, input) {
   if (execution.leaseOwner !== input?.leaseOwner) {
     throw new RepositoryConflictError('Capability lease is not held by this delivery');
@@ -190,6 +216,7 @@ export function applyCapabilityClaim(context) {
         execution,
         routePlan: parsed.plan,
         authorization: authorization(execution, parsed.reservation),
+        work: claimWork(execution, parsed.fragment, context.result),
       };
     }
     execution = parseCapabilityExecution({
@@ -221,6 +248,7 @@ export function applyCapabilityClaim(context) {
     execution,
     routePlan,
     authorization: authorization(execution, parsed.reservation),
+    work: claimWork(execution, parsed.fragment, null),
   };
 }
 

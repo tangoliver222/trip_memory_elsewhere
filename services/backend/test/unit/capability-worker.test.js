@@ -2,19 +2,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createOcrCapabilityWorker } from '../../src/capabilities/worker.js';
+import { makeCapabilityIdentity } from '../../src/capabilities/identity.js';
 import { normalizeDocumentAiOcr } from '../../src/capabilities/ocr-normalizer.js';
 import { retryableProcessingError } from '../../src/processing/errors.js';
 import {
   makeCapabilityArtifactRef,
   makeOcrCapabilityResult,
-  makeOcrReceipt,
 } from '../fixtures/capabilities.js';
 import { makeRoutableFragment, ROUTING_SOURCE_REVISION } from '../fixtures/routing.js';
 
 const NOW = '2026-07-17T13:30:00.000Z';
 const LEASE_OWNER = 'delivery_12345678';
+const IDENTITY = makeCapabilityIdentity({
+  ownerId: 'user_alpha',
+  fragmentId: 'frag_12345678',
+  sourceRevision: ROUTING_SOURCE_REVISION,
+  routePlanRevision: 1,
+  capability: 'ocr',
+  provider: 'document-ai-enterprise-ocr',
+  providerVersion: 'fake-processor-v1',
+});
 const TASK = Object.freeze({
-  capabilityExecutionId: 'execution_12345678',
+  capabilityExecutionId: IDENTITY.executionId,
   ownerId: 'user_alpha',
   routePlanId: 'route_12345678',
   routePlanRevision: 1,
@@ -30,7 +39,7 @@ const AUTHORIZATION = Object.freeze({
   executorVersion: 'v1',
   providerName: 'document-ai-enterprise-ocr',
   providerVersion: 'fake-processor-v1',
-  idempotencyKey: 'idem_12345678',
+  idempotencyKey: IDENTITY.idempotencyKey,
   ceilingMicros: 1_500,
 });
 const SUPPORTED_VERSIONS = Object.freeze({
@@ -50,6 +59,23 @@ const DOCUMENT = JSON.parse(await readFile(
   new URL('../fixtures/document-ai/one-page-response.json', import.meta.url),
   'utf8',
 ));
+const EMPTY_DOCUMENT = Object.freeze({
+  text: '',
+  pages: [{
+    pageNumber: 1,
+    dimension: { width: 1_200, height: 800, unit: 'pixel' },
+    layout: {
+      textAnchor: { textSegments: [{ startIndex: '0', endIndex: '0' }] },
+      confidence: 0,
+    },
+    blocks: [],
+    paragraphs: [],
+    lines: [],
+    tokens: [],
+    detectedLanguages: [],
+    imageQualityScores: { qualityScore: 0, detectedDefects: [] },
+  }],
+});
 
 function claimWork(overrides = {}) {
   const fragment = makeRoutableFragment();
@@ -67,6 +93,24 @@ function claimWork(overrides = {}) {
     result: null,
     ...overrides,
   };
+}
+
+function artifactRef(kind) {
+  return makeCapabilityArtifactRef({
+    kind,
+    objectName: `users/user_alpha/capability-results/${IDENTITY.executionId}/${kind}.json.gz`,
+  });
+}
+
+function resumableResult(overrides = {}) {
+  return makeOcrCapabilityResult({
+    id: IDENTITY.resultId,
+    executionRef: { type: 'capabilityExecution', id: IDENTITY.executionId },
+    sourceRevision: ROUTING_SOURCE_REVISION,
+    providerArtifactRef: artifactRef('provider'),
+    normalizedArtifactRef: artifactRef('normalized'),
+    ...overrides,
+  });
 }
 
 function harness(options = {}) {
@@ -151,12 +195,12 @@ function harness(options = {}) {
     async putProviderArtifact() {
       order.push('providerArtifact');
       if (options.providerArtifactError) throw options.providerArtifactError;
-      return makeCapabilityArtifactRef();
+      return artifactRef('provider');
     },
     async putNormalizedArtifact() {
       order.push('normalizedArtifact');
       if (options.normalizedArtifactError) throw options.normalizedArtifactError;
-      return makeCapabilityArtifactRef({ kind: 'normalized' });
+      return artifactRef('normalized');
     },
   };
   const normalizer = (input) => {
@@ -204,7 +248,7 @@ test('stale authority is a terminal no-op before materialization or provider use
 });
 
 test('provider-succeeded redelivery resumes escalation and settlement without another call', async () => {
-  const result = makeOcrCapabilityResult({ outcome: 'insufficient_input' });
+  const result = resumableResult({ outcome: 'insufficient_input' });
   const { worker, order, calls } = harness({
     work: claimWork({ executionState: 'provider_succeeded', result }),
   });
@@ -245,7 +289,7 @@ test('provider rejection after invocation becomes non-retryable billing uncertai
 });
 
 test('empty OCR persists evidence before requesting controlled escalation', async () => {
-  const { worker, order, calls } = harness({ document: { text: '', pages: [] } });
+  const { worker, order, calls } = harness({ document: EMPTY_DOCUMENT });
   assert.deepEqual(await worker.handle(TASK), {
     outcome: 'insufficient_input', retryable: false,
   });
@@ -299,7 +343,7 @@ test('unexpected provider page count or post-call persistence failure prevents a
 test('settlement or escalation failure resumes safely without another provider call', async () => {
   for (const options of [
     { settleError: new Error('repository unavailable') },
-    { document: { text: '', pages: [] }, escalationError: new Error('repository unavailable') },
+    { document: EMPTY_DOCUMENT, escalationError: new Error('repository unavailable') },
   ]) {
     const { worker, calls } = harness(options);
     assert.deepEqual(await worker.handle(TASK), {
