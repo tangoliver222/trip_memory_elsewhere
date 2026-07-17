@@ -1,6 +1,6 @@
 # Elsewhere Deterministic Processing v1
 
-更新日期：2026-07-16
+更新日期：2026-07-17
 状态：Module 4 已实现并在本地、Firebase Emulator 与 Linux 容器验证；未部署生产环境。
 
 ## 1. 范围与边界
@@ -97,7 +97,7 @@ libwebp 1.6.0
 exifreader 4.41.0
 ```
 
-2026-07-16 本地与 `node:22-slim` 镜像的实际 smoke 输出一致：
+2026-07-17 本地与 `node:22-slim` 镜像的实际 smoke 输出一致：
 
 ```json
 {"ok":true,"library":{"sharp":"0.35.3","libvips":"8.18.3","heif":"1.23.1","webp":"1.6.0"},"capabilities":{"decode":{"jpeg":true,"png":true,"webp":true,"heic":false,"heif":false},"encode":{"webp":true}},"smoke":{"jpegInput":true,"pngInput":true,"webpInput":true,"webpOutput":true}}
@@ -155,7 +155,7 @@ v1 保持 Eventarc request 内同步处理，减少基础设施与运行成本�
 迁移时保留当前 Task ID、lease、checkpoint 与终态事务语义；不得把 `Retry-After` 当作队列
 正确性的组成部分。
 
-## 8. 2026-07-16 验证证据
+## 8. 2026-07-17 验证证据
 
 以下命令均在本次实现后实际执行：
 
