@@ -1,4 +1,7 @@
-import { randomUUID as nodeRandomUUID } from 'node:crypto';
+import { createHash, randomUUID as nodeRandomUUID } from 'node:crypto';
+import { createCloudTasksDispatcher } from '../adapters/cloud-tasks-dispatcher.js';
+import { createDocumentAiOcr } from '../adapters/document-ai-ocr.js';
+import { createFirebaseCapabilityArtifactStore } from '../adapters/firebase-capability-artifact-store.js';
 import { createFirebaseDerivativeStore } from '../adapters/firebase-derivative-store.js';
 import { createFirebaseObjectInspector } from '../adapters/firebase-object-inspector.js';
 import { createFirebaseSourceMaterializer } from '../adapters/firebase-source-materializer.js';
@@ -8,11 +11,30 @@ import { createFirebaseAdmin } from '../adapters/firebase.js';
 import { createMediaMetadataReader } from '../adapters/media-metadata-reader.js';
 import { createSharpImageProcessor } from '../adapters/sharp-image-processor.js';
 import { createSharpRoutingFeatureReader } from '../adapters/sharp-routing-feature-reader.js';
+import { normalizeDocumentAiOcr } from '../capabilities/ocr-normalizer.js';
+import { createCapabilityScheduler } from '../capabilities/scheduler.js';
+import { createOcrCapabilityWorker } from '../capabilities/worker.js';
 import { createDeterministicProcessor } from '../processing/service.js';
 import { createFirestoreRepository } from '../repositories/firestore.js';
 import { createAuthoritativeRouter } from '../routing/service.js';
 import { createApiComposition } from './api.js';
+import { createCapabilityWorkerComposition } from './capability-worker.js';
 import { createIngestionComposition } from './ingestion.js';
+
+const fakeDispatcher = Object.freeze({
+  async enqueueOcrTask({ taskName }) { return { outcome: 'created', taskName }; },
+});
+const fakeOcrProvider = Object.freeze({
+  async process() { throw new Error('Fake OCR provider has no configured response'); },
+});
+
+function providerAuditId(appConfig) {
+  const provider = appConfig.capabilities.documentAi;
+  const value = provider
+    ? `${provider.projectId}/${provider.location}/${provider.processorId}`
+    : 'fake/document-ai';
+  return `processoraudit_${createHash('sha256').update(value).digest('hex').slice(0, 32)}`;
+}
 
 export function createRuntimeApp(appConfig, {
   firebaseFactory = createFirebaseAdmin,
@@ -26,6 +48,11 @@ export function createRuntimeApp(appConfig, {
   thumbnailReaderFactory = createFirebaseThumbnailReader,
   routingFeatureReaderFactory = createSharpRoutingFeatureReader,
   authoritativeRouterFactory = createAuthoritativeRouter,
+  cloudTasksDispatcherFactory = createCloudTasksDispatcher,
+  capabilitySchedulerFactory = createCapabilityScheduler,
+  capabilityArtifactStoreFactory = createFirebaseCapabilityArtifactStore,
+  documentAiOcrFactory = createDocumentAiOcr,
+  capabilityWorkerFactory = createOcrCapabilityWorker,
   clock = () => new Date().toISOString(),
   randomUUID = nodeRandomUUID,
 } = {}) {
@@ -75,15 +102,64 @@ export function createRuntimeApp(appConfig, {
       clock,
       randomUUID,
     });
+    const dispatcher = appConfig.capabilities.mode === 'google'
+      ? cloudTasksDispatcherFactory({ config: appConfig.capabilities.cloudTasks })
+      : fakeDispatcher;
+    const capabilityScheduler = capabilitySchedulerFactory({
+      repository,
+      dispatcher,
+      providerVersion: appConfig.capabilities.ocr.providerVersion,
+      clock,
+    });
     return createIngestionComposition({
       appConfig,
       repository,
       objectInspector,
       deterministicProcessor,
       authoritativeRouter,
+      capabilityScheduler,
       allowedBuckets: appConfig.storageBuckets,
       clock,
     });
+  }
+
+  if (appConfig.serviceMode === 'capability-worker') {
+    const adapterConfig = Object.freeze({
+      storage: firebase.storage,
+      allowedBuckets: appConfig.storageBuckets,
+    });
+    const materializer = sourceMaterializerFactory(adapterConfig);
+    const artifactStore = capabilityArtifactStoreFactory(adapterConfig);
+    const ocrProvider = appConfig.capabilities.mode === 'google'
+      ? documentAiOcrFactory({ config: appConfig.capabilities.documentAi })
+      : fakeOcrProvider;
+    const providerVersion = appConfig.capabilities.ocr.providerVersion;
+    const supportedVersions = Object.freeze({
+      router: Object.freeze(['v1']),
+      policy: Object.freeze(['v2']),
+      costModel: Object.freeze(['v2']),
+      executors: Object.freeze({ 'document-ocr': Object.freeze(['v1']) }),
+      providers: Object.freeze({
+        'document-ai-enterprise-ocr': Object.freeze([providerVersion]),
+      }),
+    });
+    const worker = capabilityWorkerFactory({
+      repository,
+      materializer,
+      ocrProvider,
+      artifactStore,
+      normalizer: normalizeDocumentAiOcr,
+      clock,
+      leaseOwnerFactory: () => `delivery_${randomUUID()}`,
+      supportedVersions,
+      providerMetadata: Object.freeze({
+        endpointRegion: appConfig.capabilities.documentAi?.location ?? 'local',
+        pricingVersion: 'document-ai-enterprise-ocr-2026-07-17',
+        processorAuditId: providerAuditId(appConfig),
+        unitCostMicros: 1_500,
+      }),
+    });
+    return createCapabilityWorkerComposition({ appConfig, worker });
   }
 
   throw new TypeError('Unsupported Elsewhere service mode');

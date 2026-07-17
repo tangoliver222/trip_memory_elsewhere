@@ -82,6 +82,7 @@ test('ingestion composition exposes only public probes and the finalized receive
     allowedBuckets: ['demo-elsewhere.appspot.com'],
     deterministicProcessor: { async handle() { throw new Error('not reached'); } },
     authoritativeRouter: { async handle() { throw new Error('not reached'); } },
+    capabilityScheduler: { async handle() { throw new Error('not reached'); } },
     clock: () => '2026-07-16T05:30:00.000Z',
   });
   t.after(() => app.close());
@@ -232,6 +233,16 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
     allowedAppIds: [],
     storageBuckets: ingestionBuckets,
     processing: processingConfig,
+    capabilities: {
+      mode: 'fake',
+      ocr: {
+        executorVersion: 'v1',
+        provider: 'document-ai',
+        providerVersion: 'fake-processor-v1',
+      },
+      cloudTasks: null,
+      documentAi: null,
+    },
   }, {
     firebaseFactory,
     repositoryFactory,
