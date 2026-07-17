@@ -83,10 +83,33 @@ function createContentHashBarrierDatabase(database) {
 function createRoutingBarrierDatabase(database) {
   let resolveBarrier;
   let arrivals = 0;
+  let armed = false;
   const barrier = new Promise((resolve) => {
     resolveBarrier = resolve;
   });
   const attemptCounts = [];
+  const waitForBothRoutingHeadReads = async () => {
+    arrivals += 1;
+    if (arrivals === 2) {
+      armed = false;
+      resolveBarrier();
+    }
+    if (arrivals >= 2) return;
+    let timeout;
+    try {
+      await Promise.race([
+        barrier,
+        new Promise((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error('routing transaction barrier timed out')),
+            5_000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
   const db = new Proxy(database, {
     get(target, property) {
       if (property !== 'runTransaction') {
@@ -101,38 +124,30 @@ function createRoutingBarrierDatabase(database) {
           const firstAttempt = attemptCounts[transactionIndex] === 1;
           const wrapped = new Proxy(transaction, {
             get(transactionTarget, transactionProperty) {
-              if (transactionProperty !== 'get') {
-                const value = Reflect.get(
-                  transactionTarget,
-                  transactionProperty,
-                  transactionTarget,
-                );
-                return typeof value === 'function' ? value.bind(transactionTarget) : value;
-              }
-              return async (reference) => {
-                const snapshot = await transactionTarget.get(reference);
-                if (firstAttempt && reference?.path?.includes('/routingHeads/')) {
-                  arrivals += 1;
-                  if (arrivals === 2) resolveBarrier();
-                  if (arrivals < 2) {
-                    let timeout;
-                    try {
-                      await Promise.race([
-                        barrier,
-                        new Promise((_, reject) => {
-                          timeout = setTimeout(
-                            () => reject(new Error('routing transaction barrier timed out')),
-                            5_000,
-                          );
-                        }),
-                      ]);
-                    } finally {
-                      clearTimeout(timeout);
-                    }
+              if (transactionProperty === 'get') {
+                return async (reference) => {
+                  if (armed && firstAttempt && reference?.path?.includes('/routingHeads/')) {
+                    await waitForBothRoutingHeadReads();
                   }
-                }
-                return snapshot;
-              };
+                  return transactionTarget.get(reference);
+                };
+              }
+              if (transactionProperty === 'getAll') {
+                return async (...references) => {
+                  if (armed && firstAttempt && references.some(
+                    (reference) => reference?.path?.includes('/routingHeads/'),
+                  )) {
+                    await waitForBothRoutingHeadReads();
+                  }
+                  return transactionTarget.getAll(...references);
+                };
+              }
+              const value = Reflect.get(
+                transactionTarget,
+                transactionProperty,
+                transactionTarget,
+              );
+              return typeof value === 'function' ? value.bind(transactionTarget) : value;
             },
           });
           return callback(wrapped);
@@ -140,7 +155,13 @@ function createRoutingBarrierDatabase(database) {
       };
     },
   });
-  return { db, attemptCounts };
+  return {
+    db,
+    attemptCounts,
+    arm() {
+      armed = true;
+    },
+  };
 }
 
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
@@ -202,7 +223,7 @@ if (!process.env.FIRESTORE_EMULATOR_HOST) {
     },
   });
 
-  const routingAttempts = new WeakMap();
+  const routingBarriers = new WeakMap();
   runRoutingRepositoryContract({
     name: 'Firestore repository',
     createRepository: async ({ ownerId, context }) => {
@@ -218,11 +239,14 @@ if (!process.env.FIRESTORE_EMULATOR_HOST) {
         context.after(() => database.recursiveDelete(ownerRef));
         const barrier = createRoutingBarrierDatabase(database);
         const repository = createFirestoreRepository({ db: barrier.db });
-        routingAttempts.set(repository, barrier.attemptCounts);
+        routingBarriers.set(repository, barrier);
         return repository;
       },
       attemptCountsFor(repository) {
-        return routingAttempts.get(repository);
+        return routingBarriers.get(repository).attemptCounts;
+      },
+      arm(repository) {
+        routingBarriers.get(repository).arm();
       },
       async seedLedger(ownerId, ledger) {
         await database.doc(`users/${ownerId}/budgetLedgers/${ledger.id}`).set(ledger);

@@ -808,6 +808,7 @@ export function runRoutingRepositoryContract({
         reservedMicros: 1_994_000,
       });
       await firestoreConcurrencyCase.seedLedger(ownerId, ledger);
+      firestoreConcurrencyCase.arm(repository);
 
       const results = await Promise.all([
         repository.commitRoutingApproval(ownerId, approval(firstSeed.batch.id, first.id)),
@@ -844,6 +845,7 @@ export function runRoutingRepositoryContract({
       });
       await repository.saveRoutingDraft(ownerId, { routePlan: winnerCandidate });
       await firestoreConcurrencyCase.seedRoutePlan(ownerId, loserCandidate);
+      firestoreConcurrencyCase.arm(repository);
 
       const settled = await Promise.allSettled([
         repository.commitRoutingApproval(
