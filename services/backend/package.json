@@ -10,7 +10,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
-    "test:emulator": "firebase emulators:exec --project demo-elsewhere --config ../../firebase/firebase.json --only auth,firestore,storage \"node --test --test-concurrency=1 test/emulator/auth-boundary.emulator.test.js test/emulator/import-original.emulator.test.js test/rules/firestore.rules.test.js test/rules/storage.rules.test.js test/contract/firestore-repository.test.js\"",
+    "test:emulator": "firebase emulators:exec --project demo-elsewhere --config ../../firebase/firebase.json --only auth,firestore,storage \"node --test --test-concurrency=1 test/emulator/auth-boundary.emulator.test.js test/emulator/import-original.emulator.test.js test/emulator/deterministic-processing.emulator.test.js test/rules/firestore.rules.test.js test/rules/storage.rules.test.js test/contract/firestore-repository.test.js\"",
     "test:legacy": "node --test test/legacy/*.test.js"
   },
   "dependencies": {

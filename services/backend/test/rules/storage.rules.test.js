@@ -150,6 +150,42 @@ test('Storage rules bind owner creates to pending ImportBatch manifest items', {
         { contentType: 'image/jpeg' },
       ));
     });
+
+    await t.test('only the owner can read server-created derivatives', async () => {
+      const derivedPath = 'users/user_alpha/derived/frag_derived01/deterministic-media/v1/hash/thumb.webp';
+      await environment.withSecurityRulesDisabled(async (context) => {
+        await uploadBytes(ref(context.storage(), derivedPath), bytes, {
+          contentType: 'image/webp',
+        });
+      });
+      const owner = environment.authenticatedContext('user_alpha').storage();
+      const other = environment.authenticatedContext('user_beta').storage();
+      const anonymous = environment.unauthenticatedContext().storage();
+
+      await assertSucceeds(getBytes(ref(owner, derivedPath)));
+      await assertFails(getBytes(ref(other, derivedPath)));
+      await assertFails(getBytes(ref(anonymous, derivedPath)));
+    });
+
+    await t.test('clients cannot create, overwrite, or delete derivatives', async () => {
+      const derivedPath = 'users/user_alpha/derived/frag_derived02/deterministic-media/v1/hash/thumb.webp';
+      await environment.withSecurityRulesDisabled(async (context) => {
+        await uploadBytes(ref(context.storage(), derivedPath), bytes, {
+          contentType: 'image/webp',
+        });
+      });
+      const owner = environment.authenticatedContext('user_alpha').storage();
+
+      await assertFails(uploadBytes(
+        ref(owner, 'users/user_alpha/derived/frag_derived03/deterministic-media/v1/hash/thumb.webp'),
+        bytes,
+        { contentType: 'image/webp' },
+      ));
+      await assertFails(uploadBytes(ref(owner, derivedPath), bytes, {
+        contentType: 'image/webp',
+      }));
+      await assertFails(deleteObject(ref(owner, derivedPath)));
+    });
   } finally {
     await environment.cleanup();
   }

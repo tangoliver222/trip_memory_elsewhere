@@ -72,6 +72,63 @@ test('Firestore rules isolate owner data and block client-derived writes', { ski
       }));
       await assertFails(deleteDoc(doc(database, batchPath)));
     });
+
+    await t.test('only the owner can read DuplicateCandidate documents', async () => {
+      const candidatePath = 'users/user_alpha/duplicateCandidates/candidate_12345678';
+      await environment.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), candidatePath), {
+          ownerId: 'user_alpha',
+          kind: 'exact',
+        });
+      });
+      const owner = environment.authenticatedContext('user_alpha').firestore();
+      const other = environment.authenticatedContext('user_beta').firestore();
+      const anonymous = environment.unauthenticatedContext().firestore();
+
+      await assertSucceeds(getDoc(doc(owner, candidatePath)));
+      await assertFails(getDoc(doc(other, candidatePath)));
+      await assertFails(getDoc(doc(anonymous, candidatePath)));
+    });
+
+    await t.test('clients cannot mutate DuplicateCandidate documents', async () => {
+      const candidatePath = 'users/user_alpha/duplicateCandidates/candidate_write01';
+      await environment.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), candidatePath), { ownerId: 'user_alpha' });
+      });
+      const owner = environment.authenticatedContext('user_alpha').firestore();
+
+      await assertFails(setDoc(
+        doc(owner, 'users/user_alpha/duplicateCandidates/candidate_create01'),
+        { ownerId: 'user_alpha' },
+      ));
+      await assertFails(updateDoc(doc(owner, candidatePath), { status: 'confirmed' }));
+      await assertFails(deleteDoc(doc(owner, candidatePath)));
+    });
+
+    await t.test('ProcessingTask and ContentHash stay private from every client', async () => {
+      const internalPaths = [
+        'users/user_alpha/processingTasks/task_12345678',
+        `users/user_alpha/contentHashes/${'a'.repeat(64)}`,
+      ];
+      await environment.withSecurityRulesDisabled(async (context) => {
+        for (const internalPath of internalPaths) {
+          await setDoc(doc(context.firestore(), internalPath), { ownerId: 'user_alpha' });
+        }
+      });
+
+      for (const database of [
+        environment.authenticatedContext('user_alpha').firestore(),
+        environment.authenticatedContext('user_beta').firestore(),
+        environment.unauthenticatedContext().firestore(),
+      ]) {
+        for (const internalPath of internalPaths) {
+          await assertFails(getDoc(doc(database, internalPath)));
+          await assertFails(setDoc(doc(database, `${internalPath}_new`), {
+            ownerId: 'user_alpha',
+          }));
+        }
+      }
+    });
   } finally {
     await environment.cleanup();
   }
