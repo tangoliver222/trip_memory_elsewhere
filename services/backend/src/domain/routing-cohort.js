@@ -22,6 +22,9 @@ const FragmentReferenceSchema = z.strictObject({
 });
 
 const CodeSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{1,63}$/);
+const WarningCodeSchema = z.string().regex(
+  /^(?:[a-z0-9][a-z0-9-]{1,63}|routing\/[a-z0-9][a-z0-9-]{1,55})$/,
+);
 
 function sortedUniqueReferences(max) {
   return z.array(FragmentReferenceSchema).max(max).superRefine((refs, context) => {
@@ -36,15 +39,20 @@ function sortedUniqueReferences(max) {
   });
 }
 
-const CodesSchema = z.array(CodeSchema).max(32).superRefine((codes, context) => {
-  if (new Set(codes).size !== codes.length) {
-    context.addIssue({ code: 'custom', message: 'Codes must be unique' });
-  }
-  const sorted = [...codes].sort();
-  if (codes.some((code, index) => code !== sorted[index])) {
-    context.addIssue({ code: 'custom', message: 'Codes must be sorted' });
-  }
-});
+function codesSchema(schema) {
+  return z.array(schema).max(32).superRefine((codes, context) => {
+    if (new Set(codes).size !== codes.length) {
+      context.addIssue({ code: 'custom', message: 'Codes must be unique' });
+    }
+    const sorted = [...codes].sort();
+    if (codes.some((code, index) => code !== sorted[index])) {
+      context.addIssue({ code: 'custom', message: 'Codes must be sorted' });
+    }
+  });
+}
+
+const CodesSchema = codesSchema(CodeSchema);
+const WarningCodesSchema = codesSchema(WarningCodeSchema);
 
 export const RoutingCohortSchema = z.strictObject({
   ...CommonFields,
@@ -64,7 +72,7 @@ export const RoutingCohortSchema = z.strictObject({
     version: ProcessorVersionSchema,
   }),
   basisCodes: CodesSchema.refine((codes) => codes.length > 0, 'Basis is required'),
-  warningCodes: CodesSchema,
+  warningCodes: WarningCodesSchema,
   state: z.enum(['open', 'resolved', 'superseded']),
   resolvedAt: IsoDateTimeSchema.nullable(),
 }).superRefine((cohort, context) => {

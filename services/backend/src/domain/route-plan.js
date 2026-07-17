@@ -31,14 +31,18 @@ export const ROUTING_CAPABILITIES = Object.freeze([
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const CodeSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{1,63}$/);
+const RouteReasonSchema = z.string().regex(
+  /^(?:[a-z0-9][a-z0-9-]{1,63}|routing\/[a-z0-9][a-z0-9-]{1,55})$/,
+);
 
-function uniqueSorted(schema, { min = 0, max = 32 } = {}) {
+function uniqueSorted(schema, { min = 0, max = 32, key = (value) => value } = {}) {
   return z.array(schema).min(min).max(max).superRefine((values, context) => {
-    if (new Set(values).size !== values.length) {
+    const keys = values.map(key);
+    if (new Set(keys).size !== keys.length) {
       context.addIssue({ code: 'custom', message: 'Values must be unique' });
     }
-    const sorted = [...values].sort();
-    if (values.some((value, index) => value !== sorted[index])) {
+    const sorted = [...keys].sort();
+    if (keys.some((value, index) => value !== sorted[index])) {
       context.addIssue({ code: 'custom', message: 'Values must be sorted' });
     }
   });
@@ -152,13 +156,16 @@ export const RoutePlanSchema = z.strictObject({
   representation: z.strictObject({
     role: z.enum(['independent', 'representative', 'supporting']),
     representativeRef: typedReference('fragment'),
-    cohortRefs: uniqueSorted(typedReference('routingCohort'), { max: 32 }),
+    cohortRefs: uniqueSorted(typedReference('routingCohort'), {
+      max: 32,
+      key: ({ id }) => id,
+    }),
     reasonCodes: uniqueSorted(CodeSchema, { min: 1 }),
   }),
   capabilities: CapabilitiesSchema,
   priority: z.enum(['low', 'normal', 'high']),
   budgetClass: z.enum(['deterministic_only', 'standard']),
-  routeReasons: uniqueSorted(CodeSchema, { min: 1 }),
+  routeReasons: uniqueSorted(RouteReasonSchema, { min: 1 }),
   approvedAt: IsoDateTimeSchema.nullable(),
   completedAt: IsoDateTimeSchema.nullable(),
   supersededAt: IsoDateTimeSchema.nullable(),
