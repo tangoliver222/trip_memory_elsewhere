@@ -34,6 +34,31 @@ const AUTHORIZATION = {
   idempotencyKey: 'idem_12345678',
   ceilingMicros: 1_500,
 };
+const WORK = {
+  executionState: 'claimed',
+  sourceRevision: {
+    bucket: 'demo-elsewhere.appspot.com',
+    objectName: 'users/user_alpha/originals/batch_12345678/frag_12345678',
+    generation: '1740000000000001',
+    inputHash: 'a'.repeat(64),
+  },
+  storageFacts: {
+    bucket: 'demo-elsewhere.appspot.com',
+    originalPath: 'users/user_alpha/originals/batch_12345678/frag_12345678',
+    generation: '1740000000000001',
+    contentType: 'image/jpeg',
+    sizeBytes: 2_048,
+    crc32c: 'Y3JjIQ==',
+  },
+  ocrInput: {
+    format: 'jpeg',
+    mimeType: 'image/jpeg',
+    sizeBytes: 2_048,
+    width: 1_200,
+    height: 800,
+  },
+  result: null,
+};
 
 function makeRepository() {
   const calls = [];
@@ -49,7 +74,12 @@ function makeRepository() {
     repository[method] = async (uid, input) => {
       calls.push({ method, uid, input });
       return method === 'claimCapabilityExecution'
-        ? { outcome: 'claimed', authorization: AUTHORIZATION, internalLedgers: ['private'] }
+        ? {
+            outcome: 'claimed',
+            authorization: AUTHORIZATION,
+            work: WORK,
+            internalLedgers: ['private'],
+          }
         : { outcome: 'applied' };
     };
   }
@@ -70,7 +100,11 @@ function makeAuthorizer() {
 
 test('claim delegates lease and versions then returns only bounded authorization', async () => {
   const { authorizer, calls } = makeAuthorizer();
-  assert.deepEqual(await authorizer.claim(CLAIM), AUTHORIZATION);
+  assert.deepEqual(await authorizer.claim(CLAIM), {
+    outcome: 'claimed',
+    authorization: AUTHORIZATION,
+    work: WORK,
+  });
   assert.deepEqual(calls, [{
     method: 'claimCapabilityExecution',
     uid: CLAIM.uid,
