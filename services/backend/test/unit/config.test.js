@@ -31,14 +31,18 @@ test('loadConfig rejects an invalid port before startup', () => {
   );
 });
 
-test('loadConfig accepts only API and ingestion service modes', () => {
+test('loadConfig accepts only API ingestion and capability-worker service modes', () => {
   assert.equal(loadConfig({ NODE_ENV: 'test', ELSEWHERE_SERVICE_MODE: 'api' }).serviceMode, 'api');
   assert.equal(
     loadConfig({ NODE_ENV: 'test', ELSEWHERE_SERVICE_MODE: 'ingestion' }).serviceMode,
     'ingestion',
   );
+  assert.equal(
+    loadConfig({ NODE_ENV: 'test', ELSEWHERE_SERVICE_MODE: 'capability-worker' }).serviceMode,
+    'capability-worker',
+  );
   assert.throws(
-    () => loadConfig({ NODE_ENV: 'test', ELSEWHERE_SERVICE_MODE: 'worker' }),
+    () => loadConfig({ NODE_ENV: 'test', ELSEWHERE_SERVICE_MODE: 'unknown-worker' }),
     /Invalid backend configuration/,
   );
 });
