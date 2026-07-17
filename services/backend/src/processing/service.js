@@ -113,9 +113,37 @@ function addMilliseconds(instant, milliseconds) {
   return new Date(Date.parse(instant) + milliseconds).toISOString();
 }
 
-function assertBeforeDeadline(clock, signal, deadlineAt) {
-  if (signal.aborted || Date.parse(readClock(clock)) >= Date.parse(deadlineAt)) {
+function readBeforeDeadline(clock, signal, deadlineAt) {
+  const timestamp = readClock(clock);
+  if (signal.aborted || Date.parse(timestamp) >= Date.parse(deadlineAt)) {
     throw softTimeout();
+  }
+  return timestamp;
+}
+
+function assertBeforeDeadline(clock, signal, deadlineAt) {
+  readBeforeDeadline(clock, signal, deadlineAt);
+}
+
+async function settleBeforeDeadline(operation, { clock, signal, deadlineAt }) {
+  readBeforeDeadline(clock, signal, deadlineAt);
+  let removeAbortListener = () => {};
+  const aborted = new Promise((resolve, reject) => {
+    const onAbort = () => reject(softTimeout());
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+    removeAbortListener = () => signal.removeEventListener('abort', onAbort);
+  });
+  const pending = Promise.resolve().then(operation);
+  try {
+    const result = await Promise.race([pending, aborted]);
+    readBeforeDeadline(clock, signal, deadlineAt);
+    return result;
+  } finally {
+    removeAbortListener();
   }
 }
 
@@ -137,6 +165,10 @@ async function repositoryCall(operation) {
   } catch (error) {
     throw mapRepositoryError(error);
   }
+}
+
+function repositoryCallBeforeDeadline(operation, deadline) {
+  return settleBeforeDeadline(() => repositoryCall(operation), deadline);
 }
 
 async function storageCall(operation) {
@@ -521,6 +553,7 @@ export function createDeterministicProcessor({
       timeout?.unref?.();
       let cleanup = null;
       let terminalPersisted = false;
+      let terminalSettlementStarted = false;
       let primaryFailure = null;
       let technicalMetadata = null;
       let derivative = null;
@@ -556,14 +589,24 @@ export function createDeterministicProcessor({
             throw invalidMedia();
           }
           if (checkpointHash === null) {
-            assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
-            const registeredAt = readClock(clock);
-            await repositoryCall(() => store.registerContentHash(event.uid, {
-              taskId,
-              leaseOwner,
-              registeredAt,
-              sha256: material.inputHash,
-            }));
+            const registeredAt = readBeforeDeadline(
+              clock,
+              controller.signal,
+              claimInput.softDeadlineAt,
+            );
+            await repositoryCallBeforeDeadline(
+              () => store.registerContentHash(event.uid, {
+                taskId,
+                leaseOwner,
+                registeredAt,
+                sha256: material.inputHash,
+              }),
+              {
+                clock,
+                signal: controller.signal,
+                deadlineAt: claimInput.softDeadlineAt,
+              },
+            );
           }
 
           assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
@@ -618,10 +661,17 @@ export function createDeterministicProcessor({
           let nearMatches = [];
           if (perceptualHash !== null) {
             assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
-            const bandMatches = await repositoryCall(() => store.findNearDuplicateInputs(
-              event.uid,
-              { fragmentId: event.fragmentId, bands: perceptualHash.bands },
-            ));
+            const bandMatches = await repositoryCallBeforeDeadline(
+              () => store.findNearDuplicateInputs(
+                event.uid,
+                { fragmentId: event.fragmentId, bands: perceptualHash.bands },
+              ),
+              {
+                clock,
+                signal: controller.signal,
+                deadlineAt: claimInput.softDeadlineAt,
+              },
+            );
             let selected;
             try {
               selected = selectNearDuplicates({
@@ -645,8 +695,11 @@ export function createDeterministicProcessor({
             }
           }
 
-          assertBeforeDeadline(clock, controller.signal, claimInput.softDeadlineAt);
-          const completedAt = readClock(clock);
+          const completedAt = readBeforeDeadline(
+            clock,
+            controller.signal,
+            claimInput.softDeadlineAt,
+          );
           const completion = {
             taskId,
             leaseOwner,
@@ -664,9 +717,16 @@ export function createDeterministicProcessor({
             nearMatches,
             errorCode: null,
           };
-          const completed = await repositoryCall(
+          terminalSettlementStarted = true;
+          const completed = await repositoryCallBeforeDeadline(
             () => store.completeDeterministicProcessing(event.uid, completion),
+            {
+              clock,
+              signal: controller.signal,
+              deadlineAt: claimInput.softDeadlineAt,
+            },
           );
+          terminalSettlementStarted = false;
           if (completed?.outcome === 'duplicate') {
             terminalPersisted = true;
             return TERMINAL_NOOP;
@@ -678,13 +738,20 @@ export function createDeterministicProcessor({
           const error = caught instanceof ProcessingError ? caught : repositoryUnavailable();
           primaryFailure = error;
           if (error.code === 'processing/task-busy') throw error;
+          if (terminalSettlementStarted && error.code === 'processing/soft-timeout') {
+            throw error;
+          }
           if (!error.retryable) {
-            const completedAt = readClock(clock);
+            const completedAt = readBeforeDeadline(
+              clock,
+              controller.signal,
+              claimInput.softDeadlineAt,
+            );
             let completed;
             try {
-              completed = await repositoryCall(() => store.completeDeterministicProcessing(
-                event.uid,
-                terminalCompletion({
+              terminalSettlementStarted = true;
+              completed = await repositoryCallBeforeDeadline(
+                () => store.completeDeterministicProcessing(event.uid, terminalCompletion({
                   taskId,
                   leaseOwner,
                   completedAt,
@@ -694,12 +761,22 @@ export function createDeterministicProcessor({
                   perceptualHash,
                   capabilityStatuses,
                   warningCodes,
-                }),
-              ));
+                })),
+                {
+                  clock,
+                  signal: controller.signal,
+                  deadlineAt: claimInput.softDeadlineAt,
+                },
+              );
+              terminalSettlementStarted = false;
               if (!['applied', 'duplicate'].includes(completed?.outcome)) {
                 throw repositoryUnavailable();
               }
-            } catch {
+            } catch (settlementError) {
+              if (settlementError instanceof ProcessingError
+                && settlementError.code === 'processing/soft-timeout') {
+                throw settlementError;
+              }
               const failedAt = readClock(clock);
               try {
                 await store.failDeterministicProcessing(event.uid, {
