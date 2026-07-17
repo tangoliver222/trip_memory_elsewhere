@@ -1133,11 +1133,18 @@ test('Storage Firestore and soft-timeout failures persist retryable state and th
   for (const fixture of cases) {
     await t.test(fixture.name, async () => {
       const { processor, calls } = createHarness(fixture.options);
+      const keepAlive = fixture.options.metadataWaitForAbort
+        ? setTimeout(() => {}, 1_000)
+        : null;
 
-      await assert.rejects(
-        () => processor.handle(EVENT),
-        (error) => assertStableError(error, fixture.code, true),
-      );
+      try {
+        await assert.rejects(
+          () => processor.handle(EVENT),
+          (error) => assertStableError(error, fixture.code, true),
+        );
+      } finally {
+        if (keepAlive !== null) clearTimeout(keepAlive);
+      }
       assert.deepEqual(calls.order, fixture.order);
       assert.equal(calls.fail.length, 1);
       assert.deepEqual(calls.fail[0].input, {
