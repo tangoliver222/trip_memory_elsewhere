@@ -1,4 +1,10 @@
-import { NOW, makePendingBatch, makeUploadedFragment } from './import.js';
+import {
+  NOW,
+  makePendingBatch,
+  makeUploadItem,
+  makeUploadedFragment,
+} from './import.js';
+import { makeProcessingTask } from './processing.js';
 
 export const ROUTING_SOURCE_REVISION = Object.freeze({
   bucket: 'demo-elsewhere.appspot.com',
@@ -370,4 +376,118 @@ export function makeRoutingSummary(overrides = {}) {
 
 export function makeBatchWithRoutingSummary(overrides = {}) {
   return makePendingBatch({ routingSummary: makeRoutingSummary(), ...overrides });
+}
+
+export function makeRoutingEvent(fragment = makeRoutableFragment(), overrides = {}) {
+  return {
+    uid: fragment.ownerId,
+    batchId: fragment.batchId,
+    fragmentId: fragment.id,
+    sourceRevision: {
+      bucket: fragment.storage.bucket,
+      objectName: fragment.storage.originalPath,
+      generation: fragment.storage.generation,
+    },
+    ...overrides,
+  };
+}
+
+function terminalTask(fragment) {
+  const failed = fragment.processing.deterministic.state === 'failed_terminal';
+  return makeProcessingTask({
+    id: fragment.processing.deterministic.taskId,
+    ownerId: fragment.ownerId,
+    fragmentId: fragment.id,
+    batchId: fragment.batchId,
+    sourceRevision: {
+      bucket: fragment.storage.bucket,
+      objectName: fragment.storage.originalPath,
+      generation: fragment.storage.generation,
+    },
+    inputHash: fragment.hashes.sha256,
+    state: failed ? 'failed_terminal' : 'succeeded',
+    currentStep: 'complete',
+    leaseOwner: null,
+    outputs: {
+      metadataStatus: failed ? 'failed' : fragment.processing.deterministic.metadataStatus,
+      thumbnailStatus: fragment.processing.deterministic.thumbnailStatus,
+      perceptualHashStatus: fragment.processing.deterministic.perceptualHashStatus,
+      warningCodes: [],
+    },
+    lastErrorCode: failed ? 'processing/invalid-media' : null,
+    leaseAcquiredAt: null,
+    leaseExpiresAt: null,
+    completedAt: NOW,
+  });
+}
+
+export function makeRoutingServiceSnapshot({
+  fragments = [makeRoutableFragment()],
+  duplicateCandidates = [],
+  routePlans = [],
+  routingHeads = [],
+  routingCohorts = [],
+  escalationRequests = [],
+  settled = true,
+  batchId = fragments[0]?.batchId ?? 'batch_12345678',
+} = {}) {
+  const batchFragments = fragments
+    .filter((fragment) => fragment.batchId === batchId)
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const uploads = Object.fromEntries(batchFragments.map((fragment) => [
+    fragment.id,
+    makeUploadItem({
+      fragmentId: fragment.id,
+      ownerId: fragment.ownerId,
+      batchId,
+      state: 'finalized',
+      originalPath: fragment.storage.originalPath,
+      finalizedGeneration: fragment.storage.generation,
+    }),
+  ]));
+  const succeeded = batchFragments.filter((fragment) => (
+    fragment.processing.deterministic.state === 'succeeded'
+  )).length;
+  const failedTerminal = batchFragments.length - succeeded;
+  const running = settled ? 0 : 1;
+  const settledSucceeded = Math.max(0, succeeded - running);
+  const batch = makePendingBatch({
+    id: batchId,
+    ownerId: batchFragments[0]?.ownerId ?? 'user_alpha',
+    status: settled ? (failedTerminal > 0 ? 'completed_with_errors' : 'completed') : 'processing',
+    uploadStatus: 'complete',
+    inputCount: batchFragments.length,
+    counters: {
+      saved: batchFragments.length,
+      processed: settledSucceeded,
+      failed: failedTerminal,
+      needsReview: 0,
+    },
+    processingSummary: {
+      deterministic: {
+        processorName: 'deterministic-media',
+        processorVersion: 'v1',
+        eligible: batchFragments.length,
+        running,
+        succeeded: settledSucceeded,
+        failedRetryable: 0,
+        failedTerminal,
+        unsupportedCapabilities: 0,
+        updatedAt: NOW,
+      },
+    },
+    uploads,
+  });
+  return {
+    batch,
+    fragments,
+    processingTasks: batchFragments.map(terminalTask),
+    duplicateCandidates,
+    routePlans,
+    routingHeads,
+    routingCohorts,
+    budgetReservations: [],
+    capabilityExecutions: [],
+    escalationRequests,
+  };
 }
