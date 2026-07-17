@@ -269,14 +269,41 @@ export function runRoutingRepositoryContract({
       batchId: seeded.batch.id,
     }), null);
 
+    const pendingBatchId = `batch_pending_${suffix}`;
+    const pendingFragmentId = `frag_pending_${suffix}`;
     const pendingBatch = makePendingBatch({
-      id: `batch_pending_${suffix}`,
+      id: pendingBatchId,
       ownerId,
+      status: 'processing',
+      uploadStatus: 'complete',
+      counters: { saved: 1, processed: 0, failed: 0, needsReview: 0 },
+      processingSummary: {
+        deterministic: {
+          processorName: 'deterministic-media',
+          processorVersion: 'v1',
+          eligible: 1,
+          running: 1,
+          succeeded: 0,
+          failedRetryable: 0,
+          failedTerminal: 0,
+          unsupportedCapabilities: 0,
+          updatedAt: '2026-07-16T00:01:00.000Z',
+        },
+      },
+      uploads: {
+        [pendingFragmentId]: makeUploadItem({
+          fragmentId: pendingFragmentId,
+          ownerId,
+          batchId: pendingBatchId,
+          state: 'finalized',
+          finalizedGeneration: '1740000000000001',
+        }),
+      },
     });
     const pendingFragment = makeUploadedFragment({
-      id: `frag_pending_${suffix}`,
+      id: pendingFragmentId,
       ownerId,
-      batchId: pendingBatch.id,
+      batchId: pendingBatchId,
     });
     await repository.createImportBatch(ownerId, pendingBatch);
     await repository.createFragment(ownerId, pendingFragment);
