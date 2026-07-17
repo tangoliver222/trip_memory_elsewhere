@@ -1340,6 +1340,33 @@ test('terminal-failure settlement timeout does not race a retryable failure writ
   assert.equal(calls.cleanup, 1);
 });
 
+test('terminal completion settled at the deadline is still a soft timeout', async () => {
+  let now = CLAIMED_AT;
+  const config = Object.freeze({
+    ...PROCESSING_CONFIG,
+    timeouts: Object.freeze({
+      ...PROCESSING_CONFIG.timeouts,
+      softMs: 50,
+      leaseMs: 100,
+    }),
+  });
+  const { processor, calls } = createHarness({
+    processingConfig: config,
+    clock: () => now,
+    completeHook: () => {
+      now = new Date(Date.parse(CLAIMED_AT) + config.timeouts.softMs).toISOString();
+    },
+  });
+
+  await assert.rejects(
+    () => processor.handle(EVENT),
+    (error) => assertStableError(error, 'processing/soft-timeout', true),
+  );
+  assert.equal(calls.complete.length, 1);
+  assert.equal(calls.fail.length, 0);
+  assert.equal(calls.cleanup, 1);
+});
+
 test('a retryable failure write failure becomes stable repository-unavailable', async () => {
   const { processor, calls } = createHarness({
     materializeError: retryableProcessingError('processing/storage-unavailable'),
