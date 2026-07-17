@@ -168,6 +168,34 @@ test('an unsettled batch persists only an immutable provisional draft', async ()
   )), true);
 });
 
+test('settlement closes provisional revisions before approving bounded final revisions', async () => {
+  const fragment = makeRoutableFragment();
+  const first = createHarness(makeRoutingServiceSnapshot({
+    fragments: [fragment],
+    settled: false,
+  }));
+  await first.router.handle(makeRoutingEvent(fragment));
+  const provisional = first.drafts[0];
+  const second = createHarness(makeRoutingServiceSnapshot({
+    fragments: [fragment],
+    routePlans: [provisional],
+    settled: true,
+  }));
+
+  assert.deepEqual(await second.router.handle(makeRoutingEvent(fragment)), {
+    outcome: 'approved',
+  });
+  assert.equal(second.approvals.length, 2);
+  assert.deepEqual(second.approvals[0].approvals.map(({ routePlanId }) => routePlanId), [
+    provisional.id,
+  ]);
+  assert.equal(Object.values(second.approvals[0].approvals[0].capabilityIntents)
+    .every(({ decision }) => decision === 'defer'), true);
+  assert.equal(second.approvals[1].approvals.length, 1);
+  assert.equal(second.drafts.length, 1);
+  assert.equal(second.drafts[0].revision, 2);
+});
+
 test('stale generation and nonterminal deterministic work are terminal no-ops', async () => {
   const fragment = makeRoutableFragment();
   const stale = createHarness(makeRoutingServiceSnapshot({ fragments: [fragment] }));
