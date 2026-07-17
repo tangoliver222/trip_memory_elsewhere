@@ -28,7 +28,11 @@ export const BudgetLedgerSchema = z.strictObject({
     z.strictObject({ type: z.literal('user_day'), key: z.string().date() }),
     z.strictObject({ type: z.literal('batch'), key: IdSchema }),
     z.strictObject({ type: z.literal('route'), key: IdSchema }),
-    z.strictObject({ type: z.literal('capability'), key: CapabilitySchema }),
+    z.strictObject({
+      type: z.literal('capability'),
+      key: CapabilitySchema,
+      routePlanId: IdSchema,
+    }),
   ]),
   currency: z.literal('USD'),
   ceilingMicros: MicrosSchema.positive(),

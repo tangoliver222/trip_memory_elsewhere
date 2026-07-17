@@ -172,18 +172,27 @@ export function makeBudgetLedgerId(scope) {
   requireObject(scope, 'scope');
   const type = requireEnum(scope.type, 'scope.type', LEDGER_SCOPES);
   let key;
+  let routePlanId;
   if (type === 'user_day') {
     key = requireUtcDate(scope.key, 'scope.key');
   } else if (type === 'capability') {
     key = requireCapability(scope.key, 'scope.key');
+    routePlanId = requireId(scope.routePlanId, 'scope.routePlanId');
   } else {
     key = requireId(scope.key, 'scope.key');
   }
-  return digestId('ledger', [
+  if (type !== 'capability' && Object.hasOwn(scope, 'routePlanId')) {
+    throw new TypeError('scope.routePlanId is only valid for capability ledgers');
+  }
+  const fields = [
     ['ownerId', requireId(scope.ownerId, 'scope.ownerId')],
     ['type', type],
     ['key', key],
-  ]);
+  ];
+  if (routePlanId !== undefined) {
+    fields.push(['routePlanId', routePlanId]);
+  }
+  return digestId('ledger', fields);
 }
 
 export function makeBudgetReservationId(input) {
