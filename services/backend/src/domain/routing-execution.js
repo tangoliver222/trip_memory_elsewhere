@@ -62,8 +62,10 @@ export const BudgetReservationSchema = z.strictObject({
   ledgerRefs: z.array(typedReference('budgetLedger')).min(1).max(4),
   state: z.enum(['reserved', 'settled', 'released', 'expired']),
   reservedAt: IsoDateTimeSchema,
+  actualCostMicros: MicrosSchema.nullable(),
   settledAt: NullableInstantSchema,
   releasedAt: NullableInstantSchema,
+  releaseReasonCode: CodeSchema.nullable(),
 }).superRefine((reservation, context) => {
   if (reservation.estimatedCostMicros > reservation.ceilingMicros) {
     context.addIssue({
@@ -74,14 +76,20 @@ export const BudgetReservationSchema = z.strictObject({
   }
   const validState = (
     (reservation.state === 'reserved'
+      && reservation.actualCostMicros === null
       && reservation.settledAt === null
-      && reservation.releasedAt === null)
+      && reservation.releasedAt === null
+      && reservation.releaseReasonCode === null)
     || (reservation.state === 'settled'
+      && reservation.actualCostMicros !== null
       && reservation.settledAt !== null
-      && reservation.releasedAt === null)
+      && reservation.releasedAt === null
+      && reservation.releaseReasonCode === null)
     || (['released', 'expired'].includes(reservation.state)
+      && reservation.actualCostMicros === null
       && reservation.settledAt === null
-      && reservation.releasedAt !== null)
+      && reservation.releasedAt !== null
+      && reservation.releaseReasonCode !== null)
   );
   if (!validState) {
     context.addIssue({ code: 'custom', message: 'Reservation lifecycle is invalid' });

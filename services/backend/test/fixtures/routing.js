@@ -299,8 +299,10 @@ export function makeBudgetReservation(overrides = {}) {
     ledgerRefs: [reference('budgetLedger', 'ledger_12345678')],
     state: 'reserved',
     reservedAt: NOW,
+    actualCostMicros: null,
     settledAt: null,
     releasedAt: null,
+    releaseReasonCode: null,
     ...overrides,
   };
 }
