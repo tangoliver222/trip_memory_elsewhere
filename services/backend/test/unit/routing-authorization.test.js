@@ -1,31 +1,38 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createCapabilityAuthorizer } from '../../src/routing/authorization.js';
 import {
-  createCapabilityAuthorizer,
-} from '../../src/routing/authorization.js';
-import { makeCapabilityExecutionId } from '../../src/routing/identity.js';
+  makeOcrCapabilityResult,
+  makeOcrReceipt,
+} from '../fixtures/capabilities.js';
 
 const NOW = '2026-07-17T12:00:00.000Z';
-const SOURCE_REVISION = {
-  bucket: 'demo-elsewhere.appspot.com',
-  objectName: 'users/user_alpha/originals/batch_12345678/frag_12345678',
-  generation: '1740000000000001',
-  inputHash: 'a'.repeat(64),
-};
+const LATER = '2026-07-17T12:05:00.000Z';
 const SUPPORTED_VERSIONS = {
   router: ['v1'],
-  policy: ['v1'],
-  costModel: ['v1'],
-  executors: { 'multimodal-embedding': ['v1'] },
+  policy: ['v2'],
+  costModel: ['v2'],
+  executors: { 'document-ocr': ['v1'] },
+  providers: { 'document-ai-enterprise-ocr': ['fake-processor-v1'] },
 };
 const CLAIM = {
   uid: 'user_alpha',
+  executionId: 'execution_12345678',
+  leaseOwner: 'delivery_12345678',
+  leaseExpiresAt: LATER,
+};
+const AUTHORIZATION = {
+  executionId: CLAIM.executionId,
   routePlanId: 'route_12345678',
-  capability: 'embedding',
-  executorClass: 'multimodal-embedding',
+  routePlanRevision: 1,
+  fragmentId: 'frag_12345678',
+  capability: 'ocr',
+  executorName: 'document-ocr',
   executorVersion: 'v1',
-  sourceRevision: SOURCE_REVISION,
+  providerName: 'document-ai-enterprise-ocr',
+  providerVersion: 'fake-processor-v1',
   idempotencyKey: 'idem_12345678',
+  ceilingMicros: 1_500,
 };
 
 function makeRepository() {
@@ -34,27 +41,16 @@ function makeRepository() {
   for (const method of [
     'claimCapabilityExecution',
     'markCapabilityCalling',
-    'recordCapabilityReceipt',
+    'recordCapabilityResult',
     'settleCapabilityExecution',
+    'failCapabilityExecution',
     'markCapabilityBillingUncertain',
   ]) {
     repository[method] = async (uid, input) => {
       calls.push({ method, uid, input });
-      if (method === 'claimCapabilityExecution') {
-        return {
-          outcome: 'claimed',
-          authorization: {
-            routePlanId: CLAIM.routePlanId,
-            capability: CLAIM.capability,
-            executorClass: CLAIM.executorClass,
-            scope: 'self',
-            idempotencyKey: CLAIM.idempotencyKey,
-            ceilingMicros: 5_000,
-          },
-          internalLedgers: ['must-not-escape'],
-        };
-      }
-      return { outcome: 'applied' };
+      return method === 'claimCapabilityExecution'
+        ? { outcome: 'claimed', authorization: AUTHORIZATION, internalLedgers: ['private'] }
+        : { outcome: 'applied' };
     };
   }
   return { repository, calls };
@@ -72,111 +68,81 @@ function makeAuthorizer() {
   };
 }
 
-test('claim delegates an exact server-owned authorization command and returns no ledgers', async () => {
+test('claim delegates lease and versions then returns only bounded authorization', async () => {
   const { authorizer, calls } = makeAuthorizer();
-  const result = await authorizer.claim(CLAIM);
-
-  assert.deepEqual(result, {
-    routePlanId: CLAIM.routePlanId,
-    capability: CLAIM.capability,
-    executorClass: CLAIM.executorClass,
-    scope: 'self',
-    idempotencyKey: CLAIM.idempotencyKey,
-    ceilingMicros: 5_000,
-  });
+  assert.deepEqual(await authorizer.claim(CLAIM), AUTHORIZATION);
   assert.deepEqual(calls, [{
     method: 'claimCapabilityExecution',
     uid: CLAIM.uid,
     input: {
-      routePlanId: CLAIM.routePlanId,
-      capability: CLAIM.capability,
-      executorClass: CLAIM.executorClass,
-      executorVersion: CLAIM.executorVersion,
-      sourceRevision: SOURCE_REVISION,
-      idempotencyKey: CLAIM.idempotencyKey,
-      supportedVersions: SUPPORTED_VERSIONS,
+      executionId: CLAIM.executionId,
+      leaseOwner: CLAIM.leaseOwner,
       claimedAt: NOW,
+      leaseExpiresAt: CLAIM.leaseExpiresAt,
+      supportedVersions: SUPPORTED_VERSIONS,
     },
   }]);
 });
 
-test('lifecycle methods derive one execution identity and never accept provider clients', async () => {
+test('worker lifecycle delegates execution and lease without deriving client identity', async () => {
   const { authorizer, calls } = makeAuthorizer();
   const tuple = {
     uid: CLAIM.uid,
-    routePlanId: CLAIM.routePlanId,
-    capability: CLAIM.capability,
-    idempotencyKey: CLAIM.idempotencyKey,
+    executionId: CLAIM.executionId,
+    leaseOwner: CLAIM.leaseOwner,
   };
-  const executionId = makeCapabilityExecutionId({
-    routePlanId: CLAIM.routePlanId,
-    capability: CLAIM.capability,
-    idempotencyKey: CLAIM.idempotencyKey,
-  });
-
+  const receipt = makeOcrReceipt();
+  const result = makeOcrCapabilityResult();
   await authorizer.markCalling(tuple);
-  await authorizer.recordProviderSuccess({
-    ...tuple,
-    providerRequestId: 'provider_request_123',
-    usage: { inputTokens: 128 },
-    actualCostMicros: 800,
-    resultRef: { type: 'capabilityResult', id: 'result_12345678' },
-  });
+  await authorizer.recordProviderSuccess({ ...tuple, receipt, result });
   await authorizer.settle(tuple);
-  await authorizer.fail({ ...tuple, errorCode: 'executor-failed' });
-  await authorizer.markBillingUncertain({ ...tuple, errorCode: 'provider-receipt-missing' });
+  await authorizer.fail({
+    ...tuple,
+    outcome: 'failed_terminal',
+    errorCode: 'provider-result-invalid',
+    result: null,
+  });
+  await authorizer.markBillingUncertain({
+    ...tuple,
+    errorCode: 'provider-call-uncertain',
+  });
 
   assert.deepEqual(calls.map(({ method }) => method), [
     'markCapabilityCalling',
-    'recordCapabilityReceipt',
+    'recordCapabilityResult',
     'settleCapabilityExecution',
-    'settleCapabilityExecution',
+    'failCapabilityExecution',
     'markCapabilityBillingUncertain',
   ]);
   assert.ok(calls.every(({ uid }) => uid === CLAIM.uid));
-  assert.ok(calls.every(({ input }) => input.executionId === executionId));
-  assert.equal(calls[1].input.receivedAt, NOW);
+  assert.ok(calls.every(({ input }) => input.executionId === CLAIM.executionId));
+  assert.ok(calls.every(({ input }) => input.leaseOwner === CLAIM.leaseOwner));
+  assert.equal(calls[0].input.calledAt, NOW);
+  assert.equal(calls[1].input.recordedAt, NOW);
   assert.equal(calls[2].input.settledAt, NOW);
-  assert.equal(calls[3].input.outcome, 'failed');
   assert.equal(calls[4].input.completedAt, NOW);
 });
 
-test('authorization inputs are strict and raw provider material is rejected before repository', async () => {
-  const { authorizer, calls } = makeAuthorizer();
+test('authorization rejects raw provider material extra fields and incomplete repositories', async () => {
+  const { authorizer, calls, repository } = makeAuthorizer();
   await assert.rejects(() => authorizer.claim({ ...CLAIM, ownerId: CLAIM.uid }), TypeError);
-  await assert.rejects(() => authorizer.claim({
-    ...CLAIM,
-    providerClient: { call() {} },
-  }), TypeError);
   await assert.rejects(() => authorizer.recordProviderSuccess({
     uid: CLAIM.uid,
-    routePlanId: CLAIM.routePlanId,
-    capability: CLAIM.capability,
-    idempotencyKey: CLAIM.idempotencyKey,
-    providerRequestId: 'provider_request_123',
-    usage: { inputTokens: 128 },
-    actualCostMicros: 800,
-    resultRef: { type: 'capabilityResult', id: 'result_12345678' },
+    executionId: CLAIM.executionId,
+    leaseOwner: CLAIM.leaseOwner,
+    receipt: makeOcrReceipt(),
+    result: makeOcrCapabilityResult(),
     rawResponse: { private: true },
   }), TypeError);
   assert.equal(calls.length, 0);
-});
-
-test('constructor rejects incomplete repositories versions and clocks', () => {
-  const { repository } = makeRepository();
   assert.throws(() => createCapabilityAuthorizer({
-    repository: {},
+    repository: { ...repository, recordCapabilityResult: undefined },
     supportedVersions: SUPPORTED_VERSIONS,
     clock: () => NOW,
   }), TypeError);
   assert.throws(() => createCapabilityAuthorizer({
     repository,
-    supportedVersions: { ...SUPPORTED_VERSIONS, router: [] },
+    supportedVersions: { ...SUPPORTED_VERSIONS, providers: {} },
     clock: () => NOW,
-  }), TypeError);
-  assert.throws(() => createCapabilityAuthorizer({
-    repository,
-    supportedVersions: SUPPORTED_VERSIONS,
-    clock: null,
   }), TypeError);
 });

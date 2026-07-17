@@ -7,6 +7,7 @@ import {
 import { runProcessingRepositoryContract } from './processing-repository.contract.js';
 import { runRepositoryContract } from './repository.contract.js';
 import { runRoutingRepositoryContract } from './routing-repository.contract.js';
+import { runCapabilityRepositoryContract } from './capability-repository.contract.js';
 
 runRepositoryContract({
   name: 'memory repository',
@@ -19,6 +20,11 @@ runProcessingRepositoryContract({
 });
 
 runRoutingRepositoryContract({
+  name: 'memory repository',
+  createRepository: async () => createMemoryRepository(),
+});
+
+runCapabilityRepositoryContract({
   name: 'memory repository',
   createRepository: async () => createMemoryRepository(),
 });
@@ -36,6 +42,7 @@ test('memory routing writes are copy-on-write atomic when a later write fails', 
     'budgetLedgers',
     'budgetReservations',
     'capabilityExecutions',
+    'capabilityResults',
     'escalationRequests',
   ];
   const state = Object.fromEntries(collections.map((collection) => [collection, new Map()]));

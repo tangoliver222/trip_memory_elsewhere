@@ -14,6 +14,7 @@ const COLLECTIONS = [
   'budgetLedgers',
   'budgetReservations',
   'capabilityExecutions',
+  'capabilityResults',
   'escalationRequests',
 ];
 

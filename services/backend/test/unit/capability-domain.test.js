@@ -108,3 +108,14 @@ test('unsupported result has no provider artifacts cost pages or suggested facts
   assert.deepEqual(parseCapabilityResult(unsupported), unsupported);
   assert.throws(() => parseCapabilityResult({ ...unsupported, actualCostMicros: 1 }));
 });
+
+test('completed unsupported execution has a result without a provider receipt or billable call', () => {
+  const execution = makeReservedOcrExecution({
+    state: 'completed',
+    taskName: 'ocr-task-12345678',
+    queuedAt: '2026-07-17T12:01:00.000Z',
+    resultRef: { type: 'capabilityResult', id: 'result_12345678' },
+    completedAt: '2026-07-17T12:02:00.000Z',
+  });
+  assert.deepEqual(parseCapabilityExecution(execution), execution);
+});
