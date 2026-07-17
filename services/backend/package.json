@@ -10,11 +10,13 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "smoke:media": "node scripts/media-capability-smoke.mjs",
+    "smoke:document-ai": "node scripts/document-ai-smoke.mjs",
     "test": "node --test",
     "test:emulator": "firebase emulators:exec --project demo-elsewhere --config ../../firebase/firebase.json --only auth,firestore,storage \"node --test --test-concurrency=1 test/emulator/auth-boundary.emulator.test.js test/emulator/import-original.emulator.test.js test/emulator/deterministic-processing.emulator.test.js test/emulator/authoritative-routing.emulator.test.js test/rules/firestore.rules.test.js test/rules/storage.rules.test.js test/contract/firestore-repository.test.js\"",
     "test:legacy": "node --test test/legacy/*.test.js"
   },
   "dependencies": {
+    "@google-cloud/documentai": "9.6.2",
     "@google-cloud/tasks": "6.2.3",
     "@google/genai": "1.52.0",
     "exifreader": "4.41.0",
