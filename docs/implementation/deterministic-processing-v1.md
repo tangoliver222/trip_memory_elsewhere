@@ -167,7 +167,7 @@ node --test test/unit/processing-domain.test.js test/unit/processing-identity.te
   test/unit/media-metadata-reader.test.js test/unit/sharp-image-processor.test.js \
   test/unit/firebase-derivative-store.test.js test/unit/deterministic-processor.test.js \
   test/unit/ingestion-pipeline.test.js
-# 214 pass, 0 fail, 0 skip
+# 219 pass, 0 fail, 0 skip
 
 node --test test/integration/ingestion-processing-app.test.js \
   test/integration/ingestion-app.test.js test/integration/composition.test.js
@@ -179,7 +179,7 @@ npm run test:emulator
 # 50 pass, 0 fail, 0 skip
 
 npm test
-# 384 total: 378 pass, 0 fail, 6 expected Emulator-environment skips
+# 389 total: 383 pass, 0 fail, 6 expected Emulator-environment skips
 
 npm audit --omit=dev
 # found 0 vulnerabilities
