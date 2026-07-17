@@ -201,6 +201,33 @@ test('Storage rules bind owner creates to pending ImportBatch manifest items', {
         await assertFails(deleteObject(ref(storage, derivedPath)));
       }
     });
+
+    await t.test('capability artifacts stay server-only for every client operation', async () => {
+      const artifactPath = 'users/user_alpha/capability-results/execution_12345678/provider.json.gz';
+      await environment.withSecurityRulesDisabled(async (context) => {
+        await uploadBytes(ref(context.storage(), artifactPath), bytes, {
+          contentType: 'application/gzip',
+        });
+      });
+      const contexts = [
+        ['owner', environment.authenticatedContext('user_alpha').storage()],
+        ['other', environment.authenticatedContext('user_beta').storage()],
+        ['anonymous', environment.unauthenticatedContext().storage()],
+      ];
+
+      for (const [label, storage] of contexts) {
+        await assertFails(getBytes(ref(storage, artifactPath)));
+        await assertFails(uploadBytes(
+          ref(storage, `users/user_alpha/capability-results/execution_${label}01/provider.json.gz`),
+          bytes,
+          { contentType: 'application/gzip' },
+        ));
+        await assertFails(uploadBytes(ref(storage, artifactPath), bytes, {
+          contentType: 'application/gzip',
+        }));
+        await assertFails(deleteObject(ref(storage, artifactPath)));
+      }
+    });
   } finally {
     await environment.cleanup();
   }

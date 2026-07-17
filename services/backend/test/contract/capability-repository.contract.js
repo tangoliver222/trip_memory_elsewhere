@@ -33,7 +33,7 @@ const METHODS = [
   'markCapabilityBillingUncertain',
 ];
 
-const SUPPORTED_VERSIONS = Object.freeze({
+export const SUPPORTED_VERSIONS = Object.freeze({
   router: ['v1'],
   policy: ['v2'],
   costModel: ['v2'],
@@ -83,7 +83,7 @@ function intents() {
   };
 }
 
-async function seedApprovedOcr(repository, ownerId, suffix) {
+export async function seedApprovedOcr(repository, ownerId, suffix) {
   const seeded = await seedDeterministicSuccess(repository, ownerId, suffix, 'receipt');
   const draft = makeRoutePlan({
     id: `route_ocr_${suffix}`,
