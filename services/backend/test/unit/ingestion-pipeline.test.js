@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStorageFinalizedPipeline } from '../../src/ingestion/pipeline.js';
+import { createOriginalFinalizer } from '../../src/ingestion/service.js';
+import { IngestionError } from '../../src/ingestion/errors.js';
 import { retryableProcessingError } from '../../src/processing/errors.js';
+import { createMemoryRepository } from '../../src/repositories/memory.js';
+import { makePendingBatch } from '../fixtures/import.js';
 
 const event = Object.freeze({
   eventId: 'event-12345678',
@@ -22,6 +26,14 @@ const processorEvent = Object.freeze({
     objectName: event.objectName,
     generation: event.generation,
   }),
+});
+
+const storageFacts = Object.freeze({
+  generation: event.generation,
+  contentType: 'image/jpeg',
+  sizeBytes: 2_841_930,
+  crc32c: 'ImIEBA==',
+  md5Hash: null,
 });
 
 function createPipeline(finalizerOutcome, processorOutcome = 'succeeded', calls = []) {
@@ -75,6 +87,82 @@ test('rejected upload never creates a processing task', async () => {
     ['finalizer', event],
     ['finalizer', event],
   ]);
+});
+
+test('a concurrent rejection wins over a successful inspection without creating processing work', async () => {
+  const repository = createMemoryRepository();
+  await repository.createImportBatch(event.uid, makePendingBatch());
+  let releaseInspection;
+  let markInspectionStarted;
+  const inspectionStarted = new Promise((resolve) => { markInspectionStarted = resolve; });
+  const inspectionReleased = new Promise((resolve) => { releaseInspection = resolve; });
+  const processorCalls = [];
+  const deterministicProcessor = {
+    async handle(received) {
+      processorCalls.push(received);
+      return { outcome: 'succeeded' };
+    },
+  };
+  const clock = () => '2026-07-16T06:10:00.000Z';
+  const successfulFinalizer = createOriginalFinalizer({
+    repository,
+    clock,
+    objectInspector: {
+      async inspectOriginal() {
+        markInspectionStarted();
+        await inspectionReleased;
+        return { detectedFormat: 'jpeg', storageFacts };
+      },
+    },
+  });
+  const rejectingFinalizer = createOriginalFinalizer({
+    repository,
+    clock,
+    objectInspector: {
+      async inspectOriginal() {
+        throw new IngestionError('ingestion/invalid-original', { permanent: true });
+      },
+    },
+  });
+  const successfulPipeline = createStorageFinalizedPipeline({
+    originalFinalizer: successfulFinalizer,
+    deterministicProcessor,
+  });
+  const rejectingPipeline = createStorageFinalizedPipeline({
+    originalFinalizer: rejectingFinalizer,
+    deterministicProcessor,
+  });
+
+  const inspected = successfulPipeline.handle(event);
+  await inspectionStarted;
+  assert.deepEqual(await rejectingPipeline.handle(event), { outcome: 'rejected' });
+  releaseInspection();
+  assert.deepEqual(await inspected, { outcome: 'rejected' });
+  assert.deepEqual(processorCalls, []);
+});
+
+test('invalid internal events stop before finalization or processing', async () => {
+  const calls = [];
+  const pipeline = createPipeline('applied', 'succeeded', calls);
+  const malformed = [
+    { ...event, uid: 'bad' },
+    { ...event, batchId: 'bad' },
+    { ...event, fragmentId: 'bad' },
+    { ...event, bucket: ' demo-elsewhere.appspot.com' },
+    { ...event, generation: '' },
+    { ...event, objectName: event.objectName.replace('user_alpha', 'user_other') },
+    { ...event, taskId: 'task_forged' },
+    { ...event, inputHash: 'a'.repeat(64) },
+    { ...event, sourceRevision: processorEvent.sourceRevision },
+  ];
+
+  for (const candidate of malformed) {
+    await assert.rejects(
+      () => pipeline.handle(candidate),
+      { code: 'internal/error', permanent: false },
+    );
+  }
+  assert.deepEqual(calls, []);
 });
 
 test('retryable processing propagates instead of acknowledging the event', async () => {

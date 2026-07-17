@@ -74,6 +74,7 @@ test('anonymous user saves one original through Auth, Firestore and Storage Emul
     tokenVerifier,
     allowedAppIds: ['elsewhere-web-dev'],
   });
+  const processingEvents = [];
   const ingestion = createIngestionComposition({
     appConfig,
     repository,
@@ -81,6 +82,12 @@ test('anonymous user saves one original through Auth, Firestore and Storage Emul
       storage: admin.storage,
       allowedBuckets: [bucketName],
     }),
+    deterministicProcessor: {
+      async handle(event) {
+        processingEvents.push(event);
+        return { outcome: processingEvents.length === 1 ? 'succeeded' : 'terminal_noop' };
+      },
+    },
     allowedBuckets: [bucketName],
   });
 
@@ -170,6 +177,16 @@ test('anonymous user saves one original through Auth, Firestore and Storage Emul
     });
     assert.equal(finalized.statusCode, 204);
   }
+  assert.deepEqual(processingEvents, [0, 1].map(() => ({
+    uid,
+    batchId: created.batch.id,
+    fragmentId: upload.fragmentId,
+    sourceRevision: {
+      bucket: bucketName,
+      objectName: originalPath,
+      generation: metadata.generation,
+    },
+  })));
 
   const receiptResponse = await api.inject({
     method: 'GET',

@@ -114,43 +114,72 @@ test('ingestion composition exposes only public probes and the finalized receive
 test('runtime selects one mode and builds exactly one Firebase dependency graph', async (t) => {
   const calls = [];
   const processingCalls = [];
+  const repositories = [];
+  const storageManager = { bucket() { return {}; } };
+  const processingConfig = Object.freeze({
+    timeouts: Object.freeze({
+      softMs: 180_000,
+      leaseMs: 240_000,
+      requestMs: 300_000,
+      cleanupMarginMs: 30_000,
+    }),
+    limits: Object.freeze({
+      maxInputBytes: 52_428_800,
+      maxInputPixels: 60_000_000,
+      maxImageWidth: 20_000,
+      maxImageHeight: 20_000,
+      maxPageCount: 100,
+      maxMetadataDecompressedBytes: 16_777_216,
+    }),
+  });
+  const clock = () => '2026-07-16T05:30:00.000Z';
+  const randomUUID = () => '00000000-0000-4000-8000-000000000001';
+  const ports = {};
   const firebaseFactory = (input) => {
     calls.push(input);
     return {
       db: {},
       auth: { async verifyIdToken() { return { uid: 'user_alpha' }; } },
       appCheck: { async verifyToken() { return { appId: 'elsewhere-web-test' }; } },
-      storage: { bucket() { return {}; } },
+      storage: storageManager,
     };
   };
   const repositoryFactory = ({ db }) => {
     assert.deepEqual(db, {});
-    return createMemoryRepository();
+    const repository = createMemoryRepository();
+    repositories.push(repository);
+    return repository;
   };
   const processingFactories = {
     objectInspectorFactory(input) {
       processingCalls.push(['objectInspector', input]);
-      return { async inspectOriginal() { throw new Error('not reached'); } };
+      ports.objectInspector = { async inspectOriginal() { throw new Error('not reached'); } };
+      return ports.objectInspector;
     },
     sourceMaterializerFactory(input) {
       processingCalls.push(['materializer', input]);
-      return { async materialize() { throw new Error('not reached'); } };
+      ports.materializer = { async materialize() { throw new Error('not reached'); } };
+      return ports.materializer;
     },
     metadataReaderFactory(input) {
       processingCalls.push(['metadata', input]);
-      return { async read() { throw new Error('not reached'); } };
+      ports.metadataReader = { async read() { throw new Error('not reached'); } };
+      return ports.metadataReader;
     },
     imageProcessorFactory(input) {
       processingCalls.push(['image', input]);
-      return { async process() { throw new Error('not reached'); } };
+      ports.imageProcessor = { async process() { throw new Error('not reached'); } };
+      return ports.imageProcessor;
     },
     derivativeStoreFactory(input) {
       processingCalls.push(['derivative', input]);
-      return { async putThumbnail() { throw new Error('not reached'); } };
+      ports.derivativeStore = { async putThumbnail() { throw new Error('not reached'); } };
+      return ports.derivativeStore;
     },
     deterministicProcessorFactory(input) {
       processingCalls.push(['processor', input]);
-      return { async handle() { throw new Error('not reached'); } };
+      ports.deterministicProcessor = { async handle() { throw new Error('not reached'); } };
+      return ports.deterministicProcessor;
     },
   };
 
@@ -160,7 +189,13 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
     firebaseProjectId: 'demo-elsewhere',
     allowedAppIds: ['elsewhere-web-test'],
     storageBuckets: [],
-  }, { firebaseFactory, repositoryFactory, ...processingFactories });
+  }, {
+    firebaseFactory,
+    repositoryFactory,
+    ...processingFactories,
+    clock,
+    randomUUID,
+  });
   t.after(() => api.close());
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
@@ -171,13 +206,21 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
   assert.deepEqual(processingCalls, []);
 
   calls.length = 0;
+  const ingestionBuckets = ['demo-elsewhere.appspot.com'];
   const ingestion = createRuntimeApp({
     ...appConfig,
     serviceMode: 'ingestion',
     firebaseProjectId: 'demo-elsewhere',
     allowedAppIds: [],
-    storageBuckets: ['demo-elsewhere.appspot.com'],
-  }, { firebaseFactory, repositoryFactory, ...processingFactories });
+    storageBuckets: ingestionBuckets,
+    processing: processingConfig,
+  }, {
+    firebaseFactory,
+    repositoryFactory,
+    ...processingFactories,
+    clock,
+    randomUUID,
+  });
   t.after(() => ingestion.close());
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
@@ -198,6 +241,19 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
   ]);
   assert.equal(processingCalls[0][1].storage, processingCalls[1][1].storage);
   assert.equal(processingCalls[1][1].storage, processingCalls[4][1].storage);
+  assert.deepEqual(processingCalls[0][1].allowedBuckets, ingestionBuckets);
+  assert.strictEqual(processingCalls[0][1], processingCalls[1][1]);
+  assert.strictEqual(processingCalls[1][1], processingCalls[4][1]);
+  assert.strictEqual(processingCalls[2][1].limits, processingConfig.limits);
+  assert.strictEqual(processingCalls[3][1].limits, processingConfig.limits);
+  assert.strictEqual(processingCalls[5][1].repository, repositories[1]);
+  assert.strictEqual(processingCalls[5][1].materializer, ports.materializer);
+  assert.strictEqual(processingCalls[5][1].metadataReader, ports.metadataReader);
+  assert.strictEqual(processingCalls[5][1].imageProcessor, ports.imageProcessor);
+  assert.strictEqual(processingCalls[5][1].derivativeStore, ports.derivativeStore);
+  assert.strictEqual(processingCalls[5][1].processingConfig, processingConfig);
+  assert.strictEqual(processingCalls[5][1].clock, clock);
+  assert.strictEqual(processingCalls[5][1].randomUUID, randomUUID);
 });
 
 test('production composition sources do not import test helpers', async () => {
