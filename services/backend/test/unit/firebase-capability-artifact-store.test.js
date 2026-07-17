@@ -26,11 +26,11 @@ function storageFake({ saveError = null, existingBytes = null, metadataOverrides
     },
     async getMetadata() {
       calls.metadata += 1;
-      const save = calls.saves[0];
+      const save = calls.saves.at(-1);
       const bytes = existingBytes ?? savedBytes ?? save?.bytes;
       return [{
         bucket: BUCKET,
-        name: calls.paths[0],
+        name: calls.paths.at(-1),
         generation: '1740000000000300',
         contentType: 'application/gzip',
         size: String(bytes.byteLength),

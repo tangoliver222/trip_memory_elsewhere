@@ -19,13 +19,13 @@
       "paragraphs": [
         {
           "layout": {
-            "textAnchor": { "textSegments": [{ "startIndex": "0", "endIndex": "14" }] },
+            "textAnchor": { "textSegments": [{ "startIndex": "0", "endIndex": "15" }] },
             "confidence": 0.97
           }
         },
         {
           "layout": {
-            "textAnchor": { "textSegments": [{ "startIndex": "14", "endIndex": "31" }] },
+            "textAnchor": { "textSegments": [{ "startIndex": "15", "endIndex": "31" }] },
             "confidence": 0.93
           }
         }
@@ -33,13 +33,13 @@
       "lines": [
         {
           "layout": {
-            "textAnchor": { "textSegments": [{ "startIndex": "0", "endIndex": "14" }] },
+            "textAnchor": { "textSegments": [{ "startIndex": "0", "endIndex": "15" }] },
             "confidence": 0.97
           }
         },
         {
           "layout": {
-            "textAnchor": { "textSegments": [{ "startIndex": "14", "endIndex": "31" }] },
+            "textAnchor": { "textSegments": [{ "startIndex": "15", "endIndex": "31" }] },
             "confidence": 0.93
           }
         }

@@ -44,7 +44,7 @@ test('concatenates valid multi-segment anchors and rejects malformed or out-of-r
   const document = structuredClone(golden);
   document.pages[0].tokens[0].layout.textAnchor.textSegments = [
     { startIndex: '0', endIndex: '6' },
-    { startIndex: '14', endIndex: '23' },
+    { startIndex: '15', endIndex: '24' },
   ];
   assert.equal(
     normalizeDocumentAiOcr({ document, ...CONTEXT }).normalized.pages[0].tokens[0].text,
