@@ -2,6 +2,7 @@ import {
   parseBudgetLedger,
   parseBudgetReservation,
   parseCapabilityExecution,
+  parseCapabilityResult,
   parseContentHash,
   parseDuplicateCandidate,
   parseEscalationRequest,
@@ -16,6 +17,7 @@ import {
   assertProcessingRepository,
   assertRepository,
   assertRoutingRepository,
+  assertCapabilityRepository,
 } from './contract.js';
 import {
   RepositoryConflictError,
@@ -38,15 +40,20 @@ import {
 } from './processing-outcome.js';
 import { makeExactCandidateId } from '../processing/identity.js';
 import {
-  applyCapabilityBillingUncertain,
-  applyCapabilityCalling,
-  applyCapabilityClaim,
-  applyCapabilityReceipt,
-  applyCapabilitySettlement,
   applyEscalationSubmission,
   applyRoutingApproval,
   applyRoutingDraftSave,
 } from './routing-outcome.js';
+import {
+  applyCapabilityBillingUncertain,
+  applyCapabilityCalling,
+  applyCapabilityClaim,
+  applyCapabilityFailure,
+  applyCapabilityPreparation,
+  applyCapabilityQueued,
+  applyCapabilityResult,
+  applyCapabilitySettlement,
+} from './capability-outcome.js';
 
 const keyFor = (uid, id) => `${uid}/${id}`;
 
@@ -62,6 +69,7 @@ const MEMORY_COLLECTIONS = Object.freeze([
   'budgetLedgers',
   'budgetReservations',
   'capabilityExecutions',
+  'capabilityResults',
   'escalationRequests',
 ]);
 
@@ -185,6 +193,12 @@ export function createMemoryRepository() {
   const capabilityExecutions = createStore(
     'capabilityExecutions',
     parseCapabilityExecution,
+    () => state,
+    commitWrites,
+  );
+  const capabilityResults = createStore(
+    'capabilityResults',
+    parseCapabilityResult,
     () => state,
     commitWrites,
   );
@@ -468,6 +482,10 @@ export function createMemoryRepository() {
     const executions = capabilityExecutions.values(uid)
       .filter(({ routePlanRef }) => planIds.has(routePlanRef.id))
       .sort((left, right) => left.id.localeCompare(right.id));
+    const executionIds = new Set(executions.map(({ id }) => id));
+    const results = capabilityResults.values(uid)
+      .filter(({ executionRef }) => executionIds.has(executionRef.id))
+      .sort((left, right) => left.id.localeCompare(right.id));
     return cloneFrozen({
       batch,
       fragments: snapshotFragments,
@@ -478,6 +496,7 @@ export function createMemoryRepository() {
       routingCohorts: cohorts,
       budgetReservations: reservations,
       capabilityExecutions: executions,
+      capabilityResults: results,
       escalationRequests: escalations,
     });
   }
@@ -532,51 +551,15 @@ export function createMemoryRepository() {
     return cloneFrozen(transition);
   }
 
-  async function claimCapabilityExecution(uid, input) {
-    const routePlan = routePlans.read(uid, input?.routePlanId);
-    const head = routingHeads.values(uid)
-      .find(({ currentPlanRef }) => currentPlanRef.id === routePlan?.id) ?? null;
-    const reservation = budgetReservations.values(uid).find((value) => (
-      value.routePlanRef.id === routePlan?.id && value.capability === input?.capability
-    )) ?? null;
-    const transition = applyCapabilityClaim({
-      uid,
-      routePlan,
-      head,
-      reservation,
-      executions: capabilityExecutions.values(uid),
-      input,
-    });
-    commitWrites([
-      routePlans.prepareWrite(uid, transition.routePlan),
-      capabilityExecutions.prepareWrite(uid, transition.execution),
-    ]);
-    return cloneFrozen(transition);
-  }
-
-  async function markCapabilityCalling(uid, input) {
-    const stored = capabilityExecutions.read(uid, input?.executionId);
-    const transition = applyCapabilityCalling(uid, stored, input);
-    if (transition.outcome === 'applied') {
-      commitWrites([capabilityExecutions.prepareWrite(uid, transition.execution)]);
-    }
-    return cloneFrozen(transition);
-  }
-
-  async function recordCapabilityReceipt(uid, input) {
-    const stored = capabilityExecutions.read(uid, input?.executionId);
-    const transition = applyCapabilityReceipt(uid, stored, input);
-    if (transition.outcome === 'applied') {
-      commitWrites([capabilityExecutions.prepareWrite(uid, transition.execution)]);
-    }
-    return cloneFrozen(transition);
-  }
-
   function capabilityState(uid, executionId) {
     const execution = capabilityExecutions.read(uid, executionId);
     const routePlan = routePlans.read(uid, execution?.routePlanRef.id);
     const batch = importBatches.read(uid, routePlan?.batchRef.id);
     const reservation = budgetReservations.read(uid, execution?.reservationRef.id);
+    const fragment = fragments.read(uid, execution?.fragmentRef.id);
+    const head = routingHeads.values(uid)
+      .find(({ fragmentRef }) => fragmentRef.id === execution?.fragmentRef.id) ?? null;
+    const result = capabilityResults.read(uid, execution?.resultRef?.id);
     const plans = routePlans.values(uid).filter(({ batchRef }) => batch && batchRef.id === batch.id);
     const planIds = new Set(plans.map(({ id }) => id));
     return {
@@ -584,8 +567,14 @@ export function createMemoryRepository() {
       routePlan,
       batch,
       reservation,
+      fragment,
+      head,
+      result,
       plans,
       executions: capabilityExecutions.values(uid).filter(({ routePlanRef }) => (
+        planIds.has(routePlanRef.id)
+      )),
+      results: capabilityResults.values(uid).filter(({ routePlanRef }) => (
         planIds.has(routePlanRef.id)
       )),
       heads: routingHeads.values(uid).filter(({ currentPlanRef }) => (
@@ -595,6 +584,86 @@ export function createMemoryRepository() {
         planIds.has(fromRoutePlanRef.id)
       )),
     };
+  }
+
+  async function prepareCapabilityExecution(uid, input) {
+    const execution = input?.execution;
+    const routePlan = routePlans.read(uid, execution?.routePlanRef?.id);
+    const fragment = fragments.read(uid, execution?.fragmentRef?.id);
+    const head = routingHeads.values(uid)
+      .find(({ fragmentRef }) => fragmentRef.id === fragment?.id) ?? null;
+    const reservation = budgetReservations.read(uid, execution?.reservationRef?.id);
+    const transition = applyCapabilityPreparation({
+      uid,
+      execution,
+      storedExecution: capabilityExecutions.read(uid, execution?.id),
+      plan: routePlan,
+      head,
+      fragment,
+      reservation,
+      supportedVersions: input?.supportedVersions,
+    });
+    if (transition.outcome === 'created') {
+      commitWrites([capabilityExecutions.prepareWrite(uid, transition.execution)]);
+    }
+    return cloneFrozen(transition);
+  }
+
+  async function markCapabilityQueued(uid, input) {
+    const transition = applyCapabilityQueued(
+      uid,
+      capabilityExecutions.read(uid, input?.executionId),
+      input,
+    );
+    if (transition.outcome === 'applied') {
+      commitWrites([capabilityExecutions.prepareWrite(uid, transition.execution)]);
+    }
+    return cloneFrozen(transition);
+  }
+
+  async function claimCapabilityExecution(uid, input) {
+    const current = capabilityState(uid, input?.executionId);
+    const transition = applyCapabilityClaim({
+      uid,
+      ...current,
+      plan: current.routePlan,
+      supportedVersions: input?.supportedVersions,
+      input,
+    });
+    if (transition.outcome === 'claimed') {
+      commitWrites([
+        routePlans.prepareWrite(uid, transition.routePlan),
+        capabilityExecutions.prepareWrite(uid, transition.execution),
+      ]);
+    }
+    return cloneFrozen(transition);
+  }
+
+  async function markCapabilityCalling(uid, input) {
+    const current = capabilityState(uid, input?.executionId);
+    const transition = applyCapabilityCalling(uid, current.execution, current.reservation, input);
+    if (transition.outcome === 'applied') {
+      commitWrites([capabilityExecutions.prepareWrite(uid, transition.execution)]);
+    }
+    return cloneFrozen(transition);
+  }
+
+  async function recordCapabilityResult(uid, input) {
+    const current = capabilityState(uid, input?.executionId);
+    const transition = applyCapabilityResult({
+      uid,
+      execution: current.execution,
+      reservation: current.reservation,
+      storedResult: capabilityResults.read(uid, input?.result?.id),
+      input,
+    });
+    if (transition.outcome === 'applied') {
+      commitWrites([
+        capabilityResults.prepareWrite(uid, transition.result),
+        capabilityExecutions.prepareWrite(uid, transition.execution),
+      ]);
+    }
+    return cloneFrozen(transition);
   }
 
   async function settleCapabilityExecution(uid, input) {
@@ -612,6 +681,29 @@ export function createMemoryRepository() {
       capabilityExecutions.prepareWrite(uid, transition.execution),
       budgetReservations.prepareWrite(uid, transition.reservation),
       ...transition.ledgers.map((ledger) => budgetLedgers.prepareWrite(uid, ledger)),
+      routePlans.prepareWrite(uid, transition.routePlan),
+      importBatches.prepareWrite(uid, transition.batch),
+      fragments.prepareWrite(uid, transition.fragment),
+    ]);
+    return cloneFrozen(transition);
+  }
+
+  async function failCapabilityExecution(uid, input) {
+    const current = capabilityState(uid, input?.executionId);
+    const transition = applyCapabilityFailure({
+      uid,
+      ...current,
+      ledgers: current.reservation?.ledgerRefs.map(({ id }) => (
+        budgetLedgers.read(uid, id)
+      )).filter(Boolean) ?? [],
+      input,
+    });
+    if (transition.outcome === 'duplicate') return cloneFrozen(transition);
+    commitWrites([
+      capabilityExecutions.prepareWrite(uid, transition.execution),
+      budgetReservations.prepareWrite(uid, transition.reservation),
+      ...transition.ledgers.map((ledger) => budgetLedgers.prepareWrite(uid, ledger)),
+      ...(transition.result ? [capabilityResults.prepareWrite(uid, transition.result)] : []),
       routePlans.prepareWrite(uid, transition.routePlan),
       importBatches.prepareWrite(uid, transition.batch),
     ]);
@@ -647,12 +739,16 @@ export function createMemoryRepository() {
     loadRoutingSnapshot,
     commitRoutingApproval,
     submitEscalationRequest,
+    prepareCapabilityExecution,
+    markCapabilityQueued,
     claimCapabilityExecution,
     markCapabilityCalling,
-    recordCapabilityReceipt,
+    recordCapabilityResult,
     settleCapabilityExecution,
+    failCapabilityExecution,
     markCapabilityBillingUncertain,
   });
   assertProcessingRepository(repository);
-  return assertRoutingRepository(repository);
+  assertRoutingRepository(repository);
+  return assertCapabilityRepository(repository);
 }

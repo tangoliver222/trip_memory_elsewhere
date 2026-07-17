@@ -40,15 +40,9 @@ import {
 import { makeExactCandidateId } from '../processing/identity.js';
 import {
   makeBudgetLedgerId,
-  makeBudgetReservationId,
   makeRoutingHeadId,
 } from '../routing/identity.js';
 import {
-  applyCapabilityBillingUncertain,
-  applyCapabilityCalling,
-  applyCapabilityClaim,
-  applyCapabilityReceipt,
-  applyCapabilitySettlement,
   applyEscalationSubmission,
   applyRoutingApproval,
   applyRoutingDraftSave,
@@ -671,193 +665,6 @@ export function createFirestoreRepository({ db }) {
     });
   }
 
-  async function claimCapabilityExecution(uid, input) {
-    return db.runTransaction(async (transaction) => {
-      const planRef = document(uid, 'routePlans', input?.routePlanId);
-      const planSnapshot = await transaction.get(planRef);
-      const routePlan = planSnapshot.exists ? parseRoutePlan(planSnapshot.data()) : null;
-      const headRef = routePlan ? document(
-        uid,
-        'routingHeads',
-        makeRoutingHeadId({
-          ownerId: uid,
-          fragmentId: routePlan.fragmentRef.id,
-          routerName: 'fragment-routing',
-        }),
-      ) : null;
-      const reservationRef = routePlan ? document(
-        uid,
-        'budgetReservations',
-        makeBudgetReservationId({ routePlanId: routePlan.id, capability: input?.capability }),
-      ) : null;
-      const [headSnapshot, reservationSnapshot] = headRef && reservationRef
-        ? await transaction.getAll(headRef, reservationRef)
-        : [];
-      const executionSnapshot = routePlan
-        ? await transaction.get(
-          collection(uid, 'capabilityExecutions')
-            .where('routePlanRef.id', '==', routePlan.id),
-        )
-        : null;
-      const transition = applyCapabilityClaim({
-        uid,
-        routePlan,
-        head: dataOrNull(headSnapshot),
-        reservation: dataOrNull(reservationSnapshot),
-        executions: executionSnapshot
-          ? sortById(executionSnapshot.docs.map((snapshot) => snapshot.data()))
-          : [],
-        input,
-      });
-      transaction.set(planRef, transition.routePlan);
-      transaction.create(
-        document(uid, 'capabilityExecutions', transition.execution.id),
-        transition.execution,
-      );
-      return cloneFrozen(transition);
-    });
-  }
-
-  async function mutateCapabilityExecution(uid, input, apply) {
-    const executionRef = document(uid, 'capabilityExecutions', input?.executionId);
-    return db.runTransaction(async (transaction) => {
-      const snapshot = await transaction.get(executionRef);
-      const transition = apply(uid, dataOrNull(snapshot), input);
-      if (transition.outcome === 'applied') transaction.set(executionRef, transition.execution);
-      return cloneFrozen(transition);
-    });
-  }
-
-  const markCapabilityCalling = (uid, input) => (
-    mutateCapabilityExecution(uid, input, applyCapabilityCalling)
-  );
-  const recordCapabilityReceipt = (uid, input) => (
-    mutateCapabilityExecution(uid, input, applyCapabilityReceipt)
-  );
-
-  async function loadCapabilityTransactionState(transaction, uid, executionId) {
-    const executionSnapshot = await transaction.get(
-      document(uid, 'capabilityExecutions', executionId),
-    );
-    const execution = executionSnapshot.exists
-      ? parseCapabilityExecution(executionSnapshot.data())
-      : null;
-    if (!execution) return {
-      execution: null,
-      routePlan: null,
-      batch: null,
-      reservation: null,
-      plans: [],
-      executions: [],
-      heads: [],
-      escalations: [],
-      ledgers: [],
-    };
-    const [planSnapshot, reservationSnapshot] = await transaction.getAll(
-      document(uid, 'routePlans', execution.routePlanRef.id),
-      document(uid, 'budgetReservations', execution.reservationRef.id),
-    );
-    const routePlan = planSnapshot.exists ? parseRoutePlan(planSnapshot.data()) : null;
-    const reservation = reservationSnapshot.exists
-      ? parseBudgetReservation(reservationSnapshot.data())
-      : null;
-    const batchSnapshot = routePlan
-      ? await transaction.get(document(uid, 'importBatches', routePlan.batchRef.id))
-      : null;
-    const batch = dataOrNull(batchSnapshot);
-    const planSnapshotSet = batch
-      ? await transaction.get(
-        collection(uid, 'routePlans').where('batchRef.id', '==', batch.id),
-      )
-      : null;
-    const plans = planSnapshotSet
-      ? sortById(planSnapshotSet.docs.map((snapshot) => parseRoutePlan(snapshot.data())))
-      : [];
-    const planIds = plans.map(({ id }) => id);
-    const fragmentIds = [...new Set(plans.map(({ fragmentRef }) => fragmentRef.id))].sort();
-    const headSnapshots = await transactionGetAll(transaction, fragmentIds.map((fragmentId) => (
-      document(uid, 'routingHeads', makeRoutingHeadId({
-        ownerId: uid,
-        fragmentId,
-        routerName: 'fragment-routing',
-      }))
-    )));
-    const executions = [];
-    const escalations = [];
-    for (const planIdChunk of chunks(planIds)) {
-      const [executionSet, escalationSet] = await Promise.all([
-        transaction.get(
-          collection(uid, 'capabilityExecutions').where('routePlanRef.id', 'in', planIdChunk),
-        ),
-        transaction.get(
-          collection(uid, 'escalationRequests').where('fromRoutePlanRef.id', 'in', planIdChunk),
-        ),
-      ]);
-      executions.push(...executionSet.docs.map((snapshot) => (
-        parseCapabilityExecution(snapshot.data())
-      )));
-      escalations.push(...escalationSet.docs.map((snapshot) => (
-        parseEscalationRequest(snapshot.data())
-      )));
-    }
-    const ledgerSnapshots = await transactionGetAll(
-      transaction,
-      (reservation?.ledgerRefs ?? []).map(({ id }) => document(uid, 'budgetLedgers', id)),
-    );
-    return {
-      execution,
-      routePlan,
-      batch,
-      reservation,
-      plans,
-      executions: sortById(executions),
-      heads: sortById(headSnapshots
-        .filter(({ exists }) => exists)
-        .map((snapshot) => parseRoutingHead(snapshot.data()))),
-      escalations: sortById(escalations),
-      ledgers: sortById(ledgerSnapshots
-        .filter(({ exists }) => exists)
-        .map((snapshot) => parseBudgetLedger(snapshot.data()))),
-    };
-  }
-
-  async function settleCapabilityExecution(uid, input) {
-    return db.runTransaction(async (transaction) => {
-      const current = await loadCapabilityTransactionState(transaction, uid, input?.executionId);
-      const transition = applyCapabilitySettlement({ uid, ...current, input });
-      if (transition.outcome === 'duplicate') return cloneFrozen(transition);
-      transaction.set(
-        document(uid, 'capabilityExecutions', transition.execution.id),
-        transition.execution,
-      );
-      transaction.set(
-        document(uid, 'budgetReservations', transition.reservation.id),
-        transition.reservation,
-      );
-      for (const ledger of transition.ledgers) {
-        transaction.set(document(uid, 'budgetLedgers', ledger.id), ledger);
-      }
-      transaction.set(document(uid, 'routePlans', transition.routePlan.id), transition.routePlan);
-      transaction.set(document(uid, 'importBatches', transition.batch.id), transition.batch);
-      return cloneFrozen(transition);
-    });
-  }
-
-  async function markCapabilityBillingUncertain(uid, input) {
-    return db.runTransaction(async (transaction) => {
-      const current = await loadCapabilityTransactionState(transaction, uid, input?.executionId);
-      const transition = applyCapabilityBillingUncertain({ uid, ...current, input });
-      if (transition.outcome === 'duplicate') return cloneFrozen(transition);
-      transaction.set(
-        document(uid, 'capabilityExecutions', transition.execution.id),
-        transition.execution,
-      );
-      transaction.set(document(uid, 'routePlans', transition.routePlan.id), transition.routePlan);
-      transaction.set(document(uid, 'importBatches', transition.batch.id), transition.batch);
-      return cloneFrozen(transition);
-    });
-  }
-
   const repository = assertRepository({
     createFragment: (uid, input) => create(uid, input, 'fragments', parseFragment),
     getFragment: (uid, id) => get(uid, id, 'fragments', parseFragment),
@@ -875,11 +682,6 @@ export function createFirestoreRepository({ db }) {
     loadRoutingSnapshot,
     commitRoutingApproval,
     submitEscalationRequest,
-    claimCapabilityExecution,
-    markCapabilityCalling,
-    recordCapabilityReceipt,
-    settleCapabilityExecution,
-    markCapabilityBillingUncertain,
   });
   assertProcessingRepository(repository);
   return assertRoutingRepository(repository);

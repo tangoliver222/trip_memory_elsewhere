@@ -116,6 +116,12 @@ async function seedApprovedOcr(repository, ownerId, suffix) {
       confidence: 1,
       basis: ['fragment-type', 'technical-metadata-format'],
     },
+    representation: {
+      role: 'independent',
+      representativeRef: ref('fragment', seeded.fragment.id),
+      cohortRefs: [],
+      reasonCodes: ['not-near-duplicate'],
+    },
     capabilities: {
       ocr: makeCapabilityDecision('blocked', { reasonCodes: ['await-budget-gate'] }),
       places: makeCapabilityDecision('deferred', {

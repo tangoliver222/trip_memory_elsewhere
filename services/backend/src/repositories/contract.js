@@ -21,10 +21,16 @@ const ROUTING_METHODS = [
   'loadRoutingSnapshot',
   'commitRoutingApproval',
   'submitEscalationRequest',
+];
+
+const CAPABILITY_METHODS = [
+  'prepareCapabilityExecution',
+  'markCapabilityQueued',
   'claimCapabilityExecution',
   'markCapabilityCalling',
-  'recordCapabilityReceipt',
+  'recordCapabilityResult',
   'settleCapabilityExecution',
+  'failCapabilityExecution',
   'markCapabilityBillingUncertain',
 ];
 
@@ -59,6 +65,10 @@ export const assertProcessingRepository = (repository) => (
 
 export const assertRoutingRepository = (repository) => (
   assertMethods(repository, ROUTING_METHODS)
+);
+
+export const assertCapabilityRepository = (repository) => (
+  assertMethods(repository, CAPABILITY_METHODS)
 );
 
 export const assertRepository = (repository) => assertMethods(repository, METHODS);

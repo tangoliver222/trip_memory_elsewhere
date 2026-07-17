@@ -98,7 +98,7 @@ export const BudgetReservationSchema = z.strictObject({
 
 const VersionLabelSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
 
-const ProviderReceiptSchema = z.strictObject({
+export const ProviderReceiptSchema = z.strictObject({
   clientRequestId: IdSchema,
   providerRequestId: z.string().trim().min(1).max(256).nullable(),
   requestCount: z.literal(1),
@@ -159,7 +159,7 @@ export const CapabilityExecutionSchema = z.strictObject({
   if (leased !== (execution.leaseOwner !== null && execution.leaseExpiresAt !== null)) {
     context.addIssue({ code: 'custom', message: 'Execution lease fields do not match state' });
   }
-  const called = ['calling', 'provider_succeeded', 'settling', 'completed'].includes(execution.state);
+  const called = ['calling', 'provider_succeeded', 'settling'].includes(execution.state);
   if (called && (execution.billableAttempts !== 1 || execution.startedAt === null)) {
     context.addIssue({ code: 'custom', message: 'Provider call fields do not match state' });
   }
@@ -167,13 +167,20 @@ export const CapabilityExecutionSchema = z.strictObject({
     && execution.billableAttempts !== 0) {
     context.addIssue({ code: 'custom', message: 'Pre-call execution cannot be billable' });
   }
-  const providerSucceeded = ['provider_succeeded', 'settling', 'completed'].includes(
-    execution.state,
-  );
   const billingUncertain = execution.state === 'billing_uncertain';
   const hasReceipt = execution.receipt !== null;
   const hasResult = execution.resultRef !== null;
-  if (hasReceipt !== hasResult || (!billingUncertain && providerSucceeded !== hasReceipt)) {
+  const providerSucceeded = ['provider_succeeded', 'settling'].includes(execution.state);
+  const completedWithProviderResult = execution.state === 'completed' && hasReceipt;
+  const completedWithoutProviderCall = execution.state === 'completed' && !hasReceipt;
+  if ((hasReceipt && !hasResult)
+    || (providerSucceeded && (!hasReceipt || !hasResult))
+    || (!providerSucceeded && !completedWithProviderResult && !billingUncertain && hasReceipt)
+    || (execution.state !== 'completed' && !providerSucceeded && hasResult)
+    || (completedWithoutProviderCall
+      && (execution.billableAttempts !== 0 || execution.startedAt !== null))
+    || (completedWithProviderResult
+      && (execution.billableAttempts !== 1 || execution.startedAt === null))) {
     context.addIssue({ code: 'custom', message: 'Provider result fields do not match state' });
   }
   if (billingUncertain

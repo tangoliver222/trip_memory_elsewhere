@@ -56,6 +56,7 @@ export {
   CAPABILITY_EXECUTION_STATES,
   CapabilityExecutionSchema,
   EscalationRequestSchema,
+  ProviderReceiptSchema,
   parseBudgetLedger,
   parseBudgetReservation,
   parseCapabilityExecution,

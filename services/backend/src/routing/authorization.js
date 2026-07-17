@@ -1,75 +1,60 @@
 import { z } from 'zod';
 import {
+  CapabilityResultSchema,
   IdSchema,
   IsoDateTimeSchema,
   ProcessorVersionSchema,
-  ROUTING_CAPABILITIES,
-  RoutingSourceRevisionSchema,
+  ProviderReceiptSchema,
 } from '../domain/index.js';
-import { makeCapabilityExecutionId } from './identity.js';
 
-const CapabilitySchema = z.enum(ROUTING_CAPABILITIES);
-const ExecutorClassSchema = z.enum([
-  'document-ocr',
-  'places-resolution',
-  'multimodal-embedding',
-  'gemini-multimodal',
-]);
 const CodeSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{1,63}$/);
-const ResultRefSchema = z.strictObject({
-  type: z.literal('capabilityResult'),
-  id: IdSchema,
-});
-const UsageSchema = z.record(z.string().min(1), z.number().nonnegative()).refine(
-  (value) => Object.keys(value).length > 0,
-  'Provider usage cannot be empty',
-);
-
-const ClaimSchema = z.strictObject({
-  uid: IdSchema,
-  routePlanId: IdSchema,
-  capability: CapabilitySchema,
-  executorClass: ExecutorClassSchema,
-  executorVersion: ProcessorVersionSchema,
-  sourceRevision: RoutingSourceRevisionSchema,
-  idempotencyKey: IdSchema,
-});
-
-const TupleFields = {
-  uid: IdSchema,
-  routePlanId: IdSchema,
-  capability: CapabilitySchema,
-  idempotencyKey: IdSchema,
-};
-const TupleSchema = z.strictObject(TupleFields);
-const ProviderSuccessSchema = z.strictObject({
-  ...TupleFields,
-  providerRequestId: z.string().trim().min(1).max(256),
-  usage: UsageSchema,
-  actualCostMicros: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  resultRef: ResultRefSchema,
-});
-const FailureSchema = z.strictObject({
-  ...TupleFields,
-  errorCode: CodeSchema,
-});
-const ExecutorVersionsSchema = z.strictObject({
-  'document-ocr': z.array(ProcessorVersionSchema).min(1).optional(),
-  'places-resolution': z.array(ProcessorVersionSchema).min(1).optional(),
-  'multimodal-embedding': z.array(ProcessorVersionSchema).min(1).optional(),
-  'gemini-multimodal': z.array(ProcessorVersionSchema).min(1).optional(),
-}).refine((value) => Object.keys(value).length > 0, 'Executor versions cannot be empty');
+const VersionLabelSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
+const versionsMap = (versionSchema) => z.record(
+  z.string().min(1),
+  z.array(versionSchema).min(1),
+).refine((value) => Object.keys(value).length > 0, 'Version map cannot be empty');
 const VersionsSchema = z.strictObject({
   router: z.array(ProcessorVersionSchema).min(1),
   policy: z.array(ProcessorVersionSchema).min(1),
   costModel: z.array(ProcessorVersionSchema).min(1),
-  executors: ExecutorVersionsSchema,
+  executors: versionsMap(ProcessorVersionSchema),
+  providers: versionsMap(VersionLabelSchema),
+});
+const LeaseTupleFields = {
+  uid: IdSchema,
+  executionId: IdSchema,
+  leaseOwner: IdSchema,
+};
+const LeaseTupleSchema = z.strictObject(LeaseTupleFields);
+const ClaimSchema = z.strictObject({
+  ...LeaseTupleFields,
+  leaseExpiresAt: IsoDateTimeSchema,
+});
+const ProviderSuccessSchema = z.strictObject({
+  ...LeaseTupleFields,
+  receipt: ProviderReceiptSchema,
+  result: CapabilityResultSchema,
+});
+const FailureSchema = z.strictObject({
+  ...LeaseTupleFields,
+  outcome: z.enum(['unsupported', 'failed_retryable', 'failed_terminal']),
+  errorCode: CodeSchema,
+  result: CapabilityResultSchema.nullable(),
+});
+const BillingUncertainSchema = z.strictObject({
+  ...LeaseTupleFields,
+  errorCode: CodeSchema,
 });
 const AuthorizationSchema = z.strictObject({
+  executionId: IdSchema,
   routePlanId: IdSchema,
-  capability: CapabilitySchema,
-  executorClass: ExecutorClassSchema,
-  scope: z.enum(['self', 'representative', 'cohort']),
+  routePlanRevision: z.number().int().positive().max(5),
+  fragmentId: IdSchema,
+  capability: z.enum(['ocr', 'places', 'embedding', 'gemini']),
+  executorName: z.string().min(1).max(128),
+  executorVersion: ProcessorVersionSchema,
+  providerName: z.string().min(1).max(128),
+  providerVersion: VersionLabelSchema,
   idempotencyKey: IdSchema,
   ceilingMicros: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
 });
@@ -77,101 +62,82 @@ const AuthorizationSchema = z.strictObject({
 const METHODS = [
   'claimCapabilityExecution',
   'markCapabilityCalling',
-  'recordCapabilityReceipt',
+  'recordCapabilityResult',
   'settleCapabilityExecution',
+  'failCapabilityExecution',
   'markCapabilityBillingUncertain',
 ];
 
-function parse(schema, value, name) {
-  const result = schema.safeParse(value);
+function parse(schema, input, name) {
+  const result = schema.safeParse(input);
   if (!result.success) throw new TypeError(`${name} is invalid`);
   return result.data;
 }
 
-function executionId(input) {
-  return makeCapabilityExecutionId({
-    routePlanId: input.routePlanId,
-    capability: input.capability,
-    idempotencyKey: input.idempotencyKey,
-  });
-}
-
 export function createCapabilityAuthorizer({ repository, supportedVersions, clock } = {}) {
   if (METHODS.some((method) => typeof repository?.[method] !== 'function')) {
-    throw new TypeError('Routing repository is incomplete');
+    throw new TypeError('Capability repository is incomplete');
   }
   const versions = parse(VersionsSchema, supportedVersions, 'supportedVersions');
   if (typeof clock !== 'function') throw new TypeError('clock is required');
-
   const now = () => parse(IsoDateTimeSchema, clock(), 'clock result');
-  const tupleCommand = (input) => {
-    const value = parse(TupleSchema, input, 'execution input');
-    return { uid: value.uid, executionId: executionId(value) };
+
+  const delegate = (method, schema, input, fields) => {
+    const value = parse(schema, input, `${method} input`);
+    return repository[method](value.uid, {
+      executionId: value.executionId,
+      leaseOwner: value.leaseOwner,
+      ...fields(value),
+    });
   };
 
   return Object.freeze({
     async claim(input) {
       const value = parse(ClaimSchema, input, 'claim input');
       const result = await repository.claimCapabilityExecution(value.uid, {
-        routePlanId: value.routePlanId,
-        capability: value.capability,
-        executorClass: value.executorClass,
-        executorVersion: value.executorVersion,
-        sourceRevision: value.sourceRevision,
-        idempotencyKey: value.idempotencyKey,
-        supportedVersions: versions,
+        executionId: value.executionId,
+        leaseOwner: value.leaseOwner,
         claimedAt: now(),
+        leaseExpiresAt: value.leaseExpiresAt,
+        supportedVersions: versions,
       });
       return parse(AuthorizationSchema, result?.authorization, 'authorization');
     },
 
     async markCalling(input) {
-      const command = tupleCommand(input);
-      return repository.markCapabilityCalling(command.uid, {
-        executionId: command.executionId,
-        calledAt: now(),
-      });
+      return delegate('markCapabilityCalling', LeaseTupleSchema, input, () => ({ calledAt: now() }));
     },
 
     async recordProviderSuccess(input) {
-      const value = parse(ProviderSuccessSchema, input, 'provider success');
-      return repository.recordCapabilityReceipt(value.uid, {
-        executionId: executionId(value),
-        providerRequestId: value.providerRequestId,
-        usage: value.usage,
-        actualCostMicros: value.actualCostMicros,
-        resultRef: value.resultRef,
-        receivedAt: now(),
-      });
+      return delegate('recordCapabilityResult', ProviderSuccessSchema, input, (value) => ({
+        receipt: value.receipt,
+        result: value.result,
+        recordedAt: now(),
+      }));
     },
 
     async settle(input) {
-      const command = tupleCommand(input);
-      return repository.settleCapabilityExecution(command.uid, {
-        executionId: command.executionId,
-        outcome: 'completed',
-        errorCode: null,
+      return delegate('settleCapabilityExecution', LeaseTupleSchema, input, () => ({
         settledAt: now(),
-      });
+      }));
     },
 
     async fail(input) {
-      const value = parse(FailureSchema, input, 'failure');
-      return repository.settleCapabilityExecution(value.uid, {
-        executionId: executionId(value),
-        outcome: 'failed',
+      return delegate('failCapabilityExecution', FailureSchema, input, (value) => ({
+        outcome: value.outcome,
         errorCode: value.errorCode,
-        settledAt: now(),
-      });
+        result: value.result,
+        completedAt: now(),
+      }));
     },
 
     async markBillingUncertain(input) {
-      const value = parse(FailureSchema, input, 'billing uncertainty');
-      return repository.markCapabilityBillingUncertain(value.uid, {
-        executionId: executionId(value),
-        errorCode: value.errorCode,
-        completedAt: now(),
-      });
+      return delegate(
+        'markCapabilityBillingUncertain',
+        BillingUncertainSchema,
+        input,
+        (value) => ({ errorCode: value.errorCode, completedAt: now() }),
+      );
     },
   });
 }
