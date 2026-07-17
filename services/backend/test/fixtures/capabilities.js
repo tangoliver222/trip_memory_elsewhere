@@ -26,7 +26,9 @@ export function makeOcrReceipt(overrides = {}) {
     requestCount: 1,
     taskDeliveryCount: 0,
     pricingVersion: 'document-ai-enterprise-ocr-2026-07-17',
+    estimatedPages: 1,
     actualPages: 1,
+    estimatedCostMicros: 1_500,
     actualCostMicros: 1_500,
     receivedAt: NOW,
     ...overrides,
@@ -113,6 +115,7 @@ export function makeOcrCapabilityResult(overrides = {}) {
     pageCount: 1,
     taskDeliveryCount: 0,
     pricingVersion: 'document-ai-enterprise-ocr-2026-07-17',
+    estimatedCostMicros: 1_500,
     actualCostMicros: 1_500,
     qualitySummary: {
       averageConfidence: 0.94,

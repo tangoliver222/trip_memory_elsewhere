@@ -16,6 +16,15 @@ const SUMMARY_STATE_FIELDS = [
   'failedTerminal',
 ];
 const ROUTING_STATE_FIELDS = ['drafting', 'approved', 'blocked', 'completed'];
+const CAPABILITY_STATE_FIELDS = [
+  'queued',
+  'running',
+  'completed',
+  'insufficient',
+  'unsupported',
+  'failed',
+  'billingUncertain',
+];
 
 const RoutingSummarySchema = z.strictObject({
   routerName: z.literal('fragment-routing'),
@@ -27,6 +36,20 @@ const RoutingSummarySchema = z.strictObject({
   blocked: CounterSchema,
   completed: CounterSchema,
   superseded: CounterSchema,
+  updatedAt: IsoDateTimeSchema,
+});
+
+const CapabilitySummarySchema = z.strictObject({
+  processorName: z.literal('capability-execution'),
+  processorVersion: ProcessorVersionSchema,
+  eligible: CounterSchema,
+  queued: CounterSchema,
+  running: CounterSchema,
+  completed: CounterSchema,
+  insufficient: CounterSchema,
+  unsupported: CounterSchema,
+  failed: CounterSchema,
+  billingUncertain: CounterSchema,
   updatedAt: IsoDateTimeSchema,
 });
 
@@ -215,6 +238,7 @@ export const ImportBatchSchema = z.strictObject({
     }),
   }).nullable(),
   routingSummary: RoutingSummarySchema.nullable(),
+  capabilitySummary: CapabilitySummarySchema.nullable(),
   uploads: UploadsSchema,
 }).superRefine((batch, context) => {
   for (const [name, count] of Object.entries(batch.counters)) {
@@ -258,6 +282,28 @@ export const ImportBatchSchema = z.strictObject({
         code: 'custom',
         message: 'Routing states must partition eligible work',
         path: ['routingSummary', 'eligible'],
+      });
+    }
+  }
+
+  if (batch.capabilitySummary !== null) {
+    const summary = batch.capabilitySummary;
+    const currentTotal = CAPABILITY_STATE_FIELDS.reduce(
+      (total, field) => total + summary[field],
+      0,
+    );
+    if (summary.eligible > batch.inputCount) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Capability eligible cannot exceed inputCount',
+        path: ['capabilitySummary', 'eligible'],
+      });
+    }
+    if (currentTotal !== summary.eligible) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Capability states must partition eligible work',
+        path: ['capabilitySummary', 'eligible'],
       });
     }
   }

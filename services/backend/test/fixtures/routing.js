@@ -318,31 +318,6 @@ export function makeBudgetReservation(overrides = {}) {
   };
 }
 
-export function makeCapabilityExecution(overrides = {}) {
-  return {
-    id: 'execution_12345678',
-    ownerId: 'user_alpha',
-    schemaVersion: 1,
-    createdAt: NOW,
-    updatedAt: NOW,
-    deletedAt: null,
-    routePlanRef: reference('routePlan', 'route_12345678'),
-    reservationRef: reference('budgetReservation', 'reserve_12345678'),
-    capability: 'embedding',
-    executorName: 'multimodal-embedding',
-    executorVersion: 'v1',
-    idempotencyKey: 'idem_12345678',
-    state: 'claimed',
-    billableAttempts: 1,
-    receipt: null,
-    resultRef: null,
-    errorCode: null,
-    startedAt: NOW,
-    completedAt: null,
-    ...overrides,
-  };
-}
-
 export function makeEscalationRequest(overrides = {}) {
   return {
     id: 'escalate_12345678',

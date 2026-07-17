@@ -72,8 +72,8 @@ test('import batch counters cannot exceed the declared input count', () => {
 
 test('capability summary partitions current eligible work without changing batch state', () => {
   const summary = makeCapabilitySummary({
-    eligible: 2,
-    completed: 1,
+    eligible: 1,
+    completed: 0,
     unsupported: 1,
     failed: 0,
   });

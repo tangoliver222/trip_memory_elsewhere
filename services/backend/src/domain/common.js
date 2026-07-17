@@ -17,6 +17,7 @@ export const ReferenceSchema = z.strictObject({
     'journey',
     'city',
     'importBatch',
+    'capabilityResult',
   ]),
   id: IdSchema,
 });

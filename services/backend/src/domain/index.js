@@ -6,6 +6,12 @@ export {
   parseReference,
 } from './common.js';
 export { ContentHashSchema, parseContentHash } from './content-hash.js';
+export {
+  CAPABILITY_RESULT_OUTCOMES,
+  CapabilityArtifactRefSchema,
+  CapabilityResultSchema,
+  parseCapabilityResult,
+} from './capability-result.js';
 export { ProvenanceSchema, parseProvenance } from './provenance.js';
 export { FragmentSchema, parseFragment } from './fragment.js';
 export {
@@ -47,6 +53,7 @@ export {
 export {
   BudgetLedgerSchema,
   BudgetReservationSchema,
+  CAPABILITY_EXECUTION_STATES,
   CapabilityExecutionSchema,
   EscalationRequestSchema,
   parseBudgetLedger,

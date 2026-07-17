@@ -17,13 +17,13 @@ import {
   parseCapabilityExecution,
   parseEscalationRequest,
 } from '../../src/domain/routing-execution.js';
+import { makeReservedOcrExecution } from '../fixtures/capabilities.js';
 import { parseImportBatch } from '../../src/domain/import-batch.js';
 import {
   makeBatchWithRoutingSummary,
   makeBudgetLedger,
   makeBudgetReservation,
   makeCapabilityDecision,
-  makeCapabilityExecution,
   makeEscalationRequest,
   makeRoutePlan,
   makeRoutingCohort,
@@ -186,8 +186,8 @@ test('routing execution objects enforce micros and lifecycle fields', () => {
     makeBudgetReservation(),
   );
   assert.deepEqual(
-    parseCapabilityExecution(makeCapabilityExecution()),
-    makeCapabilityExecution(),
+    parseCapabilityExecution(makeReservedOcrExecution()),
+    makeReservedOcrExecution(),
   );
   assert.deepEqual(
     parseEscalationRequest(makeEscalationRequest()),
@@ -199,7 +199,7 @@ test('routing execution objects enforce micros and lifecycle fields', () => {
   assert.throws(() => parseBudgetReservation(makeBudgetReservation({
     estimatedCostMicros: 5_001,
   })));
-  assert.throws(() => parseCapabilityExecution(makeCapabilityExecution({
+  assert.throws(() => parseCapabilityExecution(makeReservedOcrExecution({
     state: 'completed',
     completedAt: null,
   })));

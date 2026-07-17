@@ -100,6 +100,7 @@ test('unsupported result has no provider artifacts cost pages or suggested facts
     normalizedArtifactRef: null,
     requestCount: 0,
     pageCount: 0,
+    estimatedCostMicros: 0,
     actualCostMicros: 0,
     qualitySummary: null,
     suggestedFactKeys: [],

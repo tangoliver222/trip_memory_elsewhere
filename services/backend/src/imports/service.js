@@ -118,6 +118,7 @@ export function createImportService({
         counters: { saved: 0, processed: 0, failed: 0, needsReview: 0 },
         processingSummary: null,
         routingSummary: null,
+        capabilitySummary: null,
         uploads,
         createdAt: timestamp,
         updatedAt: timestamp,
