@@ -5,6 +5,7 @@ WORKDIR /app
 COPY services/backend/package.json services/backend/package-lock.json* ./services/backend/
 RUN cd services/backend && npm ci --omit=dev
 COPY services/backend/src ./services/backend/src
+COPY services/backend/scripts ./services/backend/scripts
 COPY design-lab/prototypes-vanilla/src/fixtures ./design-lab/prototypes-vanilla/src/fixtures
 ENV NODE_ENV=production
 WORKDIR /app/services/backend

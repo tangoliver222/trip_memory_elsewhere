@@ -9,6 +9,7 @@ import {
   getImageCapabilityReport,
 } from '../../src/adapters/sharp-image-processor.js';
 import { encodeDHash, splitDHashBands } from '../../src/processing/dhash.js';
+import { syntheticHevcHeicBytes } from '../fixtures/media.js';
 
 const SAFE_LIMITS = Object.freeze({
   maxInputBytes: 52_428_800,
@@ -316,6 +317,29 @@ test('AVIF-only generic HEIF support leaves phone HEIC and HEIF unsupported befo
     });
     assert.equal(Object.isFrozen(result), true);
     assert.equal(Object.isFrozen(result.warnings), true);
+  }
+});
+
+test('real synthetic HEVC HEIC follows the reported runtime capability', async (t) => {
+  const bytes = syntheticHevcHeicBytes();
+  assert.equal(bytes.subarray(4, 12).toString('ascii'), 'ftypheic');
+  assert.equal(bytes.includes(Buffer.from('hvcC', 'ascii')), true);
+  const path = await fixtureFile(t, bytes, 'synthetic-hevc.heic');
+  const report = getImageCapabilityReport();
+
+  const result = await createSharpImageProcessor({ limits: SAFE_LIMITS }).process(activeInput(
+    path,
+    { contentType: 'image/heic' },
+  ));
+  if (report.decode.heic) {
+    assert.equal(result.thumbnail?.contentType, 'image/webp');
+    assert.match(result.perceptualHash?.value, /^[a-f0-9]{16}$/);
+  } else {
+    assert.deepEqual(result, {
+      thumbnail: null,
+      perceptualHash: null,
+      warnings: [],
+    });
   }
 });
 
