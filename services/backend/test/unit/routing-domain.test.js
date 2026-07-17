@@ -194,6 +194,28 @@ test('routing execution objects enforce micros and lifecycle fields', () => {
   })));
 });
 
+test('capability budget ledgers are isolated by route plan', () => {
+  const capabilityLedger = makeBudgetLedger({
+    scope: {
+      type: 'capability',
+      key: 'ocr',
+      routePlanId: 'route_12345678',
+    },
+  });
+
+  assert.deepEqual(parseBudgetLedger(capabilityLedger), capabilityLedger);
+  assert.throws(() => parseBudgetLedger(makeBudgetLedger({
+    scope: { type: 'capability', key: 'ocr' },
+  })));
+  assert.throws(() => parseBudgetLedger(makeBudgetLedger({
+    scope: {
+      type: 'route',
+      key: 'route_12345678',
+      routePlanId: 'route_12345678',
+    },
+  })));
+});
+
 test('routing summary partitions current eligible plans without changing batch state', () => {
   const batch = makeBatchWithRoutingSummary();
   assert.deepEqual(parseImportBatch(batch), batch);

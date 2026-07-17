@@ -129,6 +129,33 @@ test('budget execution and escalation identities bind their canonical inputs', (
   assert.deepEqual(reasons, ['document-ambiguous', 'ocr-text-insufficient']);
 });
 
+test('capability ledger identity is isolated by route plan', () => {
+  const scope = {
+    ownerId: 'user_alpha',
+    type: 'capability',
+    key: 'ocr',
+    routePlanId: 'route_12345678',
+  };
+  const first = makeBudgetLedgerId(scope);
+
+  assert.equal(makeBudgetLedgerId({ ...scope }), first);
+  assert.notEqual(makeBudgetLedgerId({
+    ...scope,
+    routePlanId: 'route_87654321',
+  }), first);
+  assert.throws(() => makeBudgetLedgerId({
+    ownerId: 'user_alpha',
+    type: 'capability',
+    key: 'ocr',
+  }), TypeError);
+  assert.throws(() => makeBudgetLedgerId({
+    ownerId: 'user_alpha',
+    type: 'route',
+    key: 'route_12345678',
+    routePlanId: 'route_12345678',
+  }), TypeError);
+});
+
 test('routing identities are bounded opaque IdSchema values', () => {
   const routePlanId = makeRoutePlanId({ ...headInput, revision: 1 });
   const ids = [
