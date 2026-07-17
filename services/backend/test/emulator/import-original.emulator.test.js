@@ -88,6 +88,9 @@ test('anonymous user saves one original through Auth, Firestore and Storage Emul
         return { outcome: processingEvents.length === 1 ? 'succeeded' : 'terminal_noop' };
       },
     },
+    authoritativeRouter: {
+      async handle() { return { outcome: 'terminal_noop' }; },
+    },
     allowedBuckets: [bucketName],
   });
 

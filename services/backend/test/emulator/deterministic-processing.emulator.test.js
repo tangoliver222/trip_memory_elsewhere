@@ -128,6 +128,9 @@ test('real Emulators persist one deterministic pipeline result exactly once per 
     repository,
     objectInspector: createFirebaseObjectInspector(adapterConfig),
     deterministicProcessor,
+    authoritativeRouter: {
+      async handle() { return { outcome: 'terminal_noop' }; },
+    },
     allowedBuckets: [bucketName],
   });
 
