@@ -286,6 +286,7 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
 test('production composition sources do not import test helpers', async () => {
   const sources = await Promise.all([
     '../../src/composition/api.js',
+    '../../src/composition/capability-worker.js',
     '../../src/composition/ingestion.js',
     '../../src/composition/runtime.js',
   ].map((path) => readFile(new URL(path, import.meta.url), 'utf8')));
@@ -294,4 +295,82 @@ test('production composition sources do not import test helpers', async () => {
     assert.equal(source.includes('/test/'), false);
     assert.equal(source.includes('test/helpers'), false);
   }
+});
+
+test('runtime isolates provider construction to the owning service root', async (t) => {
+  const calls = [];
+  const storage = { bucket() { return {}; } };
+  const factories = {
+    firebaseFactory({ appName }) {
+      calls.push(['firebase', appName]);
+      return {
+        db: {}, storage,
+        auth: { async verifyIdToken() { return { uid: 'user_alpha' }; } },
+        appCheck: { async verifyToken() { return { appId: 'elsewhere-web-test' }; } },
+      };
+    },
+    repositoryFactory() { return createMemoryRepository(); },
+    sourceMaterializerFactory() {
+      calls.push(['sourceMaterializer']);
+      return { async materialize() { throw new Error('not reached'); } };
+    },
+    capabilityArtifactStoreFactory() {
+      calls.push(['artifactStore']);
+      return {
+        async putNormalizedArtifact() { throw new Error('not reached'); },
+        async putProviderArtifact() { throw new Error('not reached'); },
+      };
+    },
+    documentAiOcrFactory() {
+      calls.push(['documentAi']);
+      return { async process() { throw new Error('not reached'); } };
+    },
+    capabilityWorkerFactory() {
+      calls.push(['worker']);
+      return { async handle() { return { outcome: 'terminal_noop', retryable: false }; } };
+    },
+  };
+  const base = {
+    ...appConfig,
+    firebaseProjectId: 'demo-elsewhere',
+    capabilities: {
+      mode: 'fake',
+      ocr: {
+        executorVersion: 'v1', provider: 'document-ai', providerVersion: 'fake-processor-v1',
+      },
+      cloudTasks: null,
+      documentAi: null,
+    },
+  };
+  const api = createRuntimeApp({
+    ...base,
+    serviceMode: 'api',
+    allowedAppIds: ['elsewhere-web-test'],
+    storageBuckets: [],
+  }, factories);
+  t.after(() => api.close());
+  assert.equal(calls.some(([name]) => name === 'sourceMaterializer'), false);
+  assert.equal(calls.some(([name]) => name === 'documentAi'), false);
+
+  calls.length = 0;
+  const worker = createRuntimeApp({
+    ...base,
+    serviceMode: 'capability-worker',
+    allowedAppIds: [],
+    storageBuckets: ['demo-elsewhere.appspot.com'],
+  }, factories);
+  t.after(() => worker.close());
+  assert.deepEqual(calls.map(([name]) => name), [
+    'firebase', 'sourceMaterializer', 'artifactStore', 'worker',
+  ]);
+  assert.equal((await worker.inject({
+    method: 'POST',
+    url: '/internal/capabilities/ocr',
+    payload: {
+      capabilityExecutionId: 'execution_12345678',
+      ownerId: 'user_alpha',
+      routePlanId: 'route_12345678',
+      routePlanRevision: 1,
+    },
+  })).statusCode, 204);
 });
