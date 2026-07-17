@@ -164,6 +164,21 @@ test('routing cohort is sorted bounded and keeps a valid representative', () => 
   })));
 });
 
+test('route plan cohort references are unique and sorted by reference ID', () => {
+  const representation = makeRoutePlan().representation;
+  const first = { type: 'routingCohort', id: 'cohort_alpha001' };
+  const second = { type: 'routingCohort', id: 'cohort_bravo001' };
+  assert.doesNotThrow(() => parseRoutePlan(makeRoutePlan({
+    representation: { ...representation, cohortRefs: [first, second] },
+  })));
+  assert.throws(() => parseRoutePlan(makeRoutePlan({
+    representation: { ...representation, cohortRefs: [second, first] },
+  })));
+  assert.throws(() => parseRoutePlan(makeRoutePlan({
+    representation: { ...representation, cohortRefs: [first, { ...first }] },
+  })));
+});
+
 test('routing execution objects enforce micros and lifecycle fields', () => {
   assert.deepEqual(parseBudgetLedger(makeBudgetLedger()), makeBudgetLedger());
   assert.deepEqual(
