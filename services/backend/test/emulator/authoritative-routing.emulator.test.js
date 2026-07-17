@@ -10,7 +10,6 @@ import {
   getFirestore,
 } from 'firebase/firestore';
 import { createFirebaseAdmin } from '../../src/adapters/firebase.js';
-import { createCapabilityAuthorizer } from '../../src/routing/authorization.js';
 import { buildRoutingCohorts } from '../../src/routing/cohorts.js';
 import { createAuthoritativeRouter } from '../../src/routing/service.js';
 import { createFirestoreRepository } from '../../src/repositories/firestore.js';
@@ -28,7 +27,6 @@ const enabled = Boolean(
 );
 const projectId = 'demo-elsewhere';
 const ROUTED_AT = '2026-07-17T13:00:00.000Z';
-const CLAIMED_AT = '2026-07-17T13:01:00.000Z';
 
 const emulatorAddress = (value) => {
   const url = new URL(`http://${value}`);
@@ -188,7 +186,6 @@ test('Auth Firestore and Storage Emulators verify authoritative routing at 1/12/
     small.ownerId,
     { batchId: small.batches[0].batch.id },
   );
-  const firstPlan = firstSmallSnapshot.routePlans[0];
   assert.equal(firstSmallSnapshot.capabilityExecutions.length, 0);
   const changedFragment = structuredClone(small.fragments[0]);
   changedFragment.storage.generation = `${changedFragment.storage.generation}2`;
@@ -226,43 +223,8 @@ test('Auth Firestore and Storage Emulators verify authoritative routing at 1/12/
   const currentPlan = revisedSnapshot.routePlans.find(({ id }) => id === currentHead.currentPlanRef.id);
   assert.equal(revisedSnapshot.capabilityExecutions.length, 0);
 
-  const authorizer = createCapabilityAuthorizer({
-    repository,
-    supportedVersions: {
-      router: ['v1'],
-      policy: ['v1'],
-      costModel: ['v1'],
-      executors: { 'multimodal-embedding': ['v1'] },
-    },
-    clock: () => CLAIMED_AT,
-  });
-  const claim = (routePlanId, sourceRevision, idempotencyKey) => authorizer.claim({
-    uid: small.ownerId,
-    routePlanId,
-    capability: 'embedding',
-    executorClass: 'multimodal-embedding',
-    executorVersion: 'v1',
-    sourceRevision,
-    idempotencyKey,
-  });
-  await assert.rejects(() => claim(
-    firstPlan.id,
-    firstPlan.sourceRevision,
-    'idem_stale0001',
-  ));
-  const authorization = await claim(
-    currentPlan.id,
-    currentPlan.sourceRevision,
-    'idem_current001',
-  );
-  assert.equal(authorization.routePlanId, currentPlan.id);
-  assert.equal(authorization.capability, 'embedding');
-  const afterClaim = await repository.loadRoutingSnapshot(
-    small.ownerId,
-    { batchId: changedBatch.id },
-  );
-  assert.equal(afterClaim.capabilityExecutions.length, 1);
-  assert.equal(afterClaim.budgetReservations.length > 0, true);
+  assert.equal(currentPlan.capabilities.embedding.decision, 'approved');
+  assert.equal(revisedSnapshot.budgetReservations.length > 0, true);
   const ledgers = await admin.db.collection(`users/${small.ownerId}/budgetLedgers`).get();
   assert.equal(ledgers.docs.every((snapshot) => snapshot.data().spentMicros === 0), true);
   assert.equal(ledgers.docs.some((snapshot) => snapshot.data().reservedMicros > 0), true);

@@ -3,6 +3,7 @@ import {
   parseBudgetLedger,
   parseBudgetReservation,
   parseCapabilityExecution,
+  parseCapabilityResult,
   parseDuplicateCandidate,
   parseEscalationRequest,
   parseFragment,
@@ -16,6 +17,7 @@ import {
   assertProcessingRepository,
   assertRepository,
   assertRoutingRepository,
+  assertCapabilityRepository,
 } from './contract.js';
 import {
   RepositoryConflictError,
@@ -47,6 +49,16 @@ import {
   applyRoutingApproval,
   applyRoutingDraftSave,
 } from './routing-outcome.js';
+import {
+  applyCapabilityBillingUncertain,
+  applyCapabilityCalling,
+  applyCapabilityClaim,
+  applyCapabilityFailure,
+  applyCapabilityPreparation,
+  applyCapabilityQueued,
+  applyCapabilityResult,
+  applyCapabilitySettlement,
+} from './capability-outcome.js';
 
 const isConflict = (error) => (
   error?.code === 6
@@ -82,6 +94,19 @@ export function createFirestoreRepository({ db }) {
 
   async function databaseGetAll(references) {
     return references.length > 0 ? db.getAll(...references) : [];
+  }
+
+  async function transactionQueryByValues(transaction, uid, name, field, values, parse) {
+    const byId = new Map();
+    for (const valueChunk of chunks(values)) {
+      const snapshot = await transaction.get(
+        collection(uid, name).where(field, 'in', valueChunk),
+      );
+      for (const entry of snapshot.docs.map((doc) => parse(doc.data()))) {
+        byId.set(entry.id, entry);
+      }
+    }
+    return sortById([...byId.values()]);
   }
 
   async function create(uid, input, collection, parse) {
@@ -493,10 +518,12 @@ export function createFirestoreRepository({ db }) {
     }
     const reservationById = new Map();
     const executionById = new Map();
+    const resultById = new Map();
     for (const planIdChunk of chunks(routePlans.map(({ id }) => id))) {
-      const [reservationSnapshot, executionSnapshot] = await Promise.all([
+      const [reservationSnapshot, executionSnapshot, resultSnapshot] = await Promise.all([
         collection(uid, 'budgetReservations').where('routePlanRef.id', 'in', planIdChunk).get(),
         collection(uid, 'capabilityExecutions').where('routePlanRef.id', 'in', planIdChunk).get(),
+        collection(uid, 'capabilityResults').where('routePlanRef.id', 'in', planIdChunk).get(),
       ]);
       for (const value of sortById(reservationSnapshot.docs.map((doc) => doc.data()))) {
         const reservation = parseBudgetReservation(value);
@@ -505,6 +532,10 @@ export function createFirestoreRepository({ db }) {
       for (const value of sortById(executionSnapshot.docs.map((doc) => doc.data()))) {
         const execution = parseCapabilityExecution(value);
         executionById.set(execution.id, execution);
+      }
+      for (const value of sortById(resultSnapshot.docs.map((doc) => doc.data()))) {
+        const result = parseCapabilityResult(value);
+        resultById.set(result.id, result);
       }
     }
     return cloneFrozen({
@@ -517,6 +548,7 @@ export function createFirestoreRepository({ db }) {
       routingCohorts: sortById([...cohortsById.values()]),
       budgetReservations: sortById([...reservationById.values()]),
       capabilityExecutions: sortById([...executionById.values()]),
+      capabilityResults: sortById([...resultById.values()]),
       escalationRequests: sortById([...escalationById.values()]),
     });
   }
@@ -665,6 +697,321 @@ export function createFirestoreRepository({ db }) {
     });
   }
 
+  async function loadCapabilityState(transaction, uid, executionId) {
+    const executionSnapshot = await transaction.get(
+      document(uid, 'capabilityExecutions', executionId),
+    );
+    const execution = executionSnapshot.exists
+      ? parseCapabilityExecution(executionSnapshot.data())
+      : null;
+    if (!execution) {
+      return {
+        execution: null,
+        routePlan: null,
+        batch: null,
+        reservation: null,
+        fragment: null,
+        head: null,
+        result: null,
+        plans: [],
+        executions: [],
+        results: [],
+        heads: [],
+        escalations: [],
+        ledgers: [],
+      };
+    }
+
+    const [planSnapshot, reservationSnapshot, fragmentSnapshot, resultSnapshot] = (
+      await transactionGetAll(transaction, [
+        document(uid, 'routePlans', execution.routePlanRef.id),
+        document(uid, 'budgetReservations', execution.reservationRef.id),
+        document(uid, 'fragments', execution.fragmentRef.id),
+        ...(execution.resultRef
+          ? [document(uid, 'capabilityResults', execution.resultRef.id)]
+          : []),
+      ])
+    );
+    const routePlan = planSnapshot?.exists ? parseRoutePlan(planSnapshot.data()) : null;
+    const reservation = reservationSnapshot?.exists
+      ? parseBudgetReservation(reservationSnapshot.data())
+      : null;
+    const fragment = fragmentSnapshot?.exists ? parseFragment(fragmentSnapshot.data()) : null;
+    const result = resultSnapshot?.exists ? parseCapabilityResult(resultSnapshot.data()) : null;
+    const batchRef = routePlan ? document(uid, 'importBatches', routePlan.batchRef.id) : null;
+    const headRef = fragment ? document(
+      uid,
+      'routingHeads',
+      makeRoutingHeadId({
+        ownerId: uid,
+        fragmentId: fragment.id,
+        routerName: 'fragment-routing',
+      }),
+    ) : null;
+    const [batchSnapshot, headSnapshot] = await transactionGetAll(
+      transaction,
+      [batchRef, headRef].filter(Boolean),
+    );
+    const batch = batchSnapshot?.exists ? parseImportBatch(batchSnapshot.data()) : null;
+    const head = headSnapshot?.exists ? parseRoutingHead(headSnapshot.data()) : null;
+    const plans = batch
+      ? sortById((await transaction.get(
+        collection(uid, 'routePlans').where('batchRef.id', '==', batch.id),
+      )).docs.map((snapshot) => parseRoutePlan(snapshot.data())))
+      : [];
+    const planIds = plans.map(({ id }) => id);
+    const executions = await transactionQueryByValues(
+      transaction,
+      uid,
+      'capabilityExecutions',
+      'routePlanRef.id',
+      planIds,
+      parseCapabilityExecution,
+    );
+    const results = await transactionQueryByValues(
+      transaction,
+      uid,
+      'capabilityResults',
+      'routePlanRef.id',
+      planIds,
+      parseCapabilityResult,
+    );
+    const heads = await transactionQueryByValues(
+      transaction,
+      uid,
+      'routingHeads',
+      'currentPlanRef.id',
+      planIds,
+      parseRoutingHead,
+    );
+    const escalations = await transactionQueryByValues(
+      transaction,
+      uid,
+      'escalationRequests',
+      'fromRoutePlanRef.id',
+      planIds,
+      parseEscalationRequest,
+    );
+    const ledgerSnapshots = await transactionGetAll(
+      transaction,
+      reservation?.ledgerRefs.map(({ id }) => document(uid, 'budgetLedgers', id)) ?? [],
+    );
+    const ledgers = sortById(ledgerSnapshots
+      .filter(({ exists }) => exists)
+      .map((snapshot) => parseBudgetLedger(snapshot.data())));
+    return {
+      execution,
+      routePlan,
+      batch,
+      reservation,
+      fragment,
+      head,
+      result,
+      plans,
+      executions,
+      results,
+      heads,
+      escalations,
+      ledgers,
+    };
+  }
+
+  async function prepareCapabilityExecution(uid, input) {
+    const execution = input?.execution;
+    const executionRef = document(uid, 'capabilityExecutions', execution?.id);
+    const planRef = document(uid, 'routePlans', execution?.routePlanRef?.id);
+    const fragmentRef = document(uid, 'fragments', execution?.fragmentRef?.id);
+    const reservationRef = document(uid, 'budgetReservations', execution?.reservationRef?.id);
+    const headRef = document(
+      uid,
+      'routingHeads',
+      makeRoutingHeadId({
+        ownerId: uid,
+        fragmentId: execution?.fragmentRef?.id,
+        routerName: 'fragment-routing',
+      }),
+    );
+    return db.runTransaction(async (transaction) => {
+      const [storedSnapshot, planSnapshot, fragmentSnapshot, reservationSnapshot, headSnapshot] = (
+        await transactionGetAll(transaction, [
+          executionRef,
+          planRef,
+          fragmentRef,
+          reservationRef,
+          headRef,
+        ])
+      );
+      const transition = applyCapabilityPreparation({
+        uid,
+        execution,
+        storedExecution: dataOrNull(storedSnapshot),
+        plan: dataOrNull(planSnapshot),
+        fragment: dataOrNull(fragmentSnapshot),
+        reservation: dataOrNull(reservationSnapshot),
+        head: dataOrNull(headSnapshot),
+        supportedVersions: input?.supportedVersions,
+      });
+      if (transition.outcome === 'created') {
+        transaction.create(executionRef, transition.execution);
+      }
+      return cloneFrozen(transition);
+    });
+  }
+
+  async function markCapabilityQueued(uid, input) {
+    const executionRef = document(uid, 'capabilityExecutions', input?.executionId);
+    return db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(executionRef);
+      const transition = applyCapabilityQueued(uid, dataOrNull(snapshot), input);
+      if (transition.outcome === 'applied') transaction.set(executionRef, transition.execution);
+      return cloneFrozen(transition);
+    });
+  }
+
+  async function claimCapabilityExecution(uid, input) {
+    return db.runTransaction(async (transaction) => {
+      const current = await loadCapabilityState(transaction, uid, input?.executionId);
+      const transition = applyCapabilityClaim({
+        uid,
+        ...current,
+        plan: current.routePlan,
+        supportedVersions: input?.supportedVersions,
+        input,
+      });
+      if (transition.outcome === 'claimed') {
+        transaction.set(
+          document(uid, 'routePlans', transition.routePlan.id),
+          transition.routePlan,
+        );
+        transaction.set(
+          document(uid, 'capabilityExecutions', transition.execution.id),
+          transition.execution,
+        );
+      }
+      return cloneFrozen(transition);
+    });
+  }
+
+  async function markCapabilityCalling(uid, input) {
+    return db.runTransaction(async (transaction) => {
+      const current = await loadCapabilityState(transaction, uid, input?.executionId);
+      const transition = applyCapabilityCalling(
+        uid,
+        current.execution,
+        current.reservation,
+        input,
+      );
+      if (transition.outcome === 'applied') {
+        transaction.set(
+          document(uid, 'capabilityExecutions', transition.execution.id),
+          transition.execution,
+        );
+      }
+      return cloneFrozen(transition);
+    });
+  }
+
+  async function recordCapabilityResult(uid, input) {
+    return db.runTransaction(async (transaction) => {
+      const current = await loadCapabilityState(transaction, uid, input?.executionId);
+      const storedResultSnapshot = await transaction.get(
+        document(uid, 'capabilityResults', input?.result?.id),
+      );
+      const transition = applyCapabilityResult({
+        uid,
+        execution: current.execution,
+        reservation: current.reservation,
+        storedResult: dataOrNull(storedResultSnapshot),
+        input,
+      });
+      if (transition.outcome === 'applied') {
+        transaction.create(
+          document(uid, 'capabilityResults', transition.result.id),
+          transition.result,
+        );
+        transaction.set(
+          document(uid, 'capabilityExecutions', transition.execution.id),
+          transition.execution,
+        );
+      }
+      return cloneFrozen(transition);
+    });
+  }
+
+  async function settleCapabilityExecution(uid, input) {
+    return db.runTransaction(async (transaction) => {
+      const current = await loadCapabilityState(transaction, uid, input?.executionId);
+      const transition = applyCapabilitySettlement({
+        uid,
+        ...current,
+        input,
+      });
+      if (transition.outcome === 'duplicate') return cloneFrozen(transition);
+      transaction.set(
+        document(uid, 'capabilityExecutions', transition.execution.id),
+        transition.execution,
+      );
+      transaction.set(
+        document(uid, 'budgetReservations', transition.reservation.id),
+        transition.reservation,
+      );
+      for (const ledger of transition.ledgers) {
+        transaction.set(document(uid, 'budgetLedgers', ledger.id), ledger);
+      }
+      transaction.set(document(uid, 'routePlans', transition.routePlan.id), transition.routePlan);
+      transaction.set(document(uid, 'importBatches', transition.batch.id), transition.batch);
+      transaction.set(document(uid, 'fragments', transition.fragment.id), transition.fragment);
+      return cloneFrozen(transition);
+    });
+  }
+
+  async function failCapabilityExecution(uid, input) {
+    return db.runTransaction(async (transaction) => {
+      const current = await loadCapabilityState(transaction, uid, input?.executionId);
+      const transition = applyCapabilityFailure({
+        uid,
+        ...current,
+        input,
+      });
+      if (transition.outcome === 'duplicate') return cloneFrozen(transition);
+      transaction.set(
+        document(uid, 'capabilityExecutions', transition.execution.id),
+        transition.execution,
+      );
+      transaction.set(
+        document(uid, 'budgetReservations', transition.reservation.id),
+        transition.reservation,
+      );
+      for (const ledger of transition.ledgers) {
+        transaction.set(document(uid, 'budgetLedgers', ledger.id), ledger);
+      }
+      if (transition.result) {
+        transaction.create(
+          document(uid, 'capabilityResults', transition.result.id),
+          transition.result,
+        );
+      }
+      transaction.set(document(uid, 'routePlans', transition.routePlan.id), transition.routePlan);
+      transaction.set(document(uid, 'importBatches', transition.batch.id), transition.batch);
+      return cloneFrozen(transition);
+    });
+  }
+
+  async function markCapabilityBillingUncertain(uid, input) {
+    return db.runTransaction(async (transaction) => {
+      const current = await loadCapabilityState(transaction, uid, input?.executionId);
+      const transition = applyCapabilityBillingUncertain({ uid, ...current, input });
+      if (transition.outcome === 'duplicate') return cloneFrozen(transition);
+      transaction.set(
+        document(uid, 'capabilityExecutions', transition.execution.id),
+        transition.execution,
+      );
+      transaction.set(document(uid, 'routePlans', transition.routePlan.id), transition.routePlan);
+      transaction.set(document(uid, 'importBatches', transition.batch.id), transition.batch);
+      return cloneFrozen(transition);
+    });
+  }
+
   const repository = assertRepository({
     createFragment: (uid, input) => create(uid, input, 'fragments', parseFragment),
     getFragment: (uid, id) => get(uid, id, 'fragments', parseFragment),
@@ -682,7 +1029,16 @@ export function createFirestoreRepository({ db }) {
     loadRoutingSnapshot,
     commitRoutingApproval,
     submitEscalationRequest,
+    prepareCapabilityExecution,
+    markCapabilityQueued,
+    claimCapabilityExecution,
+    markCapabilityCalling,
+    recordCapabilityResult,
+    settleCapabilityExecution,
+    failCapabilityExecution,
+    markCapabilityBillingUncertain,
   });
   assertProcessingRepository(repository);
-  return assertRoutingRepository(repository);
+  assertRoutingRepository(repository);
+  return assertCapabilityRepository(repository);
 }

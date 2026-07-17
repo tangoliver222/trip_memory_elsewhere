@@ -131,6 +131,9 @@ test('real Emulators persist one deterministic pipeline result exactly once per 
     authoritativeRouter: {
       async handle() { return { outcome: 'terminal_noop' }; },
     },
+    capabilityScheduler: {
+      async handle() { return { outcome: 'terminal_noop' }; },
+    },
     allowedBuckets: [bucketName],
   });
 
