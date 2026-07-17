@@ -45,21 +45,22 @@ test('exact candidate produces one canonical SHA-256 cohort', () => {
   const inputHash = 'a'.repeat(64);
   const fragments = [
     makeRoutableFragment({
-      id: 'frag_exact001', inputHash, sourceCreatedAt: null,
+      id: 'frag_exact999', inputHash, sourceCreatedAt: null,
     }),
     makeRoutableFragment({
       id: 'frag_exact002', inputHash, sourceCreatedAt: null,
     }),
   ];
 
-  const cohorts = build(fragments, [exactCandidate('frag_exact001', 'frag_exact002')]);
+  const cohorts = build(fragments, [exactCandidate('frag_exact999', 'frag_exact002')]);
 
   assert.deepEqual(cohorts, [{
     type: 'exact_duplicate',
     memberRevisionRefs: [
-      { fragmentId: 'frag_exact001', generation: '1740000000000001', inputHash },
       { fragmentId: 'frag_exact002', generation: '1740000000000001', inputHash },
+      { fragmentId: 'frag_exact999', generation: '1740000000000001', inputHash },
     ],
+    canonicalFragmentRef: fragmentRef('frag_exact999'),
     basisCodes: ['sha256-exact'],
     warningCodes: [],
   }]);
