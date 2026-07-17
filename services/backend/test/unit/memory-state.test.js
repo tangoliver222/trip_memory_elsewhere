@@ -8,6 +8,13 @@ const COLLECTIONS = [
   'processingTasks',
   'contentHashes',
   'duplicateCandidates',
+  'routePlans',
+  'routingHeads',
+  'routingCohorts',
+  'budgetLedgers',
+  'budgetReservations',
+  'capabilityExecutions',
+  'escalationRequests',
 ];
 
 test('a preparation failure cannot partially mutate the current memory snapshot', () => {
