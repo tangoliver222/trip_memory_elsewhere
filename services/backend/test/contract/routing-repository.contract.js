@@ -446,9 +446,16 @@ export function runRoutingRepositoryContract({ name, createRepository }) {
   });
 
   contractTest('stores one deterministic escalation request and rejects ID collision', async ({
-    repository, ownerId,
+    repository, ownerId, suffix,
   }) => {
-    const request = makeEscalationRequest({ ownerId });
+    const seeded = await seedDeterministicSuccess(repository, ownerId, suffix);
+    const draft = makeDraft({ ownerId, ...seeded });
+    await repository.saveRoutingDraft(ownerId, { routePlan: draft });
+    await repository.commitRoutingApproval(ownerId, approval(seeded.batch.id, draft.id));
+    const request = makeEscalationRequest({
+      ownerId,
+      fromRoutePlanRef: ref('routePlan', draft.id),
+    });
     const created = await repository.submitEscalationRequest(ownerId, request);
     const duplicate = await repository.submitEscalationRequest(ownerId, request);
 
@@ -467,6 +474,7 @@ export function runRoutingRepositoryContract({ name, createRepository }) {
     repository, ownerId, suffix,
   }) => {
     const seeded = await seedDeterministicSuccess(repository, ownerId, suffix);
+    const external = await seedDeterministicSuccess(repository, ownerId, `${suffix}x`);
     const draft = makeDraft({ ownerId, ...seeded });
     const inputRevisionRefs = [
       {
@@ -474,12 +482,12 @@ export function runRoutingRepositoryContract({ name, createRepository }) {
         sourceRevision: draft.sourceRevision,
       },
       {
-        fragmentRef: ref('fragment', 'frag_external01'),
+        fragmentRef: ref('fragment', external.fragment.id),
         sourceRevision: {
-          ...draft.sourceRevision,
-          objectName: `users/${ownerId}/originals/external/frag_external01`,
-          generation: '1740000000000002',
-          inputHash: 'b'.repeat(64),
+          bucket: external.fragment.storage.bucket,
+          objectName: external.fragment.storage.originalPath,
+          generation: external.fragment.storage.generation,
+          inputHash: external.fragment.hashes.sha256,
         },
       },
     ].sort((left, right) => left.fragmentRef.id.localeCompare(right.fragmentRef.id));
@@ -487,7 +495,7 @@ export function runRoutingRepositoryContract({ name, createRepository }) {
       ownerId,
       memberRefs: [
         ref('fragment', seeded.fragment.id),
-        ref('fragment', 'frag_external01'),
+        ref('fragment', external.fragment.id),
       ].sort((left, right) => left.id.localeCompare(right.id)),
       representativeRefs: [ref('fragment', seeded.fragment.id)],
       inputRevisionRefs,
