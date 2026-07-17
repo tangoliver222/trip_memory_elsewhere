@@ -1,6 +1,6 @@
 # Elsewhere Authoritative Routing & Budget Gate v1
 
-更新日期：2026-07-17  
+更新日期：2026-07-17
 状态：Module 4.5 已实现并通过本地与 Firebase Emulator 验证；未部署生产环境，Module 5 未实现。
 
 ## 1. 模块位置与完成边界
