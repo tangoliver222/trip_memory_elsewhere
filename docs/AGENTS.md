@@ -90,6 +90,8 @@ A page may enter Gemini's motion phase only after its product purpose, static la
 - 对象链固定为：`Fragment → Entity → Visit/Event → 时间、地点与连接 → Discovery → 用户解释`。
 - 同一碎片从任何入口均先打开唯一的 `Fragment Lens`；只有 Lens 才进入完整原件。
 - 原件先于派生内容；证据先于 AI 观察；用户解释永远高于模型解释。
+- AI 永远不是导入后的第一步；原件必须先经过确定性事实处理和权威路由。
+- Document AI、Places、Embedding、Gemini 或其他计费能力只能执行当前、输入匹配且预算有效的 approved RoutePlan；处理器不得自行静默升级。
 - AI 不替用户判断情绪、人格或成长；不确定、冲突和未安放是合法状态。
 - World 是可浏览数据世界，Discover 是少量值得打扰的发现，Me 是用户解释与控制，Else 必须把用户带回来源。
 

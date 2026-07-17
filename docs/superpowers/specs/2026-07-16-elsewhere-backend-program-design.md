@@ -2,7 +2,9 @@
 
 **日期：** 2026-07-16
 
-**状态：** 待书面审阅
+**最近修订：** 2026-07-17（插入 Module 4.5）
+
+**状态：** 已批准的分模块执行路线；Module 4.5 设计已批准，尚未实施
 
 **实施方式：** Firebase Emulator 本地闭环完成后，再部署独立 `elsewhere-dev` 环境
 
@@ -17,6 +19,9 @@ Google-first 总方向合理，但原文中的 P0 同时包含 Firestore、Stora
 > **一个模块化 Node.js 后端 + Firebase Emulator + Firestore/Storage 适配器 + 可替换 AI 端口。先证明原件安全入库和字段可追溯，再建立连接、发现和 Else。**
 
 第一阶段不建设微服务群，不引入 Agent Engine，不引入第二个模型供应链，也不建设向量数据库。所有延后项必须由数据量、质量或成本指标触发。
+
+2026-07-17 路线补充：所有计费能力必须位于独立 Authoritative Routing & Budget Gate 之后。
+AI 不是导入后的第一步；OCR、Places、Embedding、Gemini 等处理器不得自行决定升级。
 
 ## 2. 前提与成功标准
 
@@ -86,7 +91,9 @@ services/backend/
 │  ├─ repositories/          # 接口契约与 Firestore 实现
 │  ├─ imports/               # ImportBatch、上传登记、回执
 │  ├─ ingestion/             # object.finalized 幂等处理
-│  ├─ processing/            # 元数据/OCR/地点/连接任务
+│  ├─ processing/            # Module 4 确定性事实
+│  ├─ routing/               # Module 4.5 cohort、RoutePlan、Budget Gate
+│  ├─ capabilities/          # Module 5 受计划约束的 OCR/Places/Embedding/Gemini
 │  ├─ discoveries/           # 候选与质量门槛
 │  ├─ else/                  # scope、检索、回答、来源验证
 │  └─ adapters/              # Firebase、AI、OCR、Places
@@ -177,10 +184,11 @@ authenticated request
 
 ### 6.2 处理闭环
 
-每个处理步骤使用唯一键：
+每个处理步骤使用版本化唯一键；具体 tuple 由对应模块冻结，不能在未读取原件前依赖尚不存在的
+input hash。
 
 ```text
-uid + fragmentId + processorName + processorVersion + inputHash
+uid + fragmentId + processorName + processorVersion + source revision
 ```
 
 任务记录状态为 `queued|running|succeeded|failed|superseded`。重试只复用同一任务，输入或处理器版本变化才创建新任务。
@@ -189,13 +197,19 @@ uid + fragmentId + processorName + processorVersion + inputHash
 
 1. SHA-256、媒介类型、基本元数据；
 2. 缩略图/预览；
-3. 文档类 OCR 或图片上下文提取；
-4. 时间/地点候选与字段级 provenance；
-5. Visit/Scene 确定性聚类候选；
-6. Connection 确定性候选；
-7. 达到证据门槛后才进入 Discovery 筛选。
+3. RoutePlan draft、cohort resolution 和 representative selection；
+4. OCR、Places、Embedding、Gemini 分项预算批准；
+5. Module 5 只执行当前 approved capabilities；
+6. 时间/地点候选与字段级 provenance；
+7. Visit/Scene 确定性聚类候选；
+8. Connection 确定性候选；
+9. 达到证据门槛后才进入 Discovery 筛选。
 
 单一步骤失败不会把 Fragment 变成不可访问；UI 读取处理摘要显示局部失败。
+
+Module 4.5 自身不调用任何外部计费 capability、模型或分类 API。Processor 发现输入不足时只提交结构化
+EscalationRequest，由 Router 在预算与用户策略下创建新 RoutePlan revision。完整设计见
+`docs/superpowers/specs/2026-07-17-authoritative-routing-budget-gate-design.md`。
 
 ### 6.3 Else 查询闭环
 
@@ -235,6 +249,7 @@ verified uid + strict scope
 | API | 本地进程 | 一个 Cloud Run service | request-based、min instances=0、max instances=2、512 MiB 起步 |
 | 上传事件 | 直接注入 CloudEvent handler | Eventarc Standard -> 同一 Cloud Run | 只发送对象引用，不在事件中复制原件 |
 | 任务 | in-memory fake | Cloud Tasks（有模型/Places 调用后） | 每个幂等任务最多有限重试 |
+| 权威路由 | 纯规则 + fake budget ledger | 同一 Cloud Run 模块起步 | 不调用付费能力；按 capability 预留和结算预算 |
 | OCR | fake/golden | Document AI OCR，仅文档类 | 不对普通照片调用；OCR 结果持久化 |
 | AI | fake/golden | Gemini 3.5 Flash 固定版本 | 证据包 ≤12k input tokens，回答 ≤256 output tokens；Developer API 只处理合成数据，真实私人数据走 Vertex AI |
 | Places | fake | 证据不足时调用 | 先 EXIF/OCR，结果按允许字段缓存 |
@@ -260,24 +275,28 @@ verified uid + strict scope
 - 模型调用记录 alias、输入/输出 token、feature、uid hash、latency 和 estimatedCost；不记录正文。
 - 每个 dev 用户默认每日最多处理 200 个新 Fragment、50 次 Else 问答；配置只允许服务端修改。
 - 相同原件、处理器版本、prompt 版本和输入哈希命中结果时不重复调用付费服务。
+- 所有付费调用必须携带当前 approved RoutePlan 与有效 BudgetReservation；stale plan 不调用 provider。
+- exact/near duplicate 和 burst 先选 representative，supporting 原件保留但按计划跳过昂贵处理。
 - Deep model 默认关闭；只有回归评估证明 Flash 不足且单次价值足够高时启用。
 
 ## 9. 分模块执行顺序
 
 每个模块拥有独立 spec、TDD 计划、验收和提交；未通过不进入下一模块。
 
-1. **Backend Foundation**：统一 package、配置、schema、Repository contract、Emulator、Rules、测试骨架。
-2. **Auth Boundary**：Firebase ID Token、App Check、uid 隔离和稳定错误契约。
-3. **Import Batch + Original Save**：批次、上传路径、Fragment 幂等创建、最小回执。
-4. **Deterministic Processing**：哈希、元数据、处理任务状态、重复识别、缩略图。
-5. **OCR + Multimodal Adapters**：Document AI/Gemini adapter、golden 测试、字段 provenance。
-6. **Place / Visit / Connection**：确定性候选、用户确认、Inbox、Receipt 聚合。
-7. **Discovery**：候选评分、质量门槛、来源、命名与保存。
-8. **Else Migration**：迁移可复用 router/prompt 思路，删除 fixture、分隔符和旧 `else-service`。
-9. **Privacy / Export / Delete**：数据清单、影响计算、导出与幂等删除。
-10. **Dev Deployment**：Terraform 最小资源、Cloud Run、预算、日志、staging smoke。
+- **Module 1 — Backend Foundation**：统一 package、配置、schema、Repository contract、Emulator、Rules、测试骨架。
+- **Module 2 — Auth Boundary**：Firebase ID Token、App Check、uid 隔离和稳定错误契约。
+- **Module 3 — Import Batch + Original Save**：批次、上传路径、Fragment 幂等创建、最小回执。
+- **Module 4 — Deterministic Processing**：哈希、元数据、处理任务状态、重复识别、缩略图。
+- **Module 4.5 — Authoritative Routing & Budget Gate**：cohort、代表项、版本化 RoutePlan、分项预算与执行授权；零外部计费 capability 调用。
+- **Module 5 — Capability Executors**：只按 approved RoutePlan 实现 OCR、Places、Embedding、Gemini adapter、golden 测试和字段 provenance。
+- **Module 6 — Place / Visit / Connection**：确定性候选、用户确认、Inbox、Receipt 聚合。
+- **Module 7 — Discovery**：候选评分、质量门槛、来源、命名与保存。
+- **Module 8 — Else Migration**：迁移可复用 router/prompt 思路，删除 fixture、分隔符和旧 `else-service`。
+- **Module 9 — Privacy / Export / Delete**：数据清单、影响计算、导出与幂等删除。
+- **Module 10 — Dev Deployment**：Terraform 最小资源、Cloud Run、预算、日志、staging smoke。
 
-不把整个路线写成一份巨型代码计划。首先只为模块 1 生成实现计划；模块 1 验收后再写模块 2。
+不把整个路线写成一份巨型代码计划。每个模块通过独立设计、计划与验收后才进入下一模块；
+Module 4.5 完成后必须停止，未经独立批准不得开始 Module 5。
 
 ## 10. 模块 1：Backend Foundation 的精确范围
 

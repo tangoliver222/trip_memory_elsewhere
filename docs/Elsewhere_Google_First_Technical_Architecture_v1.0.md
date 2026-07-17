@@ -1,8 +1,9 @@
 # Elsewhere Google-First Technical Architecture v1.0
 
-**状态：** 产品技术总方案 / 技术栈唯一基线  
-**日期：** 2026-07-15  
-**适用对象：** 产品、前端、后端、AI、数据、隐私、安全、Coding Agent  
+**状态：** 产品技术总方案 / 技术栈唯一基线
+**首次冻结：** 2026-07-15
+**最近修订：** 2026-07-17（Authoritative Routing & Budget Gate）
+**适用对象：** 产品、前端、后端、AI、数据、隐私、安全、Coding Agent
 **产品依据：** `Elsewhere_PRD_v3.0.md`、`Elsewhere_Visual_Design_System_v3.0.md`、`ELSEWHERE_PAGE_LOGIC_MAP_v1.md`
 
 ---
@@ -53,14 +54,16 @@ Elsewhere 建议采用：
 ## 0.2 架构基本原则
 
 1. **原件先保存，AI 后处理。**
-2. **结构化事实优先于生成式文本。**
-3. **所有 AI 输出必须能够回到原始来源。**
-4. **用户确认覆盖 AI 建议，但保留修改历史。**
-5. **粒子和前端视觉只消费结构化数据，不自行创造业务事实。**
-6. **所有私密原件和核心 AI 调用都走服务端，不从浏览器直接把用户内容发给模型。**
-7. **Qwen 只承担基础、低风险、可替换任务；Gemini 与 Google 专用服务承担核心多模态、关系与 Agent 能力。**
-8. **MVP 不上复杂图数据库；先用 Firestore 的对象与边集合，达到迁移阈值后再评估 Spanner Graph。**
-9. **前端保持当前 vanilla 技术栈，不因云技术选型重写页面。**
+2. **AI 永远不是第一步；确定性事实必须先编译为权威 RoutePlan。**
+3. **Document AI、Places、Embedding、Gemini 等计费能力只能执行当前、输入匹配且预算有效的 approved RoutePlan。**
+4. **结构化事实优先于生成式文本。**
+5. **所有 AI 输出必须能够回到原始来源。**
+6. **用户确认覆盖 AI 建议，但保留修改历史。**
+7. **粒子和前端视觉只消费结构化数据，不自行创造业务事实。**
+8. **所有私密原件和核心 AI 调用都走服务端，不从浏览器直接把用户内容发给模型。**
+9. **Qwen 只承担基础、低风险、可替换任务；Gemini 与 Google 专用服务承担核心多模态、关系与 Agent 能力。**
+10. **MVP 不上复杂图数据库；先用 Firestore 的对象与边集合，达到迁移阈值后再评估 Spanner Graph。**
+11. **前端保持当前 vanilla 技术栈，不因云技术选型重写页面。**
 
 ---
 
@@ -455,7 +458,9 @@ users/{uid}/derived/...
 → Firestore 更新已保存数量
 → Storage finalize Event
 → Eventarc
-→ Pub/Sub ingestion topic
+→ 确定性事实处理
+→ Authoritative Routing & Budget Gate
+→ 仅调度 approved capability
 ```
 
 ## 5.3 原件优先
@@ -476,6 +481,7 @@ fragment.status = uploaded
 api-bff
 ingestion-coordinator
 media-metadata-service
+authoritative-routing-service
 document-extraction-service
 visual-understanding-service
 place-resolution-service
@@ -495,20 +501,20 @@ MVP 可以部署在较少 Cloud Run 服务中，但代码模块保持边界，�
 
 ```text
 1. Exact dedupe: SHA-256
-2. Near duplicate: perceptual hash / embedding
+2. Near duplicate: dHash candidate
 3. EXIF / basic metadata
 4. Thumbnail / preview generation
-5. Document AI extraction
-6. Gemini visual context extraction
-7. Place candidate resolution
-8. Time zone normalization
-9. Embeddings
-10. Entity creation
-11. Visit / scene clustering
-12. Connection candidate generation
-13. Discovery update
-14. Import receipt update
-15. Inbox item generation
+5. Routing cohort resolution and representative selection
+6. Per-capability RoutePlan and budget approval
+7. Approved Document AI extraction
+8. Approved Gemini visual context extraction
+9. Approved place candidate resolution and time zone normalization
+10. Approved embeddings
+11. Entity creation
+12. Visit / scene clustering
+13. Connection candidate generation
+14. Discovery update
+15. Import receipt and Inbox update
 ```
 
 ## 5.6 任务系统分工
@@ -549,9 +555,38 @@ batch.completed
 - 发现周期重算；
 - 模型升级迁移。
 
+## 5.7 Authoritative Routing & Budget Gate
+
+Module 4.5 位于确定性事实与所有计费处理器之间：
+
+```text
+Original Save
+→ Deterministic Facts
+→ draft RoutePlan
+→ cohort resolution / Representative Selector
+→ per-capability Budget Gate
+→ approved RoutePlan
+→ Capability Executors
+```
+
+Router 只消费 source descriptor、格式、metadata、GPS/时间是否存在、SHA-256、dHash、重复候选、
+bounded thumbnail、批次上下文、用户确认和已有结果。它不得调用 Document AI、Places、
+Embedding、Gemini、Qwen、ML Kit 或外部分类 API。
+
+RoutePlan 分别审批 OCR、Places、Embedding 和 Gemini，不保存笼统 `needsAI`。approved 决策正文
+不可原地修改；Processor 只能返回结构化不足/升级请求，由 Router 生成新 revision。exact/near
+duplicate 与 burst 的 supporting Fragment 仍完整保留，只跳过计划中明确未批准的昂贵处理。
+
+预算采用 capability 级预留—结算：批准时按成本模型版本预留 ceiling，执行后记录实际成本并释放
+余额。预算不足产生 blocked decision，不把 Fragment 标记为失败。完整领域契约见
+`docs/superpowers/specs/2026-07-17-authoritative-routing-budget-gate-design.md`。
+
 ---
 
 # 6. AI 模型路由
+
+本节只描述**已获 RoutePlan 授权后**如何在模型别名之间选择。它不是 ingestion 的
+Authoritative Routing Layer，也无权增加未被 RoutePlan 批准的 capability。
 
 不要在业务代码中写死模型 ID。
 
@@ -1308,6 +1343,10 @@ Terraform 管理：
 
 ## 18.1 模型路由
 
+- 所有计费能力先经过 Authoritative Routing & Budget Gate；
+- Router 自身不调用模型或付费分类器；
+- exact/near duplicate 与 burst 优先只处理 representative；
+- OCR 足够时不得继续自动升级 Gemini；
 - 能用确定性代码，不调用模型；
 - 能用 Qwen，不调用 Gemini Pro；
 - 能用 Flash，不调用 Pro；
@@ -1362,13 +1401,15 @@ Terraform 管理：
 - Places / Geocoding / Time Zone；
 - BigQuery；
 - FCM；
-- Secret Manager。
+- Secret Manager；
+- Authoritative Routing & Budget Gate。
 
 完成：
 
 - 导入；
 - 处理；
--城市；
+- 代表项选择、分项预算与权威执行计划；
+- 城市；
 - Fragment Field；
 - Lens；
 - Inbox；
@@ -1466,6 +1507,7 @@ Three.js 只消费验证过的结构化对象，不能读取 LLM 自由文本决
 
 ## AI
 
+- 是否存在当前、输入匹配且预算有效的 approved RoutePlan？
 - 这个任务为什么需要模型？
 - 使用 Qwen、Flash 还是 Pro？
 - 输出是否结构化？
@@ -1497,6 +1539,8 @@ Three.js 只消费验证过的结构化对象，不能读取 LLM 自由文本决
 > **Firebase 负责用户可感知的产品状态。**
 
 > **Cloud Run、Eventarc、Pub/Sub 和 Tasks 负责可靠处理。**
+
+> **AI 永远不是第一步；所有计费能力必须服从 Authoritative Routing & Budget Gate。**
 
 > **Document AI 提取文档事实，Gemini 理解多模态与复杂关系，Qwen 只处理基础低风险文本。**
 

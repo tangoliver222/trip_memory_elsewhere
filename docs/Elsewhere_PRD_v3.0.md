@@ -2,6 +2,7 @@
 
 **状态：** 信息架构重构后的产品主文档
 **日期：** 2026-07-13
+**最近修订：** 2026-07-17（确定性路由与付费能力执行边界）
 **文档优先级：** 高于旧版 PRD、旧页面结构和单页视觉稿
 **适用对象：** 产品经理、UX、视觉设计、前端、AI/数据工程、Codex/Claude Code 等 Coding Agent
 **配套文档：** [`Elsewhere_Visual_Design_System_v3.0.md`](./Elsewhere_Visual_Design_System_v3.0.md) · [`ELSEWHERE_PAGE_LOGIC_MAP_v1.md`](./ELSEWHERE_PAGE_LOGIC_MAP_v1.md) · [`DESIGN_BRIEF.md`](./DESIGN_BRIEF.md) · [`AGENTS.md`](./AGENTS.md)
@@ -277,6 +278,16 @@ Elsewhere 的价值公式是：
 
 都必须能够返回至少一个原件。
 
+### 3.1.1 确定性路由先于付费能力
+
+AI 永远不是碎片导入后的第一步。原件安全保存后，系统必须先读取格式、来源、时间、GPS、
+metadata、哈希、重复候选和批次上下文，再由权威 Routing Layer 决定是否执行 OCR、Places、
+Embedding 或 Gemini。
+
+后续处理器不能自行决定升级。信息不足时只能提交结构化升级申请，由 Routing Layer 在用户偏好、
+隐私和预算约束下生成新的版本化执行计划。未进入昂贵处理的 supporting Fragment 仍完整保留、
+可查看、可导出并可作为辅助证据。
+
 ## 3.2 先证据，后观察，再由用户解释
 
 正确顺序：
@@ -544,6 +555,24 @@ AI 标题和用户标题必须分开保存。
 - 待判断数量；
 - 重复/失败/冲突；
 - 完成状态。
+
+## 4.9 Routing Cohort / RoutePlan：处理分组与权威执行计划
+
+Routing Cohort 是确定性处理分组，不等同于已确认事件或关系。类型包括 exact duplicate、near
+duplicate、burst、same-time-place 和有可靠顺序证据的 document sequence。
+
+每个 Fragment 的 RoutePlan 必须记录：
+
+- 原件 source revision 与 deterministic processing version；
+- Router、Policy 和成本模型版本；
+- independent / representative / supporting 角色；
+- OCR、Places、Embedding、Gemini 的独立批准、跳过、延后或阻止决策；
+- 每项批准能力的执行范围、attempt 上限和预算 ceiling；
+- 路由原因与当前 revision。
+
+approved RoutePlan 的决策正文不得原地修改。用户确认、原件 revision、cohort、隐私偏好或执行结果
+改变时，系统创建新 revision，并保留旧版审计。RoutePlan 是内部处理事实，不替代 Fragment、
+Visit、Connection 或 Discovery 等用户产品对象。
 
 ---
 
@@ -1518,8 +1547,10 @@ Else 的查询应能够直接：
 
 ```text
 原件保存
-→ 元数据读取
-→ 多模态 OCR/视觉理解
+→ 确定性事实：格式 / metadata / SHA-256 / dHash / 缩略图
+→ Authoritative Routing：cohort / representative / capability plan
+→ Budget Gate：分别审批 OCR / Places / Embedding / Gemini
+→ 受计划约束的 OCR / Places / Embedding / 多模态理解
 → 时间与地点候选
 → 实体解析
 → 到访/事件聚类
@@ -1528,6 +1559,10 @@ Else 的查询应能够直接：
 → 向量与结构化索引
 → 用户确认反馈
 ```
+
+只有当前、输入 revision 匹配且预算有效的 approved RoutePlan 能触发计费能力。OCR 等能力发现信息
+不足时不得自行调用 Gemini，只能申请重新路由。完全重复和连拍等 cohort 中的原件全部保留，
+但昂贵处理优先只在 representative 上执行。
 
 ## 9.2 高置信自动处理
 
@@ -1645,6 +1680,20 @@ Else 的查询应能够直接：
 - 发现详情无重复素材伪装；
 - 390px/430px 视口关键路径可用；
 - 减少动态模式功能完整。
+
+## 10.7 Routing 与成本质量指标
+
+强制指标：
+
+- 所有付费调用均关联调用时有效的 approved RoutePlan；
+- Processor 静默升级和 stale plan 调用为 0；
+- exact duplicate 重复付费处理为 0；
+- supporting Fragment 保留、可查看和可导出率为 100%；
+- Module 4.5 自身外部模型与计费 capability 调用为 0（现有云基础设施用量仍计量）。
+
+持续观察每个 Fragment 和每项能力的成本、代表项比例、首轮完成率、升级率、平均 plan revision、
+估算/实际成本偏差、用户重新处理率和因过度抑制造成的遗漏反馈。没有真实基线前不承诺成本下降
+百分比；成本指标必须与来源完整性和用户修正 guardrail 一起评估。
 
 ---
 

@@ -12,6 +12,11 @@
 > 记录原型交付时的历史形态，不代表当前公开 API。Module 1 已建立 Firestore Repository
 > 基础，但 legacy Else 仍读取前端 fixtures，二者尚未连接。
 
+> **术语边界：** 本文的 Query Router 只在 Else 已获得证据包后选择回答模型别名；它不是
+> ingestion 的 Authoritative Routing Layer，也无权批准 OCR、Places、Embedding 或 Gemini
+> capability。所有碎片付费处理必须先经过 Module 4.5 的当前 approved RoutePlan。完整边界见
+> `docs/superpowers/specs/2026-07-17-authoritative-routing-budget-gate-design.md`。
+
 ---
 
 ## 1. 本次要做什么（范围）

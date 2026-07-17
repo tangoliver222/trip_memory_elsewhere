@@ -1,16 +1,16 @@
 ﻿模块/页面,核心数据,客户端/前端,Google 数据与托管,Google 后端/事件,模型/AI,关键验收
 价值说明,Remote Config 内容,Vanilla/PWA,"Firebase Hosting, Remote Config",Analytics event,无必需模型,10秒理解价值
 权限说明,user settings,Auth/App Check UI,"Firestore, Auth, App Check",Cloud Run permission versioning,无,真实说明读取范围
-首次/日常导入,"importBatch, fragments","Photos Picker, resumable upload","Storage, Firestore","Cloud Run, Eventarc, Pub/Sub",无/轻量分类,原件先保存
-Processing,batch status,Firestore realtime,Firestore,"Pub/Sub, Tasks, Cloud Run","Document AI, Gemini Flash, Embeddings",可离开等待
+首次/日常导入,"importBatch, fragments, routingSummary","Photos Picker, resumable upload","Storage, Firestore","Cloud Run, Eventarc, Deterministic Processing, Authoritative Routing",Router不调用模型,原件先保存且付费能力未获计划不得运行
+Processing,"batch status, RoutePlan projection, capability summary",Firestore realtime,Firestore,"Authoritative Routing, Budget Gate, approved Tasks","仅执行approved OCR/Places/Embedding/Gemini",可离开等待且状态区分保存/路由/能力执行
 第一条关系,"connection, evidence",Evidence UI,"Firestore, Storage",Connection service,Flash/Pro,"来源可见, 可确认"
 世界首页,"cities, stats, recentJourney",Three.js globe,"Firestore, Maps JS",summary precompute,无实时LLM,数据变化视觉变化
 城市列表,"cities, journeys",Globe/List,"Firestore, Maps",Cloud Run counters,预计算摘要,所有城市有真实状态
 城市世界,"clusters, fragments, places",Data-driven particle clusters,"Firestore, Storage, Maps",clustering service,Flash/Pro offline,不同数据量不穿帮
-全部碎片,"fragments, clusters, vectors",Pan/zoom/LOD/Lens,"Firestore, Storage, Vector Search",Search API,"Embeddings, Else",全库空间感
+全部碎片,"fragments, clusters, approved vectors",Pan/zoom/LOD/Lens,"Firestore, Storage, Vector Search","Search API, Authoritative Routing","RoutePlan批准的代表项Embedding, Else",全库空间感且无向量的supporting原件仍可见
 Fragment Lens,fragment + refs,Bottom sheet / Flip,"Firestore, Storage",Object API,无实时生成事实,权威对象视图
 原件查看,original object,Fullscreen viewer,Storage,Signed/access-controlled read,无,原始比例/返回状态
-入库回执,batch result,Result composition,Firestore,Batch coordinator,Flash/Pro summary,明确交付变化
+入库回执,"batch result, routing summary, capability summary",Result composition,Firestore,"Batch coordinator, Authoritative Routing",只展示approved能力的结果,明确区分已保存/已路由/仍待处理
 收件箱,"inboxItems, connection candidates",Decision UI,Firestore,"Transactional API, Tasks",规则/Pro explanation,是/不是/稍后
 City Capsule,"scenes, discoveries, notes",Editorial reader,"Firestore, Storage",Capsule job,Gemini Pro,"来源绑定, 不推断情绪"
 时间视角,"visits, scenes",Timeline,"Firestore, Time Zone API",Context service,预计算节奏,时间与原件联动
@@ -37,5 +37,5 @@ AI偏好,preference,Example selector,"Firestore, Remote Config",Model config API
 删除,impact + status,Confirmation UI,"Firestore, Storage","Workflows, Tasks",无,完整删除与审计
 合并/拆分,affected objects,Source grouping UI,Firestore,"Transactional API, Pub/Sub",Pro可解释影响,版本可回滚
 冲突处理,contradicting evidence,Evidence comparison,Firestore,Conflict service,Gemini Pro,可保持未决
-重复处理,"hashes, embeddings",Duplicate UI,"Firestore, Storage",Dedupe service,Multimodal embedding,不静默删除
+重复处理,"hashes, cohorts, RoutePlans",Duplicate UI,"Firestore, Storage","Dedupe service, Representative Selector, Budget Gate",只有approved代表项可进入Embedding/多模态,不静默删除且supporting可查看导出
 分析与评估,"events, modelRuns",N/A,BigQuery,Analytics export,Vertex AI Eval,不复制完整私密内容
