@@ -4,6 +4,7 @@ import { makeProcessingTaskId } from '../../src/processing/identity.js';
 import {
   makeBudgetLedgerId,
   makeBudgetReservationId,
+  makeCapabilityExecutionId,
   makeRoutingHeadId,
 } from '../../src/routing/identity.js';
 import {
@@ -75,6 +76,25 @@ function approval(batchId, routePlanId, capabilityIntents = intents()) {
     approvals: [{ routePlanId, capabilityIntents }],
     cohorts: [],
     approvedAt: ROUTED_AT,
+  };
+}
+
+function claimCommand(routePlan, overrides = {}) {
+  return {
+    routePlanId: routePlan.id,
+    capability: 'embedding',
+    executorClass: 'multimodal-embedding',
+    executorVersion: 'v1',
+    sourceRevision: routePlan.sourceRevision,
+    idempotencyKey: 'idem_12345678',
+    supportedVersions: {
+      router: ['v1'],
+      policy: ['v1'],
+      costModel: ['v1'],
+      executors: { 'multimodal-embedding': ['v1'] },
+    },
+    claimedAt: '2026-07-17T12:01:00.000Z',
+    ...overrides,
   };
 }
 
@@ -547,6 +567,115 @@ export function runRoutingRepositoryContract({
         cohorts: [otherCohort],
       }),
       { code: 'repository/owner-mismatch' },
+    );
+  });
+
+  contractTest('enforces capability gates and persists one auditable completed execution', async ({
+    repository, ownerId, suffix,
+  }) => {
+    const seeded = await seedDeterministicSuccess(repository, ownerId, suffix);
+    const draft = makeDraft({ ownerId, ...seeded });
+    await repository.saveRoutingDraft(ownerId, { routePlan: draft });
+    const approvalResult = await repository.commitRoutingApproval(
+      ownerId,
+      approval(seeded.batch.id, draft.id),
+    );
+    const routePlan = approvalResult.plans[0];
+    for (const invalid of [
+      { capability: 'ocr', executorClass: 'document-ocr' },
+      { executorClass: 'gemini-multimodal' },
+      { sourceRevision: { ...routePlan.sourceRevision, generation: '1740000000000002' } },
+      { supportedVersions: {
+        ...claimCommand(routePlan).supportedVersions,
+        router: ['v2'],
+      } },
+    ]) {
+      await assert.rejects(
+        () => repository.claimCapabilityExecution(ownerId, claimCommand(routePlan, invalid)),
+        { code: 'repository/routing-target-mismatch' },
+      );
+    }
+    let snapshot = await repository.loadRoutingSnapshot(ownerId, { batchId: seeded.batch.id });
+    assert.deepEqual(snapshot.capabilityExecutions, []);
+
+    const claimed = await repository.claimCapabilityExecution(
+      ownerId,
+      claimCommand(routePlan),
+    );
+    assert.deepEqual(Object.keys(claimed.authorization).sort(), [
+      'capability',
+      'ceilingMicros',
+      'executorClass',
+      'idempotencyKey',
+      'routePlanId',
+      'scope',
+    ]);
+    const executionId = makeCapabilityExecutionId({
+      routePlanId: routePlan.id,
+      capability: 'embedding',
+      idempotencyKey: 'idem_12345678',
+    });
+    await repository.markCapabilityCalling(ownerId, {
+      executionId,
+      calledAt: '2026-07-17T12:02:00.000Z',
+    });
+    await repository.recordCapabilityReceipt(ownerId, {
+      executionId,
+      providerRequestId: 'provider_request_123',
+      usage: { inputTokens: 128 },
+      actualCostMicros: 800,
+      resultRef: ref('capabilityResult', 'result_12345678'),
+      receivedAt: '2026-07-17T12:03:00.000Z',
+    });
+    await repository.settleCapabilityExecution(ownerId, {
+      executionId,
+      outcome: 'completed',
+      errorCode: null,
+      settledAt: '2026-07-17T12:04:00.000Z',
+    });
+    snapshot = await repository.loadRoutingSnapshot(ownerId, { batchId: seeded.batch.id });
+
+    assert.equal(snapshot.capabilityExecutions[0].state, 'completed');
+    assert.equal(snapshot.budgetReservations[0].state, 'settled');
+    assert.equal(snapshot.routePlans.find(({ id }) => id === routePlan.id).state, 'completed');
+    assert.equal(snapshot.batch.routingSummary.completed, 1);
+    await assert.rejects(
+      () => repository.claimCapabilityExecution(ownerId, claimCommand(routePlan)),
+      { code: 'repository/conflict' },
+    );
+  });
+
+  contractTest('billing uncertainty consumes the attempt and forbids automatic re-claim', async ({
+    repository, ownerId, suffix,
+  }) => {
+    const seeded = await seedDeterministicSuccess(repository, ownerId, suffix);
+    const draft = makeDraft({ ownerId, ...seeded });
+    await repository.saveRoutingDraft(ownerId, { routePlan: draft });
+    const routePlan = (await repository.commitRoutingApproval(
+      ownerId,
+      approval(seeded.batch.id, draft.id),
+    )).plans[0];
+    await repository.claimCapabilityExecution(ownerId, claimCommand(routePlan));
+    const executionId = makeCapabilityExecutionId({
+      routePlanId: routePlan.id,
+      capability: 'embedding',
+      idempotencyKey: 'idem_12345678',
+    });
+    await repository.markCapabilityCalling(ownerId, {
+      executionId,
+      calledAt: '2026-07-17T12:02:00.000Z',
+    });
+    await repository.markCapabilityBillingUncertain(ownerId, {
+      executionId,
+      errorCode: 'provider-receipt-missing',
+      completedAt: '2026-07-17T12:03:00.000Z',
+    });
+
+    const snapshot = await repository.loadRoutingSnapshot(ownerId, { batchId: seeded.batch.id });
+    assert.equal(snapshot.capabilityExecutions[0].state, 'billing_uncertain');
+    await assert.rejects(
+      () => repository.claimCapabilityExecution(ownerId, claimCommand(routePlan)),
+      { code: 'repository/conflict' },
     );
   });
 
