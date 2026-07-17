@@ -4,7 +4,11 @@ import {
   makeUploadItem,
   makeUploadedFragment,
 } from './import.js';
-import { makeProcessingTask } from './processing.js';
+import {
+  makeExactDuplicateCandidate,
+  makeNearDuplicateCandidate,
+  makeProcessingTask,
+} from './processing.js';
 
 export const ROUTING_SOURCE_REVISION = Object.freeze({
   bucket: 'demo-elsewhere.appspot.com',
@@ -22,6 +26,7 @@ const reference = (type, id) => ({ type, id });
 export function makeRoutableFragment(overrides = {}) {
   const {
     id = 'frag_12345678',
+    ownerId = 'user_alpha',
     type = 'photo',
     batchId = 'batch_12345678',
     sourceCreatedAt = '2024-10-12T08:42:00.000Z',
@@ -35,7 +40,7 @@ export function makeRoutableFragment(overrides = {}) {
     facts: factOverrides = {},
     ...fragmentOverrides
   } = overrides;
-  const base = makeUploadedFragment({ id, batchId, type });
+  const base = makeUploadedFragment({ id, ownerId, batchId, type });
   const thumbnail = thumbnailStatus === 'complete' ? {
     path: `users/user_alpha/derived/${id}/deterministic-media/v1/${inputHash}/thumbnail.webp`,
     generation: '1740000000000100',
@@ -490,4 +495,241 @@ export function makeRoutingServiceSnapshot({
     capabilityExecutions: [],
     escalationRequests,
   };
+}
+
+const NORMAL_FEATURES = Object.freeze({
+  mean: 0.5,
+  variance: 0.1,
+  entropyBits: 4,
+  edgeEnergy: 0.2,
+  exposure: 'normal',
+  lowInformation: false,
+});
+const LOW_INFORMATION_FEATURES = Object.freeze({
+  mean: 0,
+  variance: 0,
+  entropyBits: 0,
+  edgeEnergy: 0,
+  exposure: 'under',
+  lowInformation: true,
+});
+
+function deepFreeze(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
+
+function stableHash(index) {
+  return index.toString(16).padStart(16, '0').repeat(4);
+}
+
+function fixtureFragment({
+  index,
+  id,
+  ownerId,
+  batchId,
+  type = 'photo',
+  inputHash = stableHash(index),
+  sourceCreatedAt = `2024-10-12T${String(8 + Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}:00.000Z`,
+  locationHint = null,
+  thumbnailStatus = 'complete',
+} = {}) {
+  const fragment = makeRoutableFragment({
+    id,
+    ownerId,
+    batchId,
+    type,
+    inputHash,
+    sourceCreatedAt,
+    locationHint,
+    thumbnailStatus,
+  });
+  const generation = `1800000000${String(index).padStart(9, '0')}`;
+  return {
+    ...fragment,
+    storage: { ...fragment.storage, generation },
+  };
+}
+
+function textFragment(input) {
+  const fragment = fixtureFragment({ ...input, type: 'text', thumbnailStatus: 'unsupported' });
+  return {
+    ...fragment,
+    storage: { ...fragment.storage, contentType: 'text/plain' },
+    source: { ...fragment.source, media: null },
+    hashes: {
+      sha256: fragment.hashes.sha256,
+      perceptualHash: null,
+      perceptualHashAlgorithm: null,
+      perceptualHashVersion: null,
+      perceptualHashBands: null,
+    },
+    technicalMetadata: {
+      ...fragment.technicalMetadata,
+      format: 'text',
+      width: null,
+      height: null,
+      orientation: null,
+      metadataStatus: 'complete',
+    },
+    derivatives: { thumbnail: null },
+    processing: {
+      deterministic: {
+        ...fragment.processing.deterministic,
+        thumbnailStatus: 'unsupported',
+        perceptualHashStatus: 'unsupported',
+      },
+    },
+  };
+}
+
+function fixtureBatches(fragments, duplicateCandidates) {
+  const batchIds = [...new Set(fragments.map(({ batchId }) => batchId))].sort();
+  return batchIds.map((batchId) => {
+    const snapshot = makeRoutingServiceSnapshot({
+      fragments,
+      duplicateCandidates,
+      batchId,
+      settled: true,
+    });
+    return {
+      batch: snapshot.batch,
+      processingTasks: snapshot.processingTasks,
+    };
+  });
+}
+
+function completeFixture({ name, ownerId, fragments, duplicateCandidates = [], features = {} }) {
+  return deepFreeze({
+    name,
+    ownerId,
+    fragments: [...fragments].sort((left, right) => left.id.localeCompare(right.id)),
+    duplicateCandidates: [...duplicateCandidates]
+      .sort((left, right) => left.id.localeCompare(right.id)),
+    features: Object.fromEntries(fragments.map((fragment) => [
+      fragment.id,
+      features[fragment.id] ?? NORMAL_FEATURES,
+    ])),
+    batches: fixtureBatches(fragments, duplicateCandidates),
+  });
+}
+
+export function makeSmallRoutingFixture({ ownerId = 'user_alpha' } = {}) {
+  const fragment = fixtureFragment({
+    index: 1,
+    id: 'frag_small0001',
+    ownerId,
+    batchId: 'batch_small001',
+    locationHint: {
+      lat: 13.7563,
+      lng: 100.5018,
+      accuracyMeters: 12,
+      source: 'camera_device',
+    },
+  });
+  return completeFixture({ name: 'small', ownerId, fragments: [fragment] });
+}
+
+export function makeCurrentRoutingFixture({ ownerId = 'user_alpha' } = {}) {
+  const batchId = 'batch_current1';
+  const create = (index, id, overrides = {}) => fixtureFragment({
+    index,
+    id,
+    ownerId,
+    batchId,
+    sourceCreatedAt: `2024-10-${String(12 + index).padStart(2, '0')}T08:42:00.000Z`,
+    ...overrides,
+  });
+  const burst = [
+    create(1, 'frag_burst0001', { sourceCreatedAt: '2024-10-12T08:42:00.000Z' }),
+    create(2, 'frag_burst0002', { sourceCreatedAt: '2024-10-12T08:42:01.000Z' }),
+    create(3, 'frag_burst0003', { sourceCreatedAt: '2024-10-12T08:42:02.000Z' }),
+  ];
+  const exactHash = 'e'.repeat(64);
+  const exact = [
+    create(4, 'frag_exact0001', { inputHash: exactHash }),
+    create(5, 'frag_exact0002', { inputHash: exactHash }),
+  ];
+  const near = [create(6, 'frag_near00001'), create(7, 'frag_near00002')];
+  const receipt = create(8, 'frag_receipt01', { type: 'receipt' });
+  const screenshot = create(9, 'frag_screen001', { type: 'screenshot' });
+  const text = textFragment({
+    index: 10,
+    id: 'frag_text00001',
+    ownerId,
+    batchId,
+    sourceCreatedAt: '2024-10-22T08:42:00.000Z',
+  });
+  const lowInformation = create(11, 'frag_lowinfo01');
+  const independent = create(12, 'frag_indep0001');
+  const fragments = [
+    ...burst,
+    ...exact,
+    ...near,
+    receipt,
+    screenshot,
+    text,
+    lowInformation,
+    independent,
+  ];
+  const exactCandidate = makeExactDuplicateCandidate({
+    id: 'dup_exact00001',
+    ownerId,
+    canonicalFragmentRef: reference('fragment', exact[0].id),
+    candidateFragmentRef: reference('fragment', exact[1].id),
+    pairRefs: exact.map(({ id }) => reference('fragment', id)),
+    createdByTaskId: exact[1].processing.deterministic.taskId,
+  });
+  const nearCandidate = makeNearDuplicateCandidate({
+    id: 'dup_near000001',
+    ownerId,
+    queryFragmentRef: reference('fragment', near[1].id),
+    matchedFragmentRef: reference('fragment', near[0].id),
+    pairRefs: near.map(({ id }) => reference('fragment', id)).sort((left, right) => (
+      left.id.localeCompare(right.id)
+    )),
+    pairKey: 'pair_near00001',
+    createdByTaskId: near[1].processing.deterministic.taskId,
+  });
+  return completeFixture({
+    name: 'current',
+    ownerId,
+    fragments,
+    duplicateCandidates: [exactCandidate, nearCandidate],
+    features: { [lowInformation.id]: LOW_INFORMATION_FEATURES },
+  });
+}
+
+export function makeLargeRoutingFixture({ ownerId = 'user_alpha' } = {}) {
+  const fragments = Array.from({ length: 200 }, (_, index) => fixtureFragment({
+    index: index + 1,
+    id: `frag_large${String(index).padStart(4, '0')}`,
+    ownerId,
+    batchId: `batch_large${String(Math.floor(index / 50)).padStart(3, '0')}`,
+    sourceCreatedAt: `2024-${String(1 + Math.floor(index / 28)).padStart(2, '0')}-${String(1 + (index % 28)).padStart(2, '0')}T08:00:00.000Z`,
+  }));
+  const duplicateCandidates = fragments.slice(1).map((fragment, index) => {
+    const matched = fragments[index];
+    const pairRefs = [matched.id, fragment.id]
+      .sort()
+      .map((id) => reference('fragment', id));
+    return makeNearDuplicateCandidate({
+      id: `dup_large${String(index).padStart(4, '0')}`,
+      ownerId,
+      queryFragmentRef: reference('fragment', fragment.id),
+      matchedFragmentRef: reference('fragment', matched.id),
+      pairRefs,
+      pairKey: `pair_large${String(index).padStart(4, '0')}`,
+      distance: 1,
+      rank: 1,
+      createdByTaskId: fragment.processing.deterministic.taskId,
+    });
+  });
+  return completeFixture({
+    name: 'large',
+    ownerId,
+    fragments,
+    duplicateCandidates,
+  });
 }
