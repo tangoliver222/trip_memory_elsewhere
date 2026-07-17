@@ -6,7 +6,7 @@ const appConfig = { nodeEnv: 'test', bodyLimit: 32 * 1024, logLevel: 'silent' };
 export function createIngestionTestApp({ eventHandler }) {
   const app = createApp({ appConfig });
   registerIngestionRoutes(app, {
-    finalizer: eventHandler,
+    eventHandler,
     allowedBuckets: ['demo-elsewhere.appspot.com'],
   });
   return app;

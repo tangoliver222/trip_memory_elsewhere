@@ -65,10 +65,16 @@ test('same-generation successful duplicate still ensures deterministic processin
 
 test('rejected upload never creates a processing task', async () => {
   const calls = [];
-  const result = await createPipeline('rejected', 'succeeded', calls).handle(event);
+  const pipeline = createPipeline('rejected', 'succeeded', calls);
+  const result = await pipeline.handle(event);
+  const repeated = await pipeline.handle(event);
 
   assert.deepEqual(result, { outcome: 'rejected' });
-  assert.deepEqual(calls, [['finalizer', event]]);
+  assert.deepEqual(repeated, { outcome: 'rejected' });
+  assert.deepEqual(calls, [
+    ['finalizer', event],
+    ['finalizer', event],
+  ]);
 });
 
 test('retryable processing propagates instead of acknowledging the event', async () => {

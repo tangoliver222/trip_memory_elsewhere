@@ -48,7 +48,9 @@ export function createOriginalFinalizer({
 
       if (item.state !== 'pending') {
         if (item.finalizedGeneration === event.generation) {
-          return Object.freeze({ outcome: 'duplicate' });
+          return Object.freeze({
+            outcome: item.state === 'failed' ? 'rejected' : 'duplicate',
+          });
         }
         throw conflict();
       }
@@ -84,7 +86,9 @@ export function createOriginalFinalizer({
           throw mapRepositoryError(repositoryError);
         }
         return Object.freeze({
-          outcome: rejected.outcome === 'duplicate' ? 'duplicate' : 'rejected',
+          outcome: rejected.outcome === 'duplicate' && rejected.fragment
+            ? 'duplicate'
+            : 'rejected',
         });
       }
 

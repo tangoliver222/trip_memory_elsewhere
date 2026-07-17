@@ -1,5 +1,6 @@
 import { IngestionError } from './errors.js';
 import { parseStorageFinalizedEvent } from './storage-event.js';
+import { ProcessingError } from '../processing/errors.js';
 
 const STATUS_BY_CODE = Object.freeze({
   'ingestion/invalid-event': 400,
@@ -18,9 +19,16 @@ const errorResponse = (error, requestId) => Object.freeze({
   }),
 });
 
-export function registerIngestionRoutes(app, { finalizer, allowedBuckets }) {
-  if (typeof finalizer?.handle !== 'function') {
-    throw new TypeError('Finalizer must implement handle()');
+const ACKNOWLEDGED_OUTCOMES = new Set([
+  'rejected',
+  'succeeded',
+  'failed_terminal',
+  'terminal_noop',
+]);
+
+export function registerIngestionRoutes(app, { eventHandler, allowedBuckets }) {
+  if (typeof eventHandler?.handle !== 'function') {
+    throw new TypeError('Event handler must implement handle()');
   }
 
   app.post('/events/storage-finalized', async (request, reply) => {
@@ -30,13 +38,20 @@ export function registerIngestionRoutes(app, { finalizer, allowedBuckets }) {
         body: request.body,
         allowedBuckets,
       });
-      const result = await finalizer.handle(event);
-      if (!['applied', 'duplicate', 'rejected'].includes(result?.outcome)) {
+      const result = await eventHandler.handle(event);
+      if (!result
+        || typeof result !== 'object'
+        || Array.isArray(result)
+        || Object.keys(result).length !== 1
+        || !Object.hasOwn(result, 'outcome')
+        || !ACKNOWLEDGED_OUTCOMES.has(result.outcome)) {
         throw internalError();
       }
       return reply.code(204).send();
     } catch (caught) {
-      const error = caught instanceof IngestionError ? caught : internalError();
+      const error = caught instanceof IngestionError || caught instanceof ProcessingError
+        ? caught
+        : internalError();
       return reply
         .code(STATUS_BY_CODE[error.code] ?? 503)
         .send(errorResponse(error, request.id));
