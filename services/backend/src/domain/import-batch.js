@@ -15,6 +15,20 @@ const SUMMARY_STATE_FIELDS = [
   'failedRetryable',
   'failedTerminal',
 ];
+const ROUTING_STATE_FIELDS = ['drafting', 'approved', 'blocked', 'completed'];
+
+const RoutingSummarySchema = z.strictObject({
+  routerName: z.literal('fragment-routing'),
+  routerVersion: ProcessorVersionSchema,
+  policyVersion: ProcessorVersionSchema,
+  eligible: CounterSchema,
+  drafting: CounterSchema,
+  approved: CounterSchema,
+  blocked: CounterSchema,
+  completed: CounterSchema,
+  superseded: CounterSchema,
+  updatedAt: IsoDateTimeSchema,
+});
 
 function processingSummaryInvariant(summary, inputCount) {
   for (const field of ['eligible', ...SUMMARY_STATE_FIELDS, 'unsupportedCapabilities']) {
@@ -200,6 +214,7 @@ export const ImportBatchSchema = z.strictObject({
       updatedAt: IsoDateTimeSchema,
     }),
   }).nullable(),
+  routingSummary: RoutingSummarySchema.nullable(),
   uploads: UploadsSchema,
 }).superRefine((batch, context) => {
   for (const [name, count] of Object.entries(batch.counters)) {
@@ -221,6 +236,28 @@ export const ImportBatchSchema = z.strictObject({
         code: 'custom',
         message: summaryInvariant.message,
         path: ['processingSummary', 'deterministic', summaryInvariant.field],
+      });
+    }
+  }
+
+  if (batch.routingSummary !== null) {
+    const summary = batch.routingSummary;
+    const currentTotal = ROUTING_STATE_FIELDS.reduce(
+      (total, field) => total + summary[field],
+      0,
+    );
+    if (summary.eligible > batch.inputCount) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Routing eligible cannot exceed inputCount',
+        path: ['routingSummary', 'eligible'],
+      });
+    }
+    if (currentTotal !== summary.eligible) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Routing states must partition eligible work',
+        path: ['routingSummary', 'eligible'],
       });
     }
   }

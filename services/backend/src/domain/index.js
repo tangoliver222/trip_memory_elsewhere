@@ -27,6 +27,34 @@ export {
 } from './processing-result.js';
 export { DuplicateCandidateSchema, parseDuplicateCandidate } from './duplicate-candidate.js';
 export {
+  CAPABILITY_DECISIONS,
+  ROUTE_PLAN_STATES,
+  ROUTING_CAPABILITIES,
+  CapabilityDecisionSchema,
+  RoutePlanSchema,
+  RoutingHeadSchema,
+  RoutingSourceRevisionSchema,
+  parseRoutePlan,
+  parseRoutingHead,
+  routePlanImmutablePayload,
+} from './route-plan.js';
+export {
+  ROUTING_COHORT_TYPES,
+  ROUTING_ROLES,
+  RoutingCohortSchema,
+  parseRoutingCohort,
+} from './routing-cohort.js';
+export {
+  BudgetLedgerSchema,
+  BudgetReservationSchema,
+  CapabilityExecutionSchema,
+  EscalationRequestSchema,
+  parseBudgetLedger,
+  parseBudgetReservation,
+  parseCapabilityExecution,
+  parseEscalationRequest,
+} from './routing-execution.js';
+export {
   ImportBatchSchema,
   UploadManifestItemSchema,
   deriveImportBatchState,
