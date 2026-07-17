@@ -36,7 +36,12 @@ const storageFacts = Object.freeze({
   md5Hash: null,
 });
 
-function createPipeline(finalizerOutcome, processorOutcome = 'succeeded', calls = []) {
+function createPipeline(
+  finalizerOutcome,
+  processorOutcome = 'succeeded',
+  calls = [],
+  routingOutcome = 'approved',
+) {
   return createStorageFinalizedPipeline({
     originalFinalizer: {
       async handle(received) {
@@ -50,6 +55,12 @@ function createPipeline(finalizerOutcome, processorOutcome = 'succeeded', calls 
         return { outcome: processorOutcome };
       },
     },
+    authoritativeRouter: {
+      async handle(received) {
+        calls.push(['router', received]);
+        return { outcome: routingOutcome };
+      },
+    },
   });
 }
 
@@ -57,21 +68,28 @@ test('applied original continues into deterministic processing with server-deriv
   const calls = [];
   const result = await createPipeline('applied', 'succeeded', calls).handle(event);
 
-  assert.deepEqual(result, { outcome: 'succeeded' });
+  assert.deepEqual(result, { outcome: 'approved' });
   assert.deepEqual(calls, [
     ['finalizer', event],
     ['processor', processorEvent],
+    ['router', processorEvent],
   ]);
 });
 
 test('same-generation successful duplicate still ensures deterministic processing', async () => {
   const calls = [];
-  const result = await createPipeline('duplicate', 'terminal_noop', calls).handle(event);
+  const result = await createPipeline(
+    'duplicate',
+    'terminal_noop',
+    calls,
+    'terminal_noop',
+  ).handle(event);
 
   assert.deepEqual(result, { outcome: 'terminal_noop' });
   assert.deepEqual(calls, [
     ['finalizer', event],
     ['processor', processorEvent],
+    ['router', processorEvent],
   ]);
 });
 
@@ -127,10 +145,22 @@ test('a concurrent rejection wins over a successful inspection without creating 
   const successfulPipeline = createStorageFinalizedPipeline({
     originalFinalizer: successfulFinalizer,
     deterministicProcessor,
+    authoritativeRouter: {
+      async handle(received) {
+        processorCalls.push(['router', received]);
+        return { outcome: 'approved' };
+      },
+    },
   });
   const rejectingPipeline = createStorageFinalizedPipeline({
     originalFinalizer: rejectingFinalizer,
     deterministicProcessor,
+    authoritativeRouter: {
+      async handle(received) {
+        processorCalls.push(['router', received]);
+        return { outcome: 'approved' };
+      },
+    },
   });
 
   const inspected = successfulPipeline.handle(event);
@@ -170,6 +200,9 @@ test('retryable processing propagates instead of acknowledging the event', async
   const pipeline = createStorageFinalizedPipeline({
     originalFinalizer: { async handle() { return { outcome: 'applied' }; } },
     deterministicProcessor: { async handle() { throw expected; } },
+    authoritativeRouter: {
+      async handle() { throw new Error('router must not run'); },
+    },
   });
 
   await assert.rejects(() => pipeline.handle(event), (error) => error === expected);
@@ -179,10 +212,17 @@ test('malformed finalizer and processor outcomes cannot be acknowledged', async 
   const malformedFinalizer = createStorageFinalizedPipeline({
     originalFinalizer: { async handle() { return { outcome: 'applied', forged: true }; } },
     deterministicProcessor: { async handle() { return { outcome: 'succeeded' }; } },
+    authoritativeRouter: { async handle() { return { outcome: 'approved' }; } },
   });
   const malformedProcessor = createStorageFinalizedPipeline({
     originalFinalizer: { async handle() { return { outcome: 'applied' }; } },
     deterministicProcessor: { async handle() { return { outcome: 'busy' }; } },
+    authoritativeRouter: { async handle() { return { outcome: 'approved' }; } },
+  });
+  const malformedRouter = createStorageFinalizedPipeline({
+    originalFinalizer: { async handle() { return { outcome: 'applied' }; } },
+    deterministicProcessor: { async handle() { return { outcome: 'succeeded' }; } },
+    authoritativeRouter: { async handle() { return { outcome: 'suggested' }; } },
   });
 
   await assert.rejects(
@@ -193,4 +233,43 @@ test('malformed finalizer and processor outcomes cannot be acknowledged', async 
     () => malformedProcessor.handle(event),
     { code: 'internal/error', permanent: false },
   );
+  await assert.rejects(
+    () => malformedRouter.handle(event),
+    { code: 'internal/error', permanent: false },
+  );
+});
+
+test('every deterministic terminal outcome routes exactly once before acknowledgement', async () => {
+  for (const processorOutcome of ['succeeded', 'failed_terminal', 'terminal_noop']) {
+    const calls = [];
+    const result = await createPipeline(
+      'duplicate',
+      processorOutcome,
+      calls,
+      processorOutcome === 'terminal_noop' ? 'terminal_noop' : 'completed',
+    ).handle(event);
+
+    assert.deepEqual(result, {
+      outcome: processorOutcome === 'terminal_noop' ? 'terminal_noop' : 'completed',
+    });
+    assert.deepEqual(calls, [
+      ['finalizer', event],
+      ['processor', processorEvent],
+      ['router', processorEvent],
+    ]);
+  }
+});
+
+test('routing failure propagates and is never converted into an acknowledgement', async () => {
+  const expected = Object.assign(new Error('private database details'), {
+    code: 'routing/repository-unavailable',
+    retryable: true,
+  });
+  const pipeline = createStorageFinalizedPipeline({
+    originalFinalizer: { async handle() { return { outcome: 'applied' }; } },
+    deterministicProcessor: { async handle() { return { outcome: 'succeeded' }; } },
+    authoritativeRouter: { async handle() { throw expected; } },
+  });
+
+  await assert.rejects(() => pipeline.handle(event), (error) => error === expected);
 });

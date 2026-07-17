@@ -144,6 +144,65 @@ test('Firestore rules isolate owner data and block client-derived writes', { ski
         }
       }
     });
+
+    await t.test('all authoritative routing state stays private from every client', async () => {
+      const internalPaths = [
+        'users/user_alpha/routePlans/route_plan_12345678',
+        'users/user_alpha/routingHeads/routing_head_12345678',
+        'users/user_alpha/routingCohorts/routing_cohort_12345678',
+        'users/user_alpha/budgetLedgers/budget_ledger_12345678',
+        'users/user_alpha/budgetReservations/budget_reservation_12345678',
+        'users/user_alpha/capabilityExecutions/capability_execution_12345678',
+        'users/user_alpha/escalationRequests/escalation_request_12345678',
+      ];
+      await environment.withSecurityRulesDisabled(async (context) => {
+        for (const internalPath of internalPaths) {
+          await setDoc(doc(context.firestore(), internalPath), { ownerId: 'user_alpha' });
+        }
+      });
+
+      const contexts = [
+        ['owner', environment.authenticatedContext('user_alpha').firestore()],
+        ['other', environment.authenticatedContext('user_beta').firestore()],
+        ['anonymous', environment.unauthenticatedContext().firestore()],
+      ];
+      for (const [label, database] of contexts) {
+        for (const internalPath of internalPaths) {
+          await assertFails(getDoc(doc(database, internalPath)));
+          await assertFails(setDoc(doc(database, `${internalPath}_${label}_new`), {
+            ownerId: 'user_alpha',
+          }));
+          await assertFails(updateDoc(doc(database, internalPath), { state: 'forged' }));
+          await assertFails(deleteDoc(doc(database, internalPath)));
+        }
+      }
+    });
+
+    await t.test('owner reads retain Fragment and ImportBatch routing summary visibility', async () => {
+      const batchPath = 'users/user_alpha/importBatches/batch_routing01';
+      const routingSummary = {
+        routerName: 'fragment-routing',
+        routerVersion: 'v1',
+        eligible: 1,
+        drafting: 0,
+        approved: 1,
+        executing: 0,
+        completed: 0,
+        superseded: 0,
+        rejected: 0,
+      };
+      await environment.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), batchPath), {
+          ownerId: 'user_alpha',
+          routingSummary,
+        });
+      });
+      const database = environment.authenticatedContext('user_alpha').firestore();
+
+      assert.deepEqual((await assertSucceeds(getDoc(doc(database, batchPath)))).data().routingSummary,
+        routingSummary);
+      assert.equal((await assertSucceeds(getDoc(doc(database, path)))).data().ownerId, 'user_alpha');
+    });
   } finally {
     await environment.cleanup();
   }

@@ -81,6 +81,7 @@ test('ingestion composition exposes only public probes and the finalized receive
     objectInspector: { async inspectOriginal() { throw new Error('not reached'); } },
     allowedBuckets: ['demo-elsewhere.appspot.com'],
     deterministicProcessor: { async handle() { throw new Error('not reached'); } },
+    authoritativeRouter: { async handle() { throw new Error('not reached'); } },
     clock: () => '2026-07-16T05:30:00.000Z',
   });
   t.after(() => app.close());
@@ -109,6 +110,8 @@ test('ingestion composition exposes only public probes and the finalized receive
   })).statusCode, 404);
   assert.equal((await app.inject({ url: '/protected' })).statusCode, 404);
   assert.equal((await app.inject({ url: '/v1/processing' })).statusCode, 404);
+  assert.equal((await app.inject({ url: '/routing' })).statusCode, 404);
+  assert.equal((await app.inject({ url: '/route-plans' })).statusCode, 404);
 });
 
 test('runtime selects one mode and builds exactly one Firebase dependency graph', async (t) => {
@@ -181,6 +184,21 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
       ports.deterministicProcessor = { async handle() { throw new Error('not reached'); } };
       return ports.deterministicProcessor;
     },
+    thumbnailReaderFactory(input) {
+      processingCalls.push(['routingThumbnail', input]);
+      ports.thumbnailReader = { async read() { throw new Error('not reached'); } };
+      return ports.thumbnailReader;
+    },
+    routingFeatureReaderFactory(input) {
+      processingCalls.push(['routingFeatures', input]);
+      ports.routingFeatureReader = { async read() { throw new Error('not reached'); } };
+      return ports.routingFeatureReader;
+    },
+    authoritativeRouterFactory(input) {
+      processingCalls.push(['router', input]);
+      ports.authoritativeRouter = { async handle() { throw new Error('not reached'); } };
+      return ports.authoritativeRouter;
+    },
   };
 
   const api = createRuntimeApp({
@@ -238,6 +256,9 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
     'image',
     'derivative',
     'processor',
+    'routingThumbnail',
+    'routingFeatures',
+    'router',
   ]);
   assert.equal(processingCalls[0][1].storage, processingCalls[1][1].storage);
   assert.equal(processingCalls[1][1].storage, processingCalls[4][1].storage);
@@ -254,6 +275,12 @@ test('runtime selects one mode and builds exactly one Firebase dependency graph'
   assert.strictEqual(processingCalls[5][1].processingConfig, processingConfig);
   assert.strictEqual(processingCalls[5][1].clock, clock);
   assert.strictEqual(processingCalls[5][1].randomUUID, randomUUID);
+  assert.strictEqual(processingCalls[6][1], processingCalls[0][1]);
+  assert.strictEqual(processingCalls[7][1].thumbnailReader, ports.thumbnailReader);
+  assert.strictEqual(processingCalls[8][1].repository, repositories[1]);
+  assert.strictEqual(processingCalls[8][1].featureReader, ports.routingFeatureReader);
+  assert.strictEqual(processingCalls[8][1].clock, clock);
+  assert.strictEqual(processingCalls[8][1].randomUUID, randomUUID);
 });
 
 test('production composition sources do not import test helpers', async () => {
