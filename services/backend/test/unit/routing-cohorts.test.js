@@ -155,6 +155,37 @@ test('burst rejects a 2001ms adjacent gap and a 15001ms total span', () => {
   assert.equal(spanCohorts.some((cohort) => memberIds(cohort).includes('frag_span0008')), false);
 });
 
+test('interleaved timestamps from another batch do not break a valid burst', () => {
+  const fragments = [
+    makeRoutableFragment({
+      id: 'frag_batcha01',
+      batchId: 'batch_alpha001',
+      inputHash: '5'.repeat(64),
+      capturedAt: '2024-10-12T08:42:00.000Z',
+      sourceCreatedAt: null,
+    }),
+    makeRoutableFragment({
+      id: 'frag_batchb01',
+      batchId: 'batch_bravo001',
+      inputHash: '6'.repeat(64),
+      capturedAt: '2024-10-12T08:42:01.000Z',
+      sourceCreatedAt: null,
+    }),
+    makeRoutableFragment({
+      id: 'frag_batcha02',
+      batchId: 'batch_alpha001',
+      inputHash: '7'.repeat(64),
+      capturedAt: '2024-10-12T08:42:02.000Z',
+      sourceCreatedAt: null,
+    }),
+  ];
+
+  const burst = build(fragments).find(({ type }) => type === 'burst');
+
+  assert.ok(burst);
+  assert.deepEqual(memberIds(burst), ['frag_batcha01', 'frag_batcha02']);
+});
+
 test('same-time-place accepts 10 minutes 50 metre accuracy and 50 metre distance', () => {
   const deltaDegrees = (50 / 6_371_000) * (180 / Math.PI);
   const location = (lat) => ({
@@ -215,6 +246,32 @@ test('same-time-place requires source accuracy and never invents document sequen
 
   assert.equal(cohorts.some(({ type }) => type === 'same_time_place'), false);
   assert.equal(cohorts.some(({ type }) => type === 'document_sequence'), false);
+});
+
+test('every partition of an oversized exact cohort retains its canonical member', () => {
+  const inputHash = 'f'.repeat(64);
+  const canonicalId = 'frag_exact9999';
+  const candidates = Array.from({ length: 200 }, (_, index) => `frag_exact${String(index).padStart(4, '0')}`);
+  const fragments = [canonicalId, ...candidates].map((id) => makeRoutableFragment({
+    id,
+    inputHash,
+    sourceCreatedAt: null,
+  }));
+  const evidence = candidates.map((candidateId, index) => exactCandidate(
+    canonicalId,
+    candidateId,
+    index,
+  ));
+
+  const cohorts = build(fragments, evidence).filter(({ type }) => type === 'exact_duplicate');
+
+  assert.ok(cohorts.length > 1);
+  assert.equal(cohorts.every((cohort) => cohort.memberRevisionRefs.length <= 200), true);
+  assert.equal(cohorts.every((cohort) => memberIds(cohort).includes(canonicalId)), true);
+  assert.equal(cohorts.every((cohort) => (
+    cohort.canonicalFragmentRef.id === canonicalId
+      && cohort.warningCodes.includes('routing/cohort-truncated')
+  )), true);
 });
 
 test('cohort builder rejects unsupported versions and malformed domain inputs', () => {
