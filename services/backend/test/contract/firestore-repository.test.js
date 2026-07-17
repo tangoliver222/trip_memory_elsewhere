@@ -4,6 +4,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { createFirestoreRepository } from '../../src/repositories/firestore.js';
 import { runProcessingRepositoryContract } from './processing-repository.contract.js';
 import { runRepositoryContract } from './repository.contract.js';
+import { runRoutingRepositoryContract } from './routing-repository.contract.js';
 
 function createContentHashBarrierDatabase(database) {
   let resolveBarrier;
@@ -79,6 +80,69 @@ function createContentHashBarrierDatabase(database) {
   return { db, attemptCounts };
 }
 
+function createRoutingBarrierDatabase(database) {
+  let resolveBarrier;
+  let arrivals = 0;
+  const barrier = new Promise((resolve) => {
+    resolveBarrier = resolve;
+  });
+  const attemptCounts = [];
+  const db = new Proxy(database, {
+    get(target, property) {
+      if (property !== 'runTransaction') {
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      }
+      return (callback, options) => {
+        const transactionIndex = attemptCounts.length;
+        attemptCounts.push(0);
+        return target.runTransaction(async (transaction) => {
+          attemptCounts[transactionIndex] += 1;
+          const firstAttempt = attemptCounts[transactionIndex] === 1;
+          const wrapped = new Proxy(transaction, {
+            get(transactionTarget, transactionProperty) {
+              if (transactionProperty !== 'get') {
+                const value = Reflect.get(
+                  transactionTarget,
+                  transactionProperty,
+                  transactionTarget,
+                );
+                return typeof value === 'function' ? value.bind(transactionTarget) : value;
+              }
+              return async (reference) => {
+                const snapshot = await transactionTarget.get(reference);
+                if (firstAttempt && reference?.path?.includes('/routingHeads/')) {
+                  arrivals += 1;
+                  if (arrivals === 2) resolveBarrier();
+                  if (arrivals < 2) {
+                    let timeout;
+                    try {
+                      await Promise.race([
+                        barrier,
+                        new Promise((_, reject) => {
+                          timeout = setTimeout(
+                            () => reject(new Error('routing transaction barrier timed out')),
+                            5_000,
+                          );
+                        }),
+                      ]);
+                    } finally {
+                      clearTimeout(timeout);
+                    }
+                  }
+                }
+                return snapshot;
+              };
+            },
+          });
+          return callback(wrapped);
+        }, options);
+      };
+    },
+  });
+  return { db, attemptCounts };
+}
+
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
   test('Firestore repository contract requires the Emulator', { skip: true }, () => {});
 } else {
@@ -134,6 +198,47 @@ if (!process.env.FIRESTORE_EMULATOR_HOST) {
           `users/${ownerId}/duplicateCandidates/${candidateId}`,
         ).get();
         return snapshot.exists ? snapshot.data() : null;
+      },
+    },
+  });
+
+  const routingAttempts = new WeakMap();
+  runRoutingRepositoryContract({
+    name: 'Firestore repository',
+    createRepository: async ({ ownerId, context }) => {
+      const ownerRef = database.doc(`users/${ownerId}`);
+      await database.recursiveDelete(ownerRef);
+      context.after(() => database.recursiveDelete(ownerRef));
+      return createFirestoreRepository({ db: database });
+    },
+    firestoreConcurrencyCase: {
+      async createRepository({ ownerId, context }) {
+        const ownerRef = database.doc(`users/${ownerId}`);
+        await database.recursiveDelete(ownerRef);
+        context.after(() => database.recursiveDelete(ownerRef));
+        const barrier = createRoutingBarrierDatabase(database);
+        const repository = createFirestoreRepository({ db: barrier.db });
+        routingAttempts.set(repository, barrier.attemptCounts);
+        return repository;
+      },
+      attemptCountsFor(repository) {
+        return routingAttempts.get(repository);
+      },
+      async seedLedger(ownerId, ledger) {
+        await database.doc(`users/${ownerId}/budgetLedgers/${ledger.id}`).set(ledger);
+      },
+      async readLedger(ownerId, ledgerId) {
+        const snapshot = await database.doc(
+          `users/${ownerId}/budgetLedgers/${ledgerId}`,
+        ).get();
+        return snapshot.data();
+      },
+      async seedRoutePlan(ownerId, routePlan) {
+        await database.doc(`users/${ownerId}/routePlans/${routePlan.id}`).set(routePlan);
+      },
+      async readHead(ownerId, headId) {
+        const snapshot = await database.doc(`users/${ownerId}/routingHeads/${headId}`).get();
+        return snapshot.data();
       },
     },
   });

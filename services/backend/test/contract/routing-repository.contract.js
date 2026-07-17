@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeProcessingTaskId } from '../../src/processing/identity.js';
 import {
+  makeBudgetLedgerId,
   makeBudgetReservationId,
   makeRoutingHeadId,
 } from '../../src/routing/identity.js';
@@ -12,6 +13,7 @@ import {
 } from '../fixtures/import.js';
 import {
   makeCapabilityDecision,
+  makeBudgetLedger,
   makeEscalationRequest,
   makeRoutePlan,
   makeRoutingCohort,
@@ -217,14 +219,18 @@ function makeDraft({ ownerId, batch, fragment, taskId, id = 'route_12345678', re
   });
 }
 
-export function runRoutingRepositoryContract({ name, createRepository }) {
+export function runRoutingRepositoryContract({
+  name,
+  createRepository,
+  firestoreConcurrencyCase = null,
+}) {
   let index = 0;
-  const contractTest = (label, callback) => {
+  const contractTest = (label, callback, factory = createRepository) => {
     index += 1;
     const suffix = String(index).padStart(8, '0');
     test(`${name}: ${label}`, { concurrency: false }, async (context) => {
       const ownerId = `user_routing_${suffix}`;
-      const repository = assertRoutingRepository(await createRepository({ ownerId, context }));
+      const repository = assertRoutingRepository(await factory({ ownerId, context }));
       await callback({ repository, ownerId, suffix });
     });
   };
@@ -516,4 +522,95 @@ export function runRoutingRepositoryContract({ name, createRepository }) {
       { code: 'repository/owner-mismatch' },
     );
   });
+
+  if (firestoreConcurrencyCase) {
+    contractTest('serializes concurrent approvals against one shared budget ledger', async ({
+      repository, ownerId, suffix,
+    }) => {
+      const firstSeed = await seedDeterministicSuccess(repository, ownerId, `${suffix}a`);
+      const secondSeed = await seedDeterministicSuccess(repository, ownerId, `${suffix}b`);
+      const first = makeDraft({
+        ownerId,
+        ...firstSeed,
+        id: 'route_concur001',
+      });
+      const second = makeDraft({
+        ownerId,
+        ...secondSeed,
+        id: 'route_concur002',
+      });
+      await repository.saveRoutingDraft(ownerId, { routePlan: first });
+      await repository.saveRoutingDraft(ownerId, { routePlan: second });
+      const scope = { type: 'user_day', key: '2026-07-17' };
+      const ledger = makeBudgetLedger({
+        id: makeBudgetLedgerId({ ownerId, ...scope }),
+        ownerId,
+        scope,
+        reservedMicros: 1_994_000,
+      });
+      await firestoreConcurrencyCase.seedLedger(ownerId, ledger);
+
+      const results = await Promise.all([
+        repository.commitRoutingApproval(ownerId, approval(firstSeed.batch.id, first.id)),
+        repository.commitRoutingApproval(ownerId, approval(secondSeed.batch.id, second.id)),
+      ]);
+      const storedLedger = await firestoreConcurrencyCase.readLedger(ownerId, ledger.id);
+
+      assert.equal(results.flatMap(({ reservations }) => reservations).length, 1);
+      assert.equal(storedLedger.reservedMicros, 1_999_000);
+      assert.ok(storedLedger.reservedMicros + storedLedger.spentMicros
+        <= storedLedger.ceilingMicros);
+      assert.ok(firestoreConcurrencyCase.attemptCountsFor(repository)
+        .some((attempts) => attempts > 1));
+    }, firestoreConcurrencyCase.createRepository);
+
+    contractTest('rejects the losing same-revision approval without overwriting the head', async ({
+      repository, ownerId, suffix,
+    }) => {
+      const seeded = await seedDeterministicSuccess(repository, ownerId, suffix);
+      const first = makeDraft({ ownerId, ...seeded });
+      await repository.saveRoutingDraft(ownerId, { routePlan: first });
+      await repository.commitRoutingApproval(ownerId, approval(seeded.batch.id, first.id));
+      const winnerCandidate = makeDraft({
+        ownerId,
+        ...seeded,
+        id: 'route_concur101',
+        revision: 2,
+      });
+      const loserCandidate = makeDraft({
+        ownerId,
+        ...seeded,
+        id: 'route_concur102',
+        revision: 2,
+      });
+      await repository.saveRoutingDraft(ownerId, { routePlan: winnerCandidate });
+      await firestoreConcurrencyCase.seedRoutePlan(ownerId, loserCandidate);
+
+      const settled = await Promise.allSettled([
+        repository.commitRoutingApproval(
+          ownerId,
+          approval(seeded.batch.id, winnerCandidate.id),
+        ),
+        repository.commitRoutingApproval(
+          ownerId,
+          approval(seeded.batch.id, loserCandidate.id),
+        ),
+      ]);
+      const headId = makeRoutingHeadId({
+        ownerId,
+        fragmentId: seeded.fragment.id,
+        routerName: 'fragment-routing',
+      });
+      const head = await firestoreConcurrencyCase.readHead(ownerId, headId);
+
+      assert.equal(settled.filter(({ status }) => status === 'fulfilled').length, 1);
+      assert.equal(settled.filter(({ status }) => status === 'rejected').length, 1);
+      assert.equal(settled.find(({ status }) => status === 'rejected').reason.code,
+        'repository/conflict');
+      assert.equal(head.currentRevision, 2);
+      assert.ok([winnerCandidate.id, loserCandidate.id].includes(head.currentPlanRef.id));
+      assert.ok(firestoreConcurrencyCase.attemptCountsFor(repository)
+        .some((attempts) => attempts > 1));
+    }, firestoreConcurrencyCase.createRepository);
+  }
 }
