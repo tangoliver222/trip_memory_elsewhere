@@ -1,4 +1,4 @@
-import { NOW, makePendingBatch } from './import.js';
+import { NOW, makePendingBatch, makeUploadedFragment } from './import.js';
 
 export const ROUTING_SOURCE_REVISION = Object.freeze({
   bucket: 'demo-elsewhere.appspot.com',
@@ -7,7 +7,106 @@ export const ROUTING_SOURCE_REVISION = Object.freeze({
   inputHash: 'a'.repeat(64),
 });
 
+const PERCEPTUAL_BANDS = Object.freeze([
+  '0:00', '1:00', '2:00', '3:00', '4:00', '5:00', '6:00', '7:00',
+]);
+
 const reference = (type, id) => ({ type, id });
+
+export function makeRoutableFragment(overrides = {}) {
+  const {
+    id = 'frag_12345678',
+    type = 'photo',
+    batchId = 'batch_12345678',
+    sourceCreatedAt = '2024-10-12T08:42:00.000Z',
+    capturedAt = null,
+    capturedAtStatus = 'suggested',
+    locationHint = null,
+    width = 4032,
+    height = 3024,
+    inputHash = 'a'.repeat(64),
+    thumbnailStatus = 'complete',
+    facts: factOverrides = {},
+    ...fragmentOverrides
+  } = overrides;
+  const base = makeUploadedFragment({ id, batchId, type });
+  const thumbnail = thumbnailStatus === 'complete' ? {
+    path: `users/user_alpha/derived/${id}/deterministic-media/v1/${inputHash}/thumbnail.webp`,
+    generation: '1740000000000100',
+    metageneration: '1',
+    contentType: 'image/webp',
+    sizeBytes: 48_291,
+    crc32c: 'Y3JjIQ==',
+    width: Math.min(width, 512),
+    height: Math.min(height, 512),
+  } : null;
+  const capturedFact = capturedAt === null ? {} : {
+    capturedAt: {
+      value: { instant: capturedAt },
+      sourceType: 'exif',
+      sourceRefs: [reference('fragment', id)],
+      processor: {
+        name: 'deterministic-media',
+        version: 'v1',
+        modelAlias: null,
+        promptVersion: null,
+      },
+      confidence: 0.9,
+      status: capturedAtStatus,
+      observedAt: NOW,
+    },
+  };
+
+  return {
+    ...base,
+    status: 'unresolved',
+    source: {
+      ...base.source,
+      sourceCreatedAt,
+      locationHint,
+      media: { width, height },
+    },
+    hashes: {
+      sha256: inputHash,
+      perceptualHash: inputHash.slice(0, 16),
+      perceptualHashAlgorithm: 'dhash',
+      perceptualHashVersion: 'v1',
+      perceptualHashBands: PERCEPTUAL_BANDS,
+    },
+    technicalMetadata: {
+      format: 'jpeg',
+      width,
+      height,
+      orientation: 1,
+      pageCount: null,
+      cameraMake: null,
+      cameraModel: null,
+      lensModel: null,
+      focalLengthMm: null,
+      apertureFNumber: null,
+      isoEquivalent: null,
+      exposureTimeSeconds: null,
+      metadataStatus: 'complete',
+      warningCodes: [],
+      processorVersion: 'v1',
+    },
+    derivatives: { thumbnail },
+    processing: {
+      deterministic: {
+        taskId: `task_${id.slice(5)}`,
+        processorName: 'deterministic-media',
+        processorVersion: 'v1',
+        state: 'succeeded',
+        metadataStatus: 'complete',
+        thumbnailStatus,
+        perceptualHashStatus: 'complete',
+        updatedAt: NOW,
+      },
+    },
+    facts: { ...capturedFact, ...factOverrides },
+    ...fragmentOverrides,
+  };
+}
 
 export function makeCapabilityDecision(decision, overrides = {}) {
   const common = {
