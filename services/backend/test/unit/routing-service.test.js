@@ -142,6 +142,8 @@ test('one settled Fragment compiles a valid draft then atomically requests appro
   ]);
   const draft = parseRoutePlan(harness.drafts[0]);
   assert.equal(draft.state, 'draft');
+  assert.equal(draft.router.policyVersion, 'v2');
+  assert.equal(draft.router.costModelVersion, 'v2');
   assert.equal(draft.sourceRevision.inputHash, fragment.hashes.sha256);
   assert.equal(draft.capabilities.embedding.decision, 'blocked');
   assert.deepEqual(draft.capabilities.embedding.reasonCodes, ['await-budget-gate']);
@@ -285,6 +287,11 @@ test('text and PDF route without attempting thumbnail or original reads', async 
     { mediaKind: 'document', documentKind: 'pdf' },
     { mediaKind: 'text', documentKind: null },
   ]);
+  const pdfPlan = parseRoutePlan(harness.drafts.find(({ classification }) => (
+    classification.documentKind === 'pdf'
+  )));
+  assert.equal(pdfPlan.capabilities.ocr.decision, 'deferred');
+  assert.deepEqual(pdfPlan.capabilities.ocr.reasonCodes, ['page-count-unknown']);
 });
 
 test('an external exact canonical stays visible and makes the batch Fragment supporting', async () => {

@@ -8,6 +8,7 @@ import {
   classifyRoutingInput,
   compileCapabilityIntents,
 } from '../../src/routing/policy.js';
+import * as routingPolicy from '../../src/routing/policy.js';
 import {
   makeEscalationRequest,
   makeRoutableFragment,
@@ -62,6 +63,26 @@ function nonPixelFragment({ type, format }) {
   };
 }
 
+function documentImage({
+  type = 'receipt',
+  format = 'jpeg',
+  sizeBytes = 4_000_000,
+  width = 2_000,
+  height = 3_000,
+} = {}) {
+  const base = makeRoutableFragment({ type, width, height });
+  return {
+    ...base,
+    storage: { ...base.storage, sizeBytes },
+    technicalMetadata: {
+      ...base.technicalMetadata,
+      format,
+      width,
+      height,
+    },
+  };
+}
+
 const locationHint = {
   lat: 13.7563,
   lng: 100.5018,
@@ -87,6 +108,14 @@ test('routing policy identifiers are frozen and version exact', () => {
   assert.equal(Object.isFrozen(ROUTER_V1), true);
   assert.equal(Object.isFrozen(POLICY_V1), true);
   assert.equal(Object.isFrozen(COST_MODEL_V1), true);
+  assert.deepEqual(routingPolicy.POLICY_V2, {
+    name: 'authoritative-routing-policy', version: 'v2',
+  });
+  assert.deepEqual(routingPolicy.COST_MODEL_V2, {
+    name: 'routing-admission-costs', version: 'v2',
+  });
+  assert.equal(Object.isFrozen(routingPolicy.POLICY_V2), true);
+  assert.equal(Object.isFrozen(routingPolicy.COST_MODEL_V2), true);
 });
 
 test('classification uses declared and deterministic fields without semantic guessing', () => {
@@ -160,27 +189,27 @@ test('first-pass capability matrix is deterministic by input class', () => {
       gemini: ['defer', 'await-structured-results'],
     }],
     [makeRoutableFragment({ type: 'receipt' }), {
-      ocr: ['approve', 'declared-document-type'],
+      ocr: ['approve', 'document-ai-input-supported'],
       places: ['defer', 'await-ocr-result'],
-      embedding: ['approve', 'declared-document-type'],
+      embedding: ['defer', 'await-ocr-result'],
       gemini: ['defer', 'await-structured-results'],
     }],
     [makeRoutableFragment({ type: 'ticket' }), {
-      ocr: ['approve', 'declared-document-type'],
+      ocr: ['approve', 'document-ai-input-supported'],
       places: ['defer', 'await-ocr-result'],
-      embedding: ['approve', 'declared-document-type'],
+      embedding: ['defer', 'await-ocr-result'],
       gemini: ['defer', 'await-structured-results'],
     }],
     [makeRoutableFragment({ type: 'menu' }), {
-      ocr: ['approve', 'declared-document-type'],
+      ocr: ['approve', 'document-ai-input-supported'],
       places: ['defer', 'await-ocr-result'],
-      embedding: ['approve', 'declared-document-type'],
+      embedding: ['defer', 'await-ocr-result'],
       gemini: ['defer', 'await-structured-results'],
     }],
     [makeRoutableFragment({ type: 'screenshot' }), {
-      ocr: ['approve', 'declared-document-type'],
+      ocr: ['approve', 'document-ai-input-supported'],
       places: ['defer', 'await-ocr-result'],
-      embedding: ['approve', 'declared-document-type'],
+      embedding: ['defer', 'await-ocr-result'],
       gemini: ['defer', 'await-structured-results'],
     }],
     [nonPixelFragment({ type: 'text', format: 'text' }), {
@@ -190,7 +219,7 @@ test('first-pass capability matrix is deterministic by input class', () => {
       gemini: ['defer', 'await-structured-results'],
     }],
     [nonPixelFragment({ type: 'receipt', format: 'pdf' }), {
-      ocr: ['approve', 'pdf-document'],
+      ocr: ['defer', 'page-count-unknown'],
       places: ['defer', 'await-ocr-result'],
       embedding: ['defer', 'await-ocr-result'],
       gemini: ['defer', 'await-structured-results'],
@@ -212,6 +241,30 @@ test('first-pass capability matrix is deterministic by input class', () => {
     'policy-change',
     'user-request',
   ]);
+});
+
+test('policy v2 admits only bounded Document AI image inputs', () => {
+  const cases = [
+    ['small receipt JPEG', documentImage(), 'approve', 'document-ai-input-supported'],
+    ['40 MB receipt', documentImage({ sizeBytes: 40_000_000 }), 'approve', 'document-ai-input-supported'],
+    ['HEIC receipt', documentImage({ format: 'heic' }), 'block', 'document-ai-format-unsupported'],
+    ['HEIF receipt', documentImage({ format: 'heif' }), 'block', 'document-ai-format-unsupported'],
+    ['missing pixels', documentImage({ width: null, height: null }), 'defer', 'image-pixels-unknown'],
+    ['over 40 MB', documentImage({ sizeBytes: 40_000_001 }), 'block', 'document-ai-online-limit'],
+    ['over 40 MP', documentImage({ width: 8_000, height: 6_000 }), 'block', 'document-ai-online-limit'],
+    ['unknown-page PDF', nonPixelFragment({ type: 'receipt', format: 'pdf' }), 'defer', 'page-count-unknown'],
+  ];
+
+  for (const [name, fragment, decision, reason] of cases) {
+    const ocr = compile(fragment).intents.ocr;
+    assert.equal(ocr.decision, decision, name);
+    assert.deepEqual(ocr.reasonCodes, [reason], name);
+  }
+
+  assert.deepEqual(
+    compile(documentImage({ width: null, height: null })).intents.ocr.reconsiderOn,
+    ['policy-change', 'technical-facts-updated'],
+  );
 });
 
 test('exact near and burst supporting photos skip their paid work', () => {

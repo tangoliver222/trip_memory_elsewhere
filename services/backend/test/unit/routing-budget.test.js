@@ -12,6 +12,7 @@ import {
   reserveRoutePlanBudget,
   settleReservation,
 } from '../../src/routing/budget.js';
+import * as routingBudget from '../../src/routing/budget.js';
 import { makeBudgetLedgerId } from '../../src/routing/identity.js';
 import {
   makeBudgetLedger,
@@ -41,12 +42,19 @@ function intent(decision, capability, overrides = {}) {
 function makeDraftPlan({
   id = 'route_12345678',
   capabilities = {},
+  policyVersion = 'v1',
+  costModelVersion = 'v1',
 } = {}) {
   const base = makeRoutePlan();
   return {
     ...base,
     id,
     state: 'draft',
+    router: {
+      ...base.router,
+      policyVersion,
+      costModelVersion,
+    },
     capabilities: Object.fromEntries(CAPABILITIES.map((capability) => [
       capability,
       capabilities[capability] ?? intent('skip', capability),
@@ -121,6 +129,39 @@ test('budget and cost constants are exact deeply frozen admission policy', () =>
   });
   assert.equal(Object.isFrozen(ROUTING_BUDGET_POLICY_V1), true);
   assert.equal(Object.isFrozen(ROUTING_COST_MODEL_V1.capabilities.gemini), true);
+  assert.deepEqual(routingBudget.ROUTING_COST_MODEL_V2, {
+    name: 'routing-admission-costs',
+    version: 'v2',
+    capabilities: {
+      ocr: { estimatedMicros: 1_500, ceilingMicros: 1_500, maxBillableAttempts: 1 },
+      places: { estimatedMicros: 10_000, ceilingMicros: 50_000, maxBillableAttempts: 1 },
+      embedding: { estimatedMicros: 1_000, ceilingMicros: 5_000, maxBillableAttempts: 1 },
+      gemini: { estimatedMicros: 25_000, ceilingMicros: 100_000, maxBillableAttempts: 1 },
+    },
+  });
+  assert.equal(Object.isFrozen(routingBudget.ROUTING_COST_MODEL_V2.capabilities.ocr), true);
+});
+
+test('v2 route reserves exactly one bounded OCR image page while v1 remains valid', () => {
+  const result = reserve(makeDraftPlan({
+    policyVersion: 'v2',
+    costModelVersion: 'v2',
+    capabilities: { ocr: intent('approve', 'ocr') },
+  }));
+
+  assert.equal(result.reservations.length, 1);
+  assert.deepEqual({
+    estimatedCostMicros: result.reservations[0].estimatedCostMicros,
+    ceilingMicros: result.reservations[0].ceilingMicros,
+    maxBillableAttempts: result.reservations[0].maxBillableAttempts,
+    costModelVersion: result.reservations[0].costModelVersion,
+  }, {
+    estimatedCostMicros: 1_500,
+    ceilingMicros: 1_500,
+    maxBillableAttempts: 1,
+    costModelVersion: 'v2',
+  });
+  assert.equal(result.ledgers.every(({ policyVersion }) => policyVersion === 'v2'), true);
 });
 
 test('only approve intents receive reservations and all decisions become persisted vocabulary', () => {
