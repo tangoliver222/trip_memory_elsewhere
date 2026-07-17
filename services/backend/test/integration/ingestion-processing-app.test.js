@@ -22,8 +22,8 @@ const inject = (app, overrides = {}) => app.inject({
   ...overrides,
 });
 
-test('only persisted processing terminal outcomes return 204', async (t) => {
-  for (const outcome of ['succeeded', 'failed_terminal', 'terminal_noop']) {
+test('only persisted authoritative routing outcomes return 204', async (t) => {
+  for (const outcome of ['drafted', 'approved', 'completed', 'terminal_noop']) {
     const app = createIngestionTestApp({
       eventHandler: { async handle() { return { outcome }; } },
     });
@@ -77,6 +77,8 @@ test('retry correctness depends on 503 and not a Retry-After header', async (t) 
 test('malformed or unknown processing results return stable 503', async (t) => {
   for (const eventHandler of [
     { async handle() { return { outcome: 'busy' }; } },
+    { async handle() { return { outcome: 'succeeded' }; } },
+    { async handle() { return { outcome: 'failed_terminal' }; } },
     { async handle() { throw new Error(`raw failure for ${payload.name}`); } },
   ]) {
     const app = createIngestionTestApp({ eventHandler });
