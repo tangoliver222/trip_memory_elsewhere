@@ -244,9 +244,16 @@ test('terminal duplicate ignores stale mutable associations and malformed remain
   const terminalTask = makeProcessingTask({
     state: 'succeeded',
     currentStep: 'complete',
+    inputHash: SHA256,
     leaseOwner: null,
     leaseAcquiredAt: null,
     leaseExpiresAt: null,
+    outputs: {
+      metadataStatus: 'complete',
+      thumbnailStatus: 'complete',
+      perceptualHashStatus: 'complete',
+      warningCodes: [],
+    },
     completedAt: COMPLETED_AT,
     updatedAt: COMPLETED_AT,
   });

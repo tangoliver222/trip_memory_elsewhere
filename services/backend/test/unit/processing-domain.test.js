@@ -4,6 +4,7 @@ import * as domain from '../../src/domain/index.js';
 import {
   PROCESSING_STEPS,
   PROCESSING_TASK_STATES,
+  ProcessingErrorCodeSchema,
   TechnicalMetadataSchema,
   parseDuplicateCandidate,
   parseFragment,
@@ -38,39 +39,121 @@ test('task identity fields exclude inputHash and require a complete source revis
   assert.throws(() => parseProcessingTask(makeProcessingTask({ identityInputHash: SHA256 })));
 });
 
-test('task states enforce lease deadline step and completion invariants', () => {
-  assert.equal(parseProcessingTask(makeProcessingTask()).state, 'running');
+test('persisted processing task states accept only internally consistent shapes', () => {
+  const completedAt = '2026-07-16T00:03:30.000Z';
+  const pending = makeProcessingTask({
+    state: 'pending',
+    currentStep: 'queued',
+    leaseOwner: null,
+    attemptCount: 0,
+    firstStartedAt: null,
+    attemptStartedAt: null,
+    lastHeartbeatAt: null,
+    softDeadlineAt: null,
+    leaseAcquiredAt: null,
+    leaseExpiresAt: null,
+  });
+  const running = makeProcessingTask();
+  const failedRetryable = makeProcessingTask({
+    state: 'failed_retryable',
+    leaseOwner: null,
+    leaseAcquiredAt: null,
+    leaseExpiresAt: null,
+    lastErrorCode: 'processing/soft-timeout',
+  });
+  const succeeded = makeProcessingTask({
+    state: 'succeeded',
+    currentStep: 'complete',
+    inputHash: SHA256,
+    leaseOwner: null,
+    leaseAcquiredAt: null,
+    leaseExpiresAt: null,
+    outputs: {
+      metadataStatus: 'complete',
+      thumbnailStatus: 'complete',
+      perceptualHashStatus: 'complete',
+      warningCodes: [],
+    },
+    completedAt,
+  });
+  const failedTerminal = makeProcessingTask({
+    state: 'failed_terminal',
+    currentStep: 'complete',
+    leaseOwner: null,
+    leaseAcquiredAt: null,
+    leaseExpiresAt: null,
+    outputs: {
+      metadataStatus: 'failed',
+      thumbnailStatus: 'failed',
+      perceptualHashStatus: 'failed',
+      warningCodes: [],
+    },
+    lastErrorCode: 'processing/invalid-media',
+    completedAt,
+  });
+
+  for (const task of [pending, running, failedRetryable, succeeded, failedTerminal]) {
+    assert.deepEqual(parseProcessingTask(task), task);
+  }
+
+  const contradictions = [
+    { ...pending, currentStep: 'hashing' },
+    { ...pending, attemptCount: 1 },
+    { ...pending, inputHash: SHA256 },
+    { ...pending, outputs: { ...pending.outputs, metadataStatus: 'complete' } },
+    { ...pending, lastErrorCode: 'processing/soft-timeout' },
+    { ...running, currentStep: 'queued' },
+    { ...running, currentStep: 'complete' },
+    { ...running, lastErrorCode: 'processing/soft-timeout' },
+    { ...running, completedAt },
+    { ...failedRetryable, currentStep: 'queued' },
+    { ...failedRetryable, currentStep: 'complete' },
+    { ...failedRetryable, lastErrorCode: null },
+    { ...failedRetryable, leaseOwner: 'exec_stale001' },
+    { ...failedRetryable, completedAt },
+    { ...succeeded, currentStep: 'committing' },
+    { ...succeeded, inputHash: null },
+    { ...succeeded, lastErrorCode: 'processing/invalid-media' },
+    { ...succeeded, outputs: { ...succeeded.outputs, metadataStatus: null } },
+    {
+      ...succeeded,
+      outputs: { ...succeeded.outputs, thumbnailStatus: 'failed' },
+    },
+    { ...failedTerminal, currentStep: 'committing' },
+    { ...failedTerminal, lastErrorCode: null },
+    { ...failedTerminal, outputs: { ...failedTerminal.outputs, metadataStatus: null } },
+    {
+      ...failedTerminal,
+      outputs: {
+        ...failedTerminal.outputs,
+        metadataStatus: 'complete',
+        thumbnailStatus: 'complete',
+        perceptualHashStatus: 'unsupported',
+      },
+    },
+    ...[pending, failedRetryable, succeeded, failedTerminal].flatMap((task) => (
+      ['leaseOwner', 'leaseAcquiredAt', 'leaseExpiresAt'].map((field) => ({
+        ...task,
+        [field]: field === 'leaseOwner' ? 'exec_stale001' : task.createdAt,
+      }))
+    )),
+    ...['firstStartedAt', 'attemptStartedAt', 'lastHeartbeatAt', 'softDeadlineAt']
+      .map((field) => ({ ...pending, [field]: pending.createdAt })),
+    ...[failedRetryable, succeeded, failedTerminal].flatMap((task) => [
+      { ...task, attemptCount: 0 },
+      ...['firstStartedAt', 'attemptStartedAt', 'lastHeartbeatAt', 'softDeadlineAt']
+        .map((field) => ({ ...task, [field]: null })),
+    ]),
+  ];
+  for (const task of contradictions) {
+    assert.throws(() => parseProcessingTask(task));
+  }
 
   assert.throws(() => parseProcessingTask(makeProcessingTask({ leaseOwner: null })));
   assert.throws(() => parseProcessingTask(makeProcessingTask({
     softDeadlineAt: '2026-07-16T00:05:00.000Z',
   })));
   assert.throws(() => parseProcessingTask(makeProcessingTask({ currentStep: 'extracting' })));
-
-  const failedTerminal = makeProcessingTask({
-    state: 'failed_terminal',
-    currentStep: 'complete',
-    leaseOwner: null,
-    leaseExpiresAt: null,
-    completedAt: '2026-07-16T00:03:30.000Z',
-    lastErrorCode: 'processing/invalid-media',
-  });
-  assert.equal(parseProcessingTask(failedTerminal).completedAt,
-    '2026-07-16T00:03:30.000Z');
-  assert.throws(() => parseProcessingTask({ ...failedTerminal, completedAt: null }));
-
-  const failedRetryable = makeProcessingTask({
-    state: 'failed_retryable',
-    leaseOwner: null,
-    leaseExpiresAt: null,
-    completedAt: null,
-    lastErrorCode: 'processing/soft-timeout',
-  });
-  assert.equal(parseProcessingTask(failedRetryable).completedAt, null);
-  assert.throws(() => parseProcessingTask({
-    ...failedRetryable,
-    completedAt: '2026-07-16T00:03:30.000Z',
-  }));
 });
 
 test('fragment processing fields use null rather than empty or forged values', () => {
@@ -168,9 +251,7 @@ test('PDF technical metadata keeps pageCount null and the unsupported warning', 
 });
 
 test('processing error codes use the frozen v1 vocabulary', () => {
-  assert.throws(() => parseProcessingTask(makeProcessingTask({
-    lastErrorCode: 'processing/not-real',
-  })));
+  assert.throws(() => ProcessingErrorCodeSchema.parse('processing/not-real'));
 
   const expected = [
     'processing/task-busy',
@@ -183,9 +264,8 @@ test('processing error codes use the frozen v1 vocabulary', () => {
   ];
   assert.deepEqual(domain.PROCESSING_ERROR_CODES, expected);
   assert.equal(Object.isFrozen(domain.PROCESSING_ERROR_CODES), true);
-  for (const lastErrorCode of expected) {
-    assert.equal(parseProcessingTask(makeProcessingTask({ lastErrorCode })).lastErrorCode,
-      lastErrorCode);
+  for (const errorCode of expected) {
+    assert.equal(ProcessingErrorCodeSchema.parse(errorCode), errorCode);
   }
 });
 

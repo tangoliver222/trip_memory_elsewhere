@@ -309,7 +309,6 @@ function terminalTask(claim, state = 'succeeded') {
       warningCodes: [],
     },
     lastErrorCode: state === 'failed_terminal' ? 'processing/invalid-media' : null,
-    softDeadlineAt: null,
     leaseAcquiredAt: null,
     leaseExpiresAt: null,
     completedAt: claim.claimedAt,
@@ -692,6 +691,22 @@ test('claim outcomes require complete matching task and fragment documents', asy
     ['partial terminal task', (input) => ({
       outcome: 'terminal',
       task: { id: input.taskId, state: 'succeeded' },
+    })],
+    ['contradictory succeeded task', (input) => ({
+      outcome: 'terminal',
+      task: { ...terminalTask(input, 'succeeded'), inputHash: null },
+    })],
+    ['contradictory terminal failure task', (input) => ({
+      outcome: 'terminal',
+      task: {
+        ...terminalTask(input, 'failed_terminal'),
+        outputs: {
+          metadataStatus: 'complete',
+          thumbnailStatus: 'complete',
+          perceptualHashStatus: 'unsupported',
+          warningCodes: [],
+        },
+      },
     })],
     ['mismatched busy task', (input) => ({
       outcome: 'busy',
