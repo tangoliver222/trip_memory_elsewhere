@@ -81,28 +81,40 @@ test('Firestore rules isolate owner data and block client-derived writes', { ski
           kind: 'exact',
         });
       });
-      const owner = environment.authenticatedContext('user_alpha').firestore();
-      const other = environment.authenticatedContext('user_beta').firestore();
-      const anonymous = environment.unauthenticatedContext().firestore();
+      const contexts = [
+        ['owner', environment.authenticatedContext('user_alpha').firestore()],
+        ['other', environment.authenticatedContext('user_beta').firestore()],
+        ['anonymous', environment.unauthenticatedContext().firestore()],
+      ];
 
-      await assertSucceeds(getDoc(doc(owner, candidatePath)));
-      await assertFails(getDoc(doc(other, candidatePath)));
-      await assertFails(getDoc(doc(anonymous, candidatePath)));
+      for (const [label, database] of contexts) {
+        if (label === 'owner') {
+          await assertSucceeds(getDoc(doc(database, candidatePath)));
+        } else {
+          await assertFails(getDoc(doc(database, candidatePath)));
+        }
+      }
     });
 
-    await t.test('clients cannot mutate DuplicateCandidate documents', async () => {
+    await t.test('every client is denied each DuplicateCandidate mutation', async () => {
       const candidatePath = 'users/user_alpha/duplicateCandidates/candidate_write01';
       await environment.withSecurityRulesDisabled(async (context) => {
         await setDoc(doc(context.firestore(), candidatePath), { ownerId: 'user_alpha' });
       });
-      const owner = environment.authenticatedContext('user_alpha').firestore();
+      const contexts = [
+        ['owner', environment.authenticatedContext('user_alpha').firestore()],
+        ['other', environment.authenticatedContext('user_beta').firestore()],
+        ['anonymous', environment.unauthenticatedContext().firestore()],
+      ];
 
-      await assertFails(setDoc(
-        doc(owner, 'users/user_alpha/duplicateCandidates/candidate_create01'),
-        { ownerId: 'user_alpha' },
-      ));
-      await assertFails(updateDoc(doc(owner, candidatePath), { status: 'confirmed' }));
-      await assertFails(deleteDoc(doc(owner, candidatePath)));
+      for (const [label, database] of contexts) {
+        await assertFails(setDoc(
+          doc(database, `users/user_alpha/duplicateCandidates/candidate_create_${label}01`),
+          { ownerId: 'user_alpha' },
+        ));
+        await assertFails(updateDoc(doc(database, candidatePath), { status: 'confirmed' }));
+        await assertFails(deleteDoc(doc(database, candidatePath)));
+      }
     });
 
     await t.test('ProcessingTask and ContentHash stay private from every client', async () => {
@@ -116,16 +128,19 @@ test('Firestore rules isolate owner data and block client-derived writes', { ski
         }
       });
 
-      for (const database of [
-        environment.authenticatedContext('user_alpha').firestore(),
-        environment.authenticatedContext('user_beta').firestore(),
-        environment.unauthenticatedContext().firestore(),
-      ]) {
+      const contexts = [
+        ['owner', environment.authenticatedContext('user_alpha').firestore()],
+        ['other', environment.authenticatedContext('user_beta').firestore()],
+        ['anonymous', environment.unauthenticatedContext().firestore()],
+      ];
+      for (const [label, database] of contexts) {
         for (const internalPath of internalPaths) {
           await assertFails(getDoc(doc(database, internalPath)));
-          await assertFails(setDoc(doc(database, `${internalPath}_new`), {
+          await assertFails(setDoc(doc(database, `${internalPath}_${label}_new`), {
             ownerId: 'user_alpha',
           }));
+          await assertFails(updateDoc(doc(database, internalPath), { state: 'forged' }));
+          await assertFails(deleteDoc(doc(database, internalPath)));
         }
       }
     });

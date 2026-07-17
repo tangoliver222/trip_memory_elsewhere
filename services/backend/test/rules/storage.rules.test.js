@@ -158,33 +158,48 @@ test('Storage rules bind owner creates to pending ImportBatch manifest items', {
           contentType: 'image/webp',
         });
       });
-      const owner = environment.authenticatedContext('user_alpha').storage();
-      const other = environment.authenticatedContext('user_beta').storage();
-      const anonymous = environment.unauthenticatedContext().storage();
+      const contexts = [
+        ['owner', environment.authenticatedContext('user_alpha').storage()],
+        ['other', environment.authenticatedContext('user_beta').storage()],
+        ['anonymous', environment.unauthenticatedContext().storage()],
+      ];
 
-      await assertSucceeds(getBytes(ref(owner, derivedPath)));
-      await assertFails(getBytes(ref(other, derivedPath)));
-      await assertFails(getBytes(ref(anonymous, derivedPath)));
+      for (const [label, storage] of contexts) {
+        if (label === 'owner') {
+          await assertSucceeds(getBytes(ref(storage, derivedPath)));
+        } else {
+          await assertFails(getBytes(ref(storage, derivedPath)));
+        }
+      }
     });
 
-    await t.test('clients cannot create, overwrite, or delete derivatives', async () => {
+    await t.test('every client is denied each derived object mutation', async () => {
       const derivedPath = 'users/user_alpha/derived/frag_derived02/deterministic-media/v1/hash/thumb.webp';
       await environment.withSecurityRulesDisabled(async (context) => {
         await uploadBytes(ref(context.storage(), derivedPath), bytes, {
           contentType: 'image/webp',
         });
       });
-      const owner = environment.authenticatedContext('user_alpha').storage();
+      const contexts = [
+        ['owner', environment.authenticatedContext('user_alpha').storage()],
+        ['other', environment.authenticatedContext('user_beta').storage()],
+        ['anonymous', environment.unauthenticatedContext().storage()],
+      ];
 
-      await assertFails(uploadBytes(
-        ref(owner, 'users/user_alpha/derived/frag_derived03/deterministic-media/v1/hash/thumb.webp'),
-        bytes,
-        { contentType: 'image/webp' },
-      ));
-      await assertFails(uploadBytes(ref(owner, derivedPath), bytes, {
-        contentType: 'image/webp',
-      }));
-      await assertFails(deleteObject(ref(owner, derivedPath)));
+      for (const [label, storage] of contexts) {
+        await assertFails(uploadBytes(
+          ref(
+            storage,
+            `users/user_alpha/derived/frag_create_${label}01/deterministic-media/v1/hash/thumb.webp`,
+          ),
+          bytes,
+          { contentType: 'image/webp' },
+        ));
+        await assertFails(uploadBytes(ref(storage, derivedPath), bytes, {
+          contentType: 'image/webp',
+        }));
+        await assertFails(deleteObject(ref(storage, derivedPath)));
+      }
     });
   } finally {
     await environment.cleanup();
