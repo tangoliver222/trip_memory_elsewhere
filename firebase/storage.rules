@@ -29,6 +29,11 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
+    match /users/{userId}/derived/{path=**} {
+      allow read: if owns(userId);
+      allow write: if false;
+    }
+
     match /{path=**} {
       allow read, write: if false;
     }

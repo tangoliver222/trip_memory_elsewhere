@@ -15,6 +15,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /users/{userId}/duplicateCandidates/{candidateId} {
+      allow read: if owns(userId);
+      allow write: if false;
+    }
+
+    match /users/{userId}/processingTasks/{taskId} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId}/contentHashes/{hashId} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
