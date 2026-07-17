@@ -13,10 +13,26 @@ const EnvSchema = z.object({
   ELSE_MODEL_FAST: z.string().default('gemini-flash-latest'),
   ELSE_MODEL_DEEP: z.string().optional(),
   ELSE_CORS_ORIGIN: z.string().default('*'),
-  ELSEWHERE_SERVICE_MODE: z.enum(['api', 'ingestion']).default('api'),
+  ELSEWHERE_SERVICE_MODE: z.enum(['api', 'ingestion', 'capability-worker']).default('api'),
   FIREBASE_PROJECT_ID: z.string().trim().default(''),
   ELSEWHERE_ALLOWED_APP_IDS: z.string().optional(),
   ELSEWHERE_STORAGE_BUCKETS: z.string().optional(),
+  CAPABILITY_EXECUTION_MODE: z.enum(['fake', 'google']).default('fake'),
+  OCR_PROVIDER_VERSION: z.string().trim().min(1).optional(),
+  CLOUD_TASKS_ENABLED: z.enum(['true', 'false']).default('false'),
+  CLOUD_TASKS_PROJECT_ID: z.string().trim().default(''),
+  CLOUD_TASKS_LOCATION: z.string().trim().default(''),
+  OCR_TASK_QUEUE: z.string().trim().default(''),
+  OCR_WORKER_URL: z.string().trim().default(''),
+  OCR_WORKER_AUDIENCE: z.string().trim().default(''),
+  OCR_TASK_SERVICE_ACCOUNT: z.string().trim().default(''),
+  DOCUMENT_AI_ENABLED: z.enum(['true', 'false']).default('false'),
+  DOCUMENT_AI_PROJECT_ID: z.string().trim().default(''),
+  DOCUMENT_AI_LOCATION: z.string().trim().default(''),
+  DOCUMENT_AI_PROCESSOR_ID: z.string().trim().default(''),
+  DOCUMENT_AI_PROCESSOR_VERSION: z.string().trim().default(''),
+  DOCUMENT_AI_ENDPOINT: z.string().trim().default(''),
+  RUN_REAL_GOOGLE_PROVIDER_TESTS: z.enum(['true', 'false']).default('false'),
   PROCESSING_SOFT_TIMEOUT_MS: z.coerce.number().int().positive().default(180000),
   PROCESSING_LEASE_MS: z.coerce.number().int().positive().default(240000),
   CLOUD_RUN_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(300000),
@@ -72,8 +88,63 @@ export function loadConfig(env = process.env) {
   if (value.ELSEWHERE_SERVICE_MODE === 'api' && allowedAppIds.length === 0) {
     missing.push('ELSEWHERE_ALLOWED_APP_IDS');
   }
-  if (value.ELSEWHERE_SERVICE_MODE === 'ingestion' && storageBuckets.length === 0) {
+  if (['ingestion', 'capability-worker'].includes(value.ELSEWHERE_SERVICE_MODE)
+    && storageBuckets.length === 0) {
     missing.push('ELSEWHERE_STORAGE_BUCKETS');
+  }
+
+  const cloudTasksEnabled = value.CLOUD_TASKS_ENABLED === 'true';
+  const documentAiEnabled = value.DOCUMENT_AI_ENABLED === 'true';
+  const capabilityMode = value.CAPABILITY_EXECUTION_MODE;
+  const providerVersion = value.OCR_PROVIDER_VERSION
+    ?? (capabilityMode === 'fake' ? 'fake-processor-v1' : '');
+
+  if (capabilityMode === 'fake' && cloudTasksEnabled) missing.push('CLOUD_TASKS_ENABLED');
+  if (capabilityMode === 'fake' && documentAiEnabled) missing.push('DOCUMENT_AI_ENABLED');
+  if (capabilityMode === 'google' && !providerVersion) missing.push('OCR_PROVIDER_VERSION');
+  if (capabilityMode === 'google'
+    && value.NODE_ENV === 'test'
+    && value.RUN_REAL_GOOGLE_PROVIDER_TESTS !== 'true') {
+    missing.push('RUN_REAL_GOOGLE_PROVIDER_TESTS');
+  }
+
+  if (value.ELSEWHERE_SERVICE_MODE === 'api' && (cloudTasksEnabled || documentAiEnabled)) {
+    missing.push('ELSEWHERE_SERVICE_MODE');
+  }
+  if (value.ELSEWHERE_SERVICE_MODE === 'ingestion') {
+    if (documentAiEnabled) missing.push('DOCUMENT_AI_ENABLED');
+    if (capabilityMode === 'google' && !cloudTasksEnabled) missing.push('CLOUD_TASKS_ENABLED');
+  }
+  if (value.ELSEWHERE_SERVICE_MODE === 'capability-worker') {
+    if (cloudTasksEnabled) missing.push('CLOUD_TASKS_ENABLED');
+    if (capabilityMode === 'google' && !documentAiEnabled) missing.push('DOCUMENT_AI_ENABLED');
+  }
+
+  const cloudTasksFields = [
+    'CLOUD_TASKS_PROJECT_ID',
+    'CLOUD_TASKS_LOCATION',
+    'OCR_TASK_QUEUE',
+    'OCR_WORKER_URL',
+    'OCR_WORKER_AUDIENCE',
+    'OCR_TASK_SERVICE_ACCOUNT',
+  ];
+  if (cloudTasksEnabled) {
+    missing.push(...cloudTasksFields.filter((field) => !value[field]));
+  }
+
+  const documentAiFields = [
+    'DOCUMENT_AI_PROJECT_ID',
+    'DOCUMENT_AI_LOCATION',
+    'DOCUMENT_AI_PROCESSOR_ID',
+    'DOCUMENT_AI_PROCESSOR_VERSION',
+    'DOCUMENT_AI_ENDPOINT',
+  ];
+  if (documentAiEnabled) {
+    missing.push(...documentAiFields.filter((field) => !value[field]));
+    if (value.DOCUMENT_AI_PROCESSOR_VERSION
+      && value.DOCUMENT_AI_PROCESSOR_VERSION !== providerVersion) {
+      missing.push('OCR_PROVIDER_VERSION', 'DOCUMENT_AI_PROCESSOR_VERSION');
+    }
   }
   if (missing.length > 0) throw invalidConfiguration(missing);
 
@@ -106,6 +177,30 @@ export function loadConfig(env = process.env) {
     }),
   });
 
+  const capabilities = Object.freeze({
+    mode: capabilityMode,
+    ocr: Object.freeze({
+      executorVersion: 'v1',
+      provider: 'document-ai',
+      providerVersion,
+    }),
+    cloudTasks: cloudTasksEnabled ? Object.freeze({
+      projectId: value.CLOUD_TASKS_PROJECT_ID,
+      location: value.CLOUD_TASKS_LOCATION,
+      queue: value.OCR_TASK_QUEUE,
+      workerUrl: value.OCR_WORKER_URL,
+      audience: value.OCR_WORKER_AUDIENCE,
+      serviceAccountEmail: value.OCR_TASK_SERVICE_ACCOUNT,
+    }) : null,
+    documentAi: documentAiEnabled ? Object.freeze({
+      projectId: value.DOCUMENT_AI_PROJECT_ID,
+      location: value.DOCUMENT_AI_LOCATION,
+      processorId: value.DOCUMENT_AI_PROCESSOR_ID,
+      processorVersion: value.DOCUMENT_AI_PROCESSOR_VERSION,
+      endpoint: value.DOCUMENT_AI_ENDPOINT,
+    }) : null,
+  });
+
   return Object.freeze({
     nodeEnv: value.NODE_ENV,
     host: value.HOST,
@@ -126,6 +221,7 @@ export function loadConfig(env = process.env) {
     allowedAppIds,
     storageBuckets,
     processing,
+    capabilities,
     evidenceLimit: 40,
     maxQuestionLength: 500,
   });
