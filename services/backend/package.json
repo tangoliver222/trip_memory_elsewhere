@@ -15,6 +15,7 @@
     "test:legacy": "node --test test/legacy/*.test.js"
   },
   "dependencies": {
+    "@google-cloud/tasks": "6.2.3",
     "@google/genai": "1.52.0",
     "exifreader": "4.41.0",
     "fastify": "^5.10.0",
