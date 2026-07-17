@@ -319,6 +319,39 @@ function repositoryError(code) {
   return Object.assign(new Error(`${SECRET_PROVIDER_ERROR}:${code}`), { code });
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function waitForCall(calls, name) {
+  for (let attempt = 0; attempt < 40 && calls[name].length === 0; attempt += 1) {
+    await Promise.resolve();
+  }
+  assert.equal(calls[name].length, 1);
+}
+
+async function readSettlement(operation) {
+  let settlement = null;
+  void operation.then(
+    (value) => {
+      settlement = { status: 'fulfilled', value };
+    },
+    (error) => {
+      settlement = { status: 'rejected', error };
+    },
+  );
+  for (let attempt = 0; attempt < 40 && settlement === null; attempt += 1) {
+    await Promise.resolve();
+  }
+  return settlement;
+}
+
 function assertStableError(error, code, retryable) {
   assert.equal(error?.name, 'ProcessingError');
   assert.equal(error?.code, code);
@@ -406,6 +439,8 @@ function createHarness(options = {}) {
     async completeDeterministicProcessing(uid, input) {
       calls.order.push('complete');
       calls.complete.push({ uid, input });
+      options.completeHook?.(input);
+      if (options.completePromise) return options.completePromise;
       if (options.completeError) throw options.completeError;
       return Object.freeze({ outcome: options.completeOutcome ?? 'applied' });
     },
@@ -1234,6 +1269,75 @@ test('terminal failure transaction failure records retryable state and never ret
     'claim', 'materialize', 'register', 'metadata', 'complete', 'fail', 'cleanup',
   ]);
   assert.equal(calls.fail[0].input.errorCode, 'processing/repository-unavailable');
+});
+
+test('successful terminal settlement cannot outlive the absolute soft deadline', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const settlement = deferred();
+  let now = CLAIMED_AT;
+  const config = Object.freeze({
+    ...PROCESSING_CONFIG,
+    timeouts: Object.freeze({
+      ...PROCESSING_CONFIG.timeouts,
+      softMs: 50,
+      leaseMs: 100,
+    }),
+  });
+  const { processor, calls } = createHarness({
+    processingConfig: config,
+    clock: () => now,
+    completePromise: settlement.promise,
+    completeHook: () => {
+      now = new Date(Date.parse(CLAIMED_AT) + config.timeouts.softMs).toISOString();
+    },
+  });
+  const operation = processor.handle(EVENT);
+  await waitForCall(calls, 'complete');
+
+  t.mock.timers.tick(config.timeouts.softMs);
+  const result = await readSettlement(operation);
+  settlement.resolve(Object.freeze({ outcome: 'applied' }));
+  await operation.catch(() => {});
+
+  assert.equal(result?.status, 'rejected');
+  assertStableError(result.error, 'processing/soft-timeout', true);
+  assert.equal(calls.fail.length, 0);
+  assert.equal(calls.cleanup, 1);
+});
+
+test('terminal-failure settlement timeout does not race a retryable failure write', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const settlement = deferred();
+  let now = CLAIMED_AT;
+  const config = Object.freeze({
+    ...PROCESSING_CONFIG,
+    timeouts: Object.freeze({
+      ...PROCESSING_CONFIG.timeouts,
+      softMs: 50,
+      leaseMs: 100,
+    }),
+  });
+  const { processor, calls } = createHarness({
+    processingConfig: config,
+    clock: () => now,
+    metadataError: terminalProcessingError('processing/invalid-media'),
+    completePromise: settlement.promise,
+    completeHook: () => {
+      now = new Date(Date.parse(CLAIMED_AT) + config.timeouts.softMs).toISOString();
+    },
+  });
+  const operation = processor.handle(EVENT);
+  await waitForCall(calls, 'complete');
+
+  t.mock.timers.tick(config.timeouts.softMs);
+  const result = await readSettlement(operation);
+  settlement.reject(new Error(SECRET_PROVIDER_ERROR));
+  await operation.catch(() => {});
+
+  assert.equal(result?.status, 'rejected');
+  assertStableError(result.error, 'processing/soft-timeout', true);
+  assert.equal(calls.fail.length, 0);
+  assert.equal(calls.cleanup, 1);
 });
 
 test('a retryable failure write failure becomes stable repository-unavailable', async () => {
