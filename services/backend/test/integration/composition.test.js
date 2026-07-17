@@ -385,3 +385,90 @@ test('runtime isolates provider construction to the owning service root', async 
     },
   })).statusCode, 204);
 });
+
+test('default fake roots construct and call no paid Google capability adapter', async (t) => {
+  const counters = {
+    tasksConstructed: 0,
+    tasksCalled: 0,
+    documentAiConstructed: 0,
+    documentAiCalled: 0,
+  };
+  const storage = { bucket() { return {}; } };
+  const factories = {
+    firebaseFactory() {
+      return {
+        db: {},
+        storage,
+        auth: { async verifyIdToken() { return { uid: 'user_alpha' }; } },
+        appCheck: { async verifyToken() { return { appId: 'elsewhere-web-test' }; } },
+      };
+    },
+    repositoryFactory() { return createMemoryRepository(); },
+    objectInspectorFactory: () => ({ async inspectOriginal() { throw new Error('not reached'); } }),
+    sourceMaterializerFactory: () => ({ async materialize() { throw new Error('not reached'); } }),
+    metadataReaderFactory: () => ({ async read() { throw new Error('not reached'); } }),
+    imageProcessorFactory: () => ({ async process() { throw new Error('not reached'); } }),
+    derivativeStoreFactory: () => ({ async putThumbnail() { throw new Error('not reached'); } }),
+    deterministicProcessorFactory: () => ({ async handle() { throw new Error('not reached'); } }),
+    thumbnailReaderFactory: () => ({ async read() { throw new Error('not reached'); } }),
+    routingFeatureReaderFactory: () => ({ async read() { throw new Error('not reached'); } }),
+    authoritativeRouterFactory: () => ({ async handle() { throw new Error('not reached'); } }),
+    capabilitySchedulerFactory: () => ({ async handle() { throw new Error('not reached'); } }),
+    capabilityArtifactStoreFactory: () => ({
+      async putNormalizedArtifact() { throw new Error('not reached'); },
+      async putProviderArtifact() { throw new Error('not reached'); },
+    }),
+    capabilityWorkerFactory: () => ({
+      async handle() { return { outcome: 'terminal_noop', retryable: false }; },
+    }),
+    cloudTasksDispatcherFactory() {
+      counters.tasksConstructed += 1;
+      return {
+        async enqueueOcrTask() {
+          counters.tasksCalled += 1;
+          throw new Error('paid adapter must not be called');
+        },
+      };
+    },
+    documentAiOcrFactory() {
+      counters.documentAiConstructed += 1;
+      return {
+        async process() {
+          counters.documentAiCalled += 1;
+          throw new Error('paid adapter must not be called');
+        },
+      };
+    },
+  };
+  const base = {
+    ...appConfig,
+    firebaseProjectId: 'demo-elsewhere',
+    allowedAppIds: ['elsewhere-web-test'],
+    storageBuckets: ['demo-elsewhere.appspot.com'],
+    processing: {
+      limits: {},
+      timeouts: {},
+    },
+    capabilities: {
+      mode: 'fake',
+      ocr: {
+        executorVersion: 'v1', provider: 'document-ai', providerVersion: 'fake-processor-v1',
+      },
+      cloudTasks: null,
+      documentAi: null,
+    },
+  };
+
+  for (const serviceMode of ['api', 'ingestion', 'capability-worker']) {
+    const app = createRuntimeApp({ ...base, serviceMode }, factories);
+    t.after(() => app.close());
+    assert.equal((await app.inject({ url: '/healthz' })).statusCode, 200);
+  }
+
+  assert.deepEqual(counters, {
+    tasksConstructed: 0,
+    tasksCalled: 0,
+    documentAiConstructed: 0,
+    documentAiCalled: 0,
+  });
+});
