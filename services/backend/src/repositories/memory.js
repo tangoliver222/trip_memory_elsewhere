@@ -1,18 +1,27 @@
 import {
+  parseBudgetLedger,
+  parseBudgetReservation,
+  parseCapabilityExecution,
   parseContentHash,
   parseDuplicateCandidate,
+  parseEscalationRequest,
   parseFragment,
   parseImportBatch,
   parseProcessingTask,
+  parseRoutePlan,
+  parseRoutingCohort,
+  parseRoutingHead,
 } from '../domain/index.js';
 import {
   assertProcessingRepository,
   assertRepository,
+  assertRoutingRepository,
 } from './contract.js';
 import {
   RepositoryConflictError,
   RepositoryOriginalConflictError,
   RepositoryOwnerError,
+  RepositoryRoutingTargetError,
 } from './errors.js';
 import {
   applyOriginalOutcome,
@@ -28,6 +37,11 @@ import {
   applyRetryableProcessingFailure,
 } from './processing-outcome.js';
 import { makeExactCandidateId } from '../processing/identity.js';
+import {
+  applyEscalationSubmission,
+  applyRoutingApproval,
+  applyRoutingDraftSave,
+} from './routing-outcome.js';
 
 const keyFor = (uid, id) => `${uid}/${id}`;
 
@@ -37,6 +51,13 @@ const MEMORY_COLLECTIONS = Object.freeze([
   'processingTasks',
   'contentHashes',
   'duplicateCandidates',
+  'routePlans',
+  'routingHeads',
+  'routingCohorts',
+  'budgetLedgers',
+  'budgetReservations',
+  'capabilityExecutions',
+  'escalationRequests',
 ]);
 
 function createMemoryState() {
@@ -133,6 +154,38 @@ export function createMemoryRepository() {
   const duplicateCandidates = createStore(
     'duplicateCandidates',
     parseDuplicateCandidate,
+    () => state,
+    commitWrites,
+  );
+  const routePlans = createStore('routePlans', parseRoutePlan, () => state, commitWrites);
+  const routingHeads = createStore('routingHeads', parseRoutingHead, () => state, commitWrites);
+  const routingCohorts = createStore(
+    'routingCohorts',
+    parseRoutingCohort,
+    () => state,
+    commitWrites,
+  );
+  const budgetLedgers = createStore(
+    'budgetLedgers',
+    parseBudgetLedger,
+    () => state,
+    commitWrites,
+  );
+  const budgetReservations = createStore(
+    'budgetReservations',
+    parseBudgetReservation,
+    () => state,
+    commitWrites,
+  );
+  const capabilityExecutions = createStore(
+    'capabilityExecutions',
+    parseCapabilityExecution,
+    () => state,
+    commitWrites,
+  );
+  const escalationRequests = createStore(
+    'escalationRequests',
+    parseEscalationRequest,
     () => state,
     commitWrites,
   );
@@ -308,6 +361,168 @@ export function createMemoryRepository() {
     return cloneFrozen(transition);
   }
 
+  async function saveRoutingDraft(uid, input) {
+    const routePlan = input?.routePlan;
+    const storedBatch = importBatches.read(uid, routePlan?.batchRef?.id);
+    const storedFragment = fragments.read(uid, routePlan?.fragmentRef?.id);
+    const storedTask = processingTasks.read(uid, routePlan?.inputs?.deterministicTaskId);
+    const transition = applyRoutingDraftSave({
+      uid,
+      batch: storedBatch,
+      fragment: storedFragment,
+      task: storedTask,
+      storedPlan: routePlans.read(uid, routePlan?.id),
+      plans: routePlans.values(uid),
+      heads: routingHeads.values(uid),
+      routePlan,
+    });
+    if (transition.outcome === 'duplicate') return cloneFrozen(transition);
+    commitWrites([
+      routePlans.prepareWrite(uid, transition.routePlan),
+      importBatches.prepareWrite(uid, transition.batch),
+    ]);
+    return cloneFrozen(transition);
+  }
+
+  function directlyRelatedCandidates(uid, initialFragmentIds, taskIds) {
+    const candidates = duplicateCandidates.values(uid);
+    const selected = new Map(candidates
+      .filter(({ createdByTaskId }) => taskIds.has(createdByTaskId))
+      .map((candidate) => [candidate.id, candidate]));
+    const members = new Set(initialFragmentIds);
+    const queue = [...initialFragmentIds].sort();
+    while (queue.length > 0 && members.size < 200) {
+      const current = queue.shift();
+      const adjacent = candidates
+        .filter((candidate) => candidate.kind === 'near'
+          && candidate.pairRefs.some(({ id }) => id === current))
+        .sort((left, right) => left.id.localeCompare(right.id));
+      for (const candidate of adjacent) {
+        selected.set(candidate.id, candidate);
+        for (const { id } of candidate.pairRefs) {
+          if (!members.has(id) && members.size < 200) {
+            members.add(id);
+            queue.push(id);
+            queue.sort();
+          }
+        }
+      }
+    }
+    for (const candidate of selected.values()) {
+      for (const { id } of candidate.pairRefs) {
+        if (members.size < 200 || members.has(id)) members.add(id);
+      }
+    }
+    return { candidates: [...selected.values()], memberIds: members };
+  }
+
+  async function loadRoutingSnapshot(uid, input) {
+    const batch = importBatches.read(uid, input?.batchId);
+    if (!batch) return null;
+    const batchFragments = fragments.values(uid)
+      .filter(({ batchId }) => batchId === batch.id)
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const taskIds = new Set();
+    const batchTasks = [];
+    for (const fragment of batchFragments) {
+      const deterministic = fragment.processing.deterministic;
+      const task = deterministic ? processingTasks.read(uid, deterministic.taskId) : null;
+      if (!deterministic
+        || !['succeeded', 'failed_terminal'].includes(deterministic.state)
+        || !task
+        || !['succeeded', 'failed_terminal'].includes(task.state)) {
+        throw new RepositoryRoutingTargetError();
+      }
+      taskIds.add(task.id);
+      batchTasks.push(task);
+    }
+    const related = directlyRelatedCandidates(
+      uid,
+      batchFragments.map(({ id }) => id),
+      taskIds,
+    );
+    const snapshotFragments = fragments.values(uid)
+      .filter(({ id }) => related.memberIds.has(id))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const plans = routePlans.values(uid)
+      .filter(({ batchRef }) => batchRef.id === batch.id)
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const planIds = new Set(plans.map(({ id }) => id));
+    const heads = routingHeads.values(uid)
+      .filter(({ fragmentRef }) => related.memberIds.has(fragmentRef.id))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const cohorts = routingCohorts.values(uid)
+      .filter(({ memberRefs }) => memberRefs.some(({ id }) => related.memberIds.has(id)))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    const escalations = escalationRequests.values(uid)
+      .filter(({ fromRoutePlanRef }) => planIds.has(fromRoutePlanRef.id))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    return cloneFrozen({
+      batch,
+      fragments: snapshotFragments,
+      processingTasks: batchTasks.sort((left, right) => left.id.localeCompare(right.id)),
+      duplicateCandidates: related.candidates.sort((left, right) => left.id.localeCompare(right.id)),
+      routePlans: plans,
+      routingHeads: heads,
+      routingCohorts: cohorts,
+      escalationRequests: escalations,
+    });
+  }
+
+  async function commitRoutingApproval(uid, input) {
+    const storedBatch = importBatches.read(uid, input?.batchId);
+    if (!storedBatch) throw new RepositoryRoutingTargetError();
+    for (const cohort of input?.cohorts ?? []) {
+      if (cohort?.ownerId !== uid) throw new RepositoryOwnerError();
+      const stored = routingCohorts.read(uid, cohort.id);
+      if (stored && JSON.stringify(stored) !== JSON.stringify(cohort)) {
+        throw new RepositoryConflictError();
+      }
+    }
+    const transition = applyRoutingApproval({
+      uid,
+      batch: storedBatch,
+      approvals: input?.approvals,
+      cohortInputs: input?.cohorts ?? [],
+      fragments: fragments.values(uid),
+      tasks: processingTasks.values(uid),
+      plans: routePlans.values(uid),
+      heads: routingHeads.values(uid),
+      ledgers: budgetLedgers.values(uid),
+      now: input?.approvedAt,
+    });
+    if (transition.outcome === 'duplicate') return cloneFrozen(transition);
+    commitWrites([
+      ...transition.supersededPlans.map((plan) => routePlans.prepareWrite(uid, plan)),
+      ...transition.plans.map((plan) => routePlans.prepareWrite(uid, plan)),
+      ...transition.heads.map((head) => routingHeads.prepareWrite(uid, head)),
+      ...transition.cohorts.map((cohort) => routingCohorts.prepareWrite(uid, cohort)),
+      ...transition.reservations.map((reservation) => (
+        budgetReservations.prepareWrite(uid, reservation)
+      )),
+      ...transition.ledgers.map((ledger) => budgetLedgers.prepareWrite(uid, ledger)),
+      importBatches.prepareWrite(uid, transition.batch),
+    ]);
+    return cloneFrozen(transition);
+  }
+
+  async function submitEscalationRequest(uid, input) {
+    const transition = applyEscalationSubmission(
+      uid,
+      escalationRequests.read(uid, input?.id),
+      input,
+      routePlans.values(uid),
+    );
+    if (transition.outcome === 'created') {
+      commitWrites([escalationRequests.prepareWrite(uid, transition.request)]);
+    }
+    return cloneFrozen(transition);
+  }
+
+  const capabilityLifecyclePending = async () => {
+    throw new RepositoryRoutingTargetError('Capability authorization is not implemented');
+  };
+
   const repository = assertRepository({
     createFragment: fragments.create,
     getFragment: fragments.get,
@@ -321,6 +536,16 @@ export function createMemoryRepository() {
     findNearDuplicateInputs,
     completeDeterministicProcessing,
     failDeterministicProcessing,
+    saveRoutingDraft,
+    loadRoutingSnapshot,
+    commitRoutingApproval,
+    submitEscalationRequest,
+    claimCapabilityExecution: capabilityLifecyclePending,
+    markCapabilityCalling: capabilityLifecyclePending,
+    recordCapabilityReceipt: capabilityLifecyclePending,
+    settleCapabilityExecution: capabilityLifecyclePending,
+    markCapabilityBillingUncertain: capabilityLifecyclePending,
   });
-  return assertProcessingRepository(repository);
+  assertProcessingRepository(repository);
+  return assertRoutingRepository(repository);
 }

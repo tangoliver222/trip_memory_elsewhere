@@ -16,6 +16,18 @@ const PROCESSING_METHODS = [
   'completeDeterministicProcessing',
 ];
 
+const ROUTING_METHODS = [
+  'saveRoutingDraft',
+  'loadRoutingSnapshot',
+  'commitRoutingApproval',
+  'submitEscalationRequest',
+  'claimCapabilityExecution',
+  'markCapabilityCalling',
+  'recordCapabilityReceipt',
+  'settleCapabilityExecution',
+  'markCapabilityBillingUncertain',
+];
+
 const METHODS = [
   'createFragment',
   'getFragment',
@@ -43,6 +55,10 @@ export const assertProcessingLeaseRepository = (repository) => (
 
 export const assertProcessingRepository = (repository) => (
   assertMethods(repository, PROCESSING_METHODS)
+);
+
+export const assertRoutingRepository = (repository) => (
+  assertMethods(repository, ROUTING_METHODS)
 );
 
 export const assertRepository = (repository) => assertMethods(repository, METHODS);

@@ -45,3 +45,11 @@ export class RepositoryLeaseOwnerError extends Error {
     this.code = 'repository/lease-owner-mismatch';
   }
 }
+
+export class RepositoryRoutingTargetError extends Error {
+  constructor(message = 'Routing plan does not match the current deterministic source') {
+    super(message);
+    this.name = 'RepositoryRoutingTargetError';
+    this.code = 'repository/routing-target-mismatch';
+  }
+}
