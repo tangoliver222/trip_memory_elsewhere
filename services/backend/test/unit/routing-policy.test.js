@@ -70,7 +70,11 @@ function documentImage({
   width = 2_000,
   height = 3_000,
 } = {}) {
-  const base = makeRoutableFragment({ type, width, height });
+  const base = makeRoutableFragment({
+    type,
+    width: width ?? 2_000,
+    height: height ?? 3_000,
+  });
   return {
     ...base,
     storage: { ...base.storage, sizeBytes },

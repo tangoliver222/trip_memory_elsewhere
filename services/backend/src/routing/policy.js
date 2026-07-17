@@ -5,9 +5,17 @@ export const POLICY_V1 = Object.freeze({
   name: 'authoritative-routing-policy',
   version: 'v1',
 });
+export const POLICY_V2 = Object.freeze({
+  name: 'authoritative-routing-policy',
+  version: 'v2',
+});
 export const COST_MODEL_V1 = Object.freeze({
   name: 'routing-admission-costs',
   version: 'v1',
+});
+export const COST_MODEL_V2 = Object.freeze({
+  name: 'routing-admission-costs',
+  version: 'v2',
 });
 
 const CAPABILITIES = Object.freeze(['ocr', 'places', 'embedding', 'gemini']);
@@ -24,6 +32,9 @@ const GEMINI_RECONSIDER_ON = Object.freeze([
   'policy-change',
   'user-request',
 ]);
+const DOCUMENT_AI_IMAGE_FORMATS = new Set(['jpeg', 'png', 'webp']);
+const DOCUMENT_AI_MAX_BYTES = 40_000_000;
+const DOCUMENT_AI_MAX_PIXELS = 40_000_000;
 
 function deepFreeze(value) {
   if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -146,7 +157,29 @@ function supportingIntents(fragment, representation) {
   return allCapabilities(() => skip(reason, 'representative'));
 }
 
-function baseIntents(fragment, classification, representation) {
+function documentOcrIntent(fragment, scope) {
+  const {
+    format, width, height, pageCount,
+  } = fragment.technicalMetadata ?? {};
+  if (format === 'pdf') {
+    return pageCount === null
+      ? defer('page-count-unknown', ['technical-facts-updated', 'policy-change'], scope)
+      : block('document-ai-format-not-enabled', scope);
+  }
+  if (!DOCUMENT_AI_IMAGE_FORMATS.has(format)) {
+    return block('document-ai-format-unsupported', scope);
+  }
+  if (!Number.isInteger(width) || !Number.isInteger(height)) {
+    return defer('image-pixels-unknown', ['technical-facts-updated', 'policy-change'], scope);
+  }
+  if (fragment.storage.sizeBytes > DOCUMENT_AI_MAX_BYTES
+    || width * height > DOCUMENT_AI_MAX_PIXELS) {
+    return block('document-ai-online-limit', scope);
+  }
+  return approve('document-ocr', 'document-ai-input-supported', scope);
+}
+
+function baseIntentsV1(fragment, classification, representation) {
   const scope = representation.role === 'independent' ? 'self' : 'representative';
   if (classification.documentKind === 'pdf') {
     return {
@@ -184,6 +217,22 @@ function baseIntents(fragment, classification, representation) {
     embedding: approve('multimodal-embedding', 'independent-fragment', scope),
     gemini: defer('await-structured-results', GEMINI_RECONSIDER_ON, scope),
   };
+}
+
+function baseIntentsV2(fragment, classification, representation) {
+  const scope = representation.role === 'independent' ? 'self' : 'representative';
+  if (classification.mediaKind === 'text') {
+    return baseIntentsV1(fragment, classification, representation);
+  }
+  if (classification.mediaKind === 'document') {
+    return {
+      ocr: documentOcrIntent(fragment, scope),
+      places: defer('await-ocr-result', ['ocr-completed', 'policy-change', 'user-request'], scope),
+      embedding: defer('await-ocr-result', ['ocr-completed', 'policy-change', 'user-request'], scope),
+      gemini: defer('await-structured-results', GEMINI_RECONSIDER_ON, scope),
+    };
+  }
+  return baseIntentsV1(fragment, classification, representation);
 }
 
 function applyPriorResults(intents, fragment, priorResults) {
@@ -240,11 +289,15 @@ export function compileCapabilityIntents({
   escalation = null,
   revision = 1,
   requestContext: requestContextInput,
+  policyVersion = POLICY_V2.version,
 } = {}) {
   if (!Number.isSafeInteger(revision) || revision < 1) {
     throw new TypeError('revision is invalid');
   }
   if (revision > 5) throw revisionError();
+  if (![POLICY_V1.version, POLICY_V2.version].includes(policyVersion)) {
+    throw new TypeError('policyVersion is invalid');
+  }
   const fragment = parseFragment(fragmentInput);
   const representation = normalizeRepresentation(representationInput, fragment.id);
   const requestContext = normalizeRequestContext(requestContextInput);
@@ -257,7 +310,9 @@ export function compileCapabilityIntents({
     intents = allCapabilities(() => block('low-information'));
   } else {
     intents = supportingIntents(fragment, representation)
-      ?? baseIntents(fragment, classification, representation);
+      ?? (policyVersion === POLICY_V1.version
+        ? baseIntentsV1(fragment, classification, representation)
+        : baseIntentsV2(fragment, classification, representation));
     intents = applyPriorResults(intents, fragment, priorResults);
     if (validGeminiEscalation(fragment, escalation, priorResults)) {
       intents = {

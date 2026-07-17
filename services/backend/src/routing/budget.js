@@ -39,6 +39,25 @@ export const ROUTING_COST_MODEL_V1 = deepFreeze({
   },
 });
 
+export const ROUTING_BUDGET_POLICY_V2 = deepFreeze({
+  ...ROUTING_BUDGET_POLICY_V1,
+  version: 'v2',
+});
+
+export const ROUTING_COST_MODEL_V2 = deepFreeze({
+  ...ROUTING_COST_MODEL_V1,
+  version: 'v2',
+  capabilities: {
+    ...ROUTING_COST_MODEL_V1.capabilities,
+    ocr: { estimatedMicros: 1_500, ceilingMicros: 1_500, maxBillableAttempts: 1 },
+  },
+});
+
+const BUDGET_VERSIONS = new Map([
+  ['v1:v1', { policy: ROUTING_BUDGET_POLICY_V1, costModel: ROUTING_COST_MODEL_V1 }],
+  ['v2:v2', { policy: ROUTING_BUDGET_POLICY_V2, costModel: ROUTING_COST_MODEL_V2 }],
+]);
+
 function budgetError(code, message) {
   const error = new Error(message);
   error.name = 'RoutingBudgetError';
@@ -122,10 +141,10 @@ function normalizeIntent(value, capability) {
   };
 }
 
-function persistedDecision(intent, capability, admitted) {
+function persistedDecision(intent, capability, admitted, costModel) {
   const common = { scope: intent.scope };
   if (intent.decision === 'approve' && admitted) {
-    const cost = ROUTING_COST_MODEL_V1.capabilities[capability];
+    const cost = costModel.capabilities[capability];
     return {
       ...common,
       decision: 'approved',
@@ -165,10 +184,18 @@ function persistedDecision(intent, capability, admitted) {
   return decision;
 }
 
-function validateDraftPlan(routePlan, ownerId, batchId, intents) {
+function budgetVersionFor(routePlan) {
+  const versions = BUDGET_VERSIONS.get(
+    `${routePlan.router?.policyVersion}:${routePlan.router?.costModelVersion}`,
+  );
+  if (!versions) invalid('routePlan boundary is invalid');
+  return versions;
+}
+
+function validateDraftPlan(routePlan, ownerId, batchId, intents, versions) {
   const validationCapabilities = Object.fromEntries(ROUTING_CAPABILITIES.map((capability) => [
     capability,
-    persistedDecision(intents[capability], capability, false),
+    persistedDecision(intents[capability], capability, false, versions.costModel),
   ]));
   const candidate = {
     ...routePlan,
@@ -187,27 +214,27 @@ function validateDraftPlan(routePlan, ownerId, batchId, intents) {
   }
   if (routePlan.state !== 'draft'
     || routePlan.ownerId !== ownerId
-    || routePlan.batchRef.id !== batchId
-    || routePlan.router.policyVersion !== ROUTING_BUDGET_POLICY_V1.version
-    || routePlan.router.costModelVersion !== ROUTING_COST_MODEL_V1.version) {
+    || routePlan.batchRef.id !== batchId) {
     invalid('routePlan boundary is invalid');
   }
 }
 
-function ledgerDefinitions({ ownerId, batchId, routePlanId, capability, utcDay }) {
-  const cost = ROUTING_COST_MODEL_V1.capabilities[capability];
+function ledgerDefinitions({
+  ownerId, batchId, routePlanId, capability, utcDay, policy, costModel,
+}) {
+  const cost = costModel.capabilities[capability];
   return [
     {
       scope: { type: 'user_day', key: utcDay },
-      ceilingMicros: ROUTING_BUDGET_POLICY_V1.userUtcDayCeilingMicros,
+      ceilingMicros: policy.userUtcDayCeilingMicros,
     },
     {
       scope: { type: 'batch', key: batchId },
-      ceilingMicros: ROUTING_BUDGET_POLICY_V1.batchCeilingMicros,
+      ceilingMicros: policy.batchCeilingMicros,
     },
     {
       scope: { type: 'route', key: routePlanId },
-      ceilingMicros: ROUTING_BUDGET_POLICY_V1.routeCeilingMicros,
+      ceilingMicros: policy.routeCeilingMicros,
     },
     {
       scope: { type: 'capability', key: capability, routePlanId },
@@ -235,7 +262,7 @@ function parseLedgers(inputs, ownerId) {
   return byId;
 }
 
-function resolveLedgers(byId, definitions, ownerId, now) {
+function resolveLedgers(byId, definitions, ownerId, now, versions) {
   return definitions.map((definition) => {
     const existing = byId.get(definition.id);
     if (!existing) {
@@ -251,15 +278,15 @@ function resolveLedgers(byId, definitions, ownerId, now) {
         ceilingMicros: definition.ceilingMicros,
         reservedMicros: 0,
         spentMicros: 0,
-        policyVersion: ROUTING_BUDGET_POLICY_V1.version,
-        costModelVersion: ROUTING_COST_MODEL_V1.version,
+        policyVersion: versions.policy.version,
+        costModelVersion: versions.costModel.version,
       };
     }
     if (JSON.stringify(existing.scope) !== JSON.stringify(definition.scope)
       || existing.ceilingMicros !== definition.ceilingMicros
       || existing.currency !== 'USD'
-      || existing.policyVersion !== ROUTING_BUDGET_POLICY_V1.version
-      || existing.costModelVersion !== ROUTING_COST_MODEL_V1.version) {
+      || existing.policyVersion !== versions.policy.version
+      || existing.costModelVersion !== versions.costModel.version) {
       invalid('ledger policy is invalid');
     }
     return existing;
@@ -296,7 +323,8 @@ export function reserveRoutePlanBudget({
     capability,
     normalizeIntent(routePlan.capabilities?.[capability], capability),
   ]));
-  validateDraftPlan(routePlan, ownerId, batchId, intents);
+  const versions = budgetVersionFor(routePlan);
+  validateDraftPlan(routePlan, ownerId, batchId, intents, versions);
   const byId = parseLedgers(ledgerInputs, ownerId);
   const capabilities = {};
   const reservations = [];
@@ -306,20 +334,25 @@ export function reserveRoutePlanBudget({
   for (const capability of ROUTING_CAPABILITIES) {
     const intentValue = intents[capability];
     if (intentValue.decision !== 'approve') {
-      capabilities[capability] = persistedDecision(intentValue, capability, false);
+      capabilities[capability] = persistedDecision(
+        intentValue, capability, false, versions.costModel,
+      );
       continue;
     }
-    const cost = ROUTING_COST_MODEL_V1.capabilities[capability];
+    const cost = versions.costModel.capabilities[capability];
     const definitions = ledgerDefinitions({
       ownerId,
       batchId,
       routePlanId: routePlan.id,
       capability,
       utcDay,
+      ...versions,
     });
-    const capabilityLedgers = resolveLedgers(byId, definitions, ownerId, now);
+    const capabilityLedgers = resolveLedgers(byId, definitions, ownerId, now, versions);
     if (!canReserve(capabilityLedgers, cost.ceilingMicros)) {
-      capabilities[capability] = persistedDecision(intentValue, capability, false);
+      capabilities[capability] = persistedDecision(
+        intentValue, capability, false, versions.costModel,
+      );
       blockedCapabilities.push(capability);
       continue;
     }
@@ -340,7 +373,7 @@ export function reserveRoutePlanBudget({
       estimatedCostMicros: cost.estimatedMicros,
       ceilingMicros: cost.ceilingMicros,
       currency: 'USD',
-      costModelVersion: ROUTING_COST_MODEL_V1.version,
+      costModelVersion: versions.costModel.version,
       maxBillableAttempts: cost.maxBillableAttempts,
       ledgerRefs: updatedLedgers.map(({ id }) => ({ type: 'budgetLedger', id })),
       state: 'reserved',
@@ -351,7 +384,9 @@ export function reserveRoutePlanBudget({
       releaseReasonCode: null,
     });
     reservations.push(reservation);
-    capabilities[capability] = persistedDecision(intentValue, capability, true);
+    capabilities[capability] = persistedDecision(
+      intentValue, capability, true, versions.costModel,
+    );
   }
 
   const hasApproved = Object.values(capabilities)

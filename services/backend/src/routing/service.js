@@ -15,8 +15,8 @@ import {
   makeRoutingCohortId,
 } from './identity.js';
 import {
-  COST_MODEL_V1,
-  POLICY_V1,
+  COST_MODEL_V2,
+  POLICY_V2,
   ROUTER_V1,
   classifyRoutingInput,
   compileCapabilityIntents,
@@ -174,8 +174,8 @@ function makeDraft({
     router: {
       name: ROUTER_V1.name,
       version: ROUTER_V1.version,
-      policyVersion: POLICY_V1.version,
-      costModelVersion: COST_MODEL_V1.version,
+      policyVersion: POLICY_V2.version,
+      costModelVersion: COST_MODEL_V2.version,
     },
     revision,
     state: 'draft',
