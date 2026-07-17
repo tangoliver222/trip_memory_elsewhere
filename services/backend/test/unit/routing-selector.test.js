@@ -139,8 +139,14 @@ test('same-time-place reduces photo semantics but preserves receipt OCR', () => 
     fragmentRef(photo.id),
     fragmentRef(receipt.id),
   ]);
-  assert.deepEqual(selection.capabilityRepresentativeRefs.embedding, [fragmentRef(photo.id)]);
-  assert.deepEqual(selection.capabilityRepresentativeRefs.gemini, [fragmentRef(photo.id)]);
+  assert.deepEqual(selection.capabilityRepresentativeRefs.embedding, [
+    fragmentRef(photo.id),
+    fragmentRef(receipt.id),
+  ]);
+  assert.deepEqual(selection.capabilityRepresentativeRefs.gemini, [
+    fragmentRef(photo.id),
+    fragmentRef(receipt.id),
+  ]);
 });
 
 test('primary suppression priority is exact then near then burst while all cohorts remain', () => {
