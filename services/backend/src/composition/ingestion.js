@@ -9,6 +9,7 @@ export function createIngestionComposition({
   objectInspector,
   deterministicProcessor,
   authoritativeRouter,
+  capabilityScheduler,
   allowedBuckets,
   clock,
 }) {
@@ -18,6 +19,7 @@ export function createIngestionComposition({
     originalFinalizer: finalizer,
     deterministicProcessor,
     authoritativeRouter,
+    capabilityScheduler,
   });
   registerIngestionRoutes(app, { eventHandler, allowedBuckets });
   return app;

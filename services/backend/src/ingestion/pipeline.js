@@ -22,6 +22,7 @@ const ROUTING_OUTCOMES = new Set([
   'completed',
   'terminal_noop',
 ]);
+const SCHEDULING_OUTCOMES = new Set(['queued', 'terminal_noop']);
 
 function requireHandler(port, name) {
   if (typeof port?.handle !== 'function') {
@@ -90,10 +91,12 @@ export function createStorageFinalizedPipeline({
   originalFinalizer,
   deterministicProcessor,
   authoritativeRouter,
+  capabilityScheduler,
 } = {}) {
   const finalizer = requireHandler(originalFinalizer, 'Original finalizer');
   const processor = requireHandler(deterministicProcessor, 'Deterministic processor');
   const router = requireHandler(authoritativeRouter, 'Authoritative router');
+  const scheduler = requireHandler(capabilityScheduler, 'Capability scheduler');
 
   return Object.freeze({
     async handle(eventInput) {
@@ -113,6 +116,10 @@ export function createStorageFinalizedPipeline({
       const routingOutcome = normalizeOutcome(
         await router.handle(toProcessorEvent(event)),
         ROUTING_OUTCOMES,
+      );
+      normalizeOutcome(
+        await scheduler.handle({ uid: event.uid, batchId: event.batchId }),
+        SCHEDULING_OUTCOMES,
       );
       return Object.freeze({ outcome: routingOutcome });
     },

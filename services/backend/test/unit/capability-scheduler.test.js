@@ -24,6 +24,8 @@ function plan(fragmentId, overrides = {}) {
   return {
     id,
     ownerId: OWNER_ID,
+    createdAt: NOW,
+    approvedAt: NOW,
     revision: 1,
     state: 'approved',
     fragmentRef: ref('fragment', fragmentId),

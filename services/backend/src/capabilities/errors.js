@@ -29,3 +29,8 @@ export class CapabilityError extends Error {
     this.billingUncertain = definition.billingUncertain;
   }
 }
+
+export const retryableCapabilityError = (code) => new CapabilityError(code, {
+  retryable: true,
+  billingUncertain: false,
+});
