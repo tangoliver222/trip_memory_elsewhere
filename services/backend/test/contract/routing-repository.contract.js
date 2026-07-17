@@ -589,6 +589,18 @@ export function runRoutingRepositoryContract({
         ...claimCommand(routePlan).supportedVersions,
         router: ['v2'],
       } },
+      { supportedVersions: {
+        ...claimCommand(routePlan).supportedVersions,
+        policy: ['v2'],
+      } },
+      { supportedVersions: {
+        ...claimCommand(routePlan).supportedVersions,
+        costModel: ['v2'],
+      } },
+      { supportedVersions: {
+        ...claimCommand(routePlan).supportedVersions,
+        executors: { 'multimodal-embedding': ['v2'] },
+      } },
     ]) {
       await assert.rejects(
         () => repository.claimCapabilityExecution(ownerId, claimCommand(routePlan, invalid)),
@@ -610,6 +622,9 @@ export function runRoutingRepositoryContract({
       'routePlanId',
       'scope',
     ]);
+    snapshot = await repository.loadRoutingSnapshot(ownerId, { batchId: seeded.batch.id });
+    assert.equal(snapshot.capabilityExecutions[0].state, 'claimed');
+    assert.equal(snapshot.routePlans.find(({ id }) => id === routePlan.id).state, 'executing');
     const executionId = makeCapabilityExecutionId({
       routePlanId: routePlan.id,
       capability: 'embedding',
@@ -619,6 +634,8 @@ export function runRoutingRepositoryContract({
       executionId,
       calledAt: '2026-07-17T12:02:00.000Z',
     });
+    snapshot = await repository.loadRoutingSnapshot(ownerId, { batchId: seeded.batch.id });
+    assert.equal(snapshot.capabilityExecutions[0].state, 'calling');
     await repository.recordCapabilityReceipt(ownerId, {
       executionId,
       providerRequestId: 'provider_request_123',
@@ -627,6 +644,8 @@ export function runRoutingRepositoryContract({
       resultRef: ref('capabilityResult', 'result_12345678'),
       receivedAt: '2026-07-17T12:03:00.000Z',
     });
+    snapshot = await repository.loadRoutingSnapshot(ownerId, { batchId: seeded.batch.id });
+    assert.equal(snapshot.capabilityExecutions[0].state, 'provider_succeeded');
     await repository.settleCapabilityExecution(ownerId, {
       executionId,
       outcome: 'completed',
@@ -643,6 +662,90 @@ export function runRoutingRepositoryContract({
       () => repository.claimCapabilityExecution(ownerId, claimCommand(routePlan)),
       { code: 'repository/conflict' },
     );
+  });
+
+  contractTest('releases a reservation after a known failure and completes the plan', async ({
+    repository, ownerId, suffix,
+  }) => {
+    const seeded = await seedDeterministicSuccess(repository, ownerId, suffix);
+    const draft = makeDraft({ ownerId, ...seeded });
+    await repository.saveRoutingDraft(ownerId, { routePlan: draft });
+    const routePlan = (await repository.commitRoutingApproval(
+      ownerId,
+      approval(seeded.batch.id, draft.id),
+    )).plans[0];
+    await repository.claimCapabilityExecution(ownerId, claimCommand(routePlan));
+    const executionId = makeCapabilityExecutionId({
+      routePlanId: routePlan.id,
+      capability: 'embedding',
+      idempotencyKey: 'idem_12345678',
+    });
+    await repository.settleCapabilityExecution(ownerId, {
+      executionId,
+      outcome: 'failed',
+      errorCode: 'executor-failed',
+      settledAt: '2026-07-17T12:02:00.000Z',
+    });
+
+    const snapshot = await repository.loadRoutingSnapshot(ownerId, { batchId: seeded.batch.id });
+    assert.equal(snapshot.capabilityExecutions[0].state, 'failed');
+    assert.equal(snapshot.budgetReservations[0].state, 'released');
+    assert.equal(snapshot.routePlans.find(({ id }) => id === routePlan.id).state, 'completed');
+    assert.equal(snapshot.batch.routingSummary.completed, 1);
+  });
+
+  contractTest('settles a superseded execution without publishing it as a current fact', async ({
+    repository, ownerId, suffix,
+  }) => {
+    const seeded = await seedDeterministicSuccess(repository, ownerId, suffix);
+    const firstDraft = makeDraft({ ownerId, ...seeded, id: 'route_supersede1' });
+    await repository.saveRoutingDraft(ownerId, { routePlan: firstDraft });
+    const firstPlan = (await repository.commitRoutingApproval(
+      ownerId,
+      approval(seeded.batch.id, firstDraft.id),
+    )).plans[0];
+    await repository.claimCapabilityExecution(ownerId, claimCommand(firstPlan));
+    const executionId = makeCapabilityExecutionId({
+      routePlanId: firstPlan.id,
+      capability: 'embedding',
+      idempotencyKey: 'idem_12345678',
+    });
+    await repository.markCapabilityCalling(ownerId, {
+      executionId,
+      calledAt: '2026-07-17T12:02:00.000Z',
+    });
+    await repository.recordCapabilityReceipt(ownerId, {
+      executionId,
+      providerRequestId: 'provider_request_123',
+      usage: { inputTokens: 128 },
+      actualCostMicros: 800,
+      resultRef: ref('capabilityResult', 'result_12345678'),
+      receivedAt: '2026-07-17T12:03:00.000Z',
+    });
+
+    const secondDraft = makeDraft({
+      ownerId,
+      ...seeded,
+      id: 'route_supersede2',
+      revision: 2,
+    });
+    await repository.saveRoutingDraft(ownerId, { routePlan: secondDraft });
+    const secondPlan = (await repository.commitRoutingApproval(
+      ownerId,
+      approval(seeded.batch.id, secondDraft.id),
+    )).plans[0];
+    await repository.settleCapabilityExecution(ownerId, {
+      executionId,
+      outcome: 'completed',
+      errorCode: null,
+      settledAt: '2026-07-17T12:04:00.000Z',
+    });
+
+    const snapshot = await repository.loadRoutingSnapshot(ownerId, { batchId: seeded.batch.id });
+    assert.equal(snapshot.capabilityExecutions.find(({ id }) => id === executionId).state, 'completed');
+    assert.equal(snapshot.routePlans.find(({ id }) => id === firstPlan.id).state, 'superseded');
+    assert.equal(snapshot.routingHeads[0].currentPlanRef.id, secondPlan.id);
+    assert.equal(JSON.stringify(snapshot.fragments).includes('result_12345678'), false);
   });
 
   contractTest('billing uncertainty consumes the attempt and forbids automatic re-claim', async ({
