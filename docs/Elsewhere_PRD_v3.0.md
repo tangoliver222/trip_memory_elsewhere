@@ -2,7 +2,7 @@
 
 **状态：** 信息架构重构后的产品主文档
 **日期：** 2026-07-13
-**最近修订：** 2026-07-17（确定性路由与付费能力执行边界）
+**最近修订：** 2026-07-18（Module 5A 权威 OCR 执行边界）
 **文档优先级：** 高于旧版 PRD、旧页面结构和单页视觉稿
 **适用对象：** 产品经理、UX、视觉设计、前端、AI/数据工程、Codex/Claude Code 等 Coding Agent
 **配套文档：** [`Elsewhere_Visual_Design_System_v3.0.md`](./Elsewhere_Visual_Design_System_v3.0.md) · [`ELSEWHERE_PAGE_LOGIC_MAP_v1.md`](./ELSEWHERE_PAGE_LOGIC_MAP_v1.md) · [`DESIGN_BRIEF.md`](./DESIGN_BRIEF.md) · [`AGENTS.md`](./AGENTS.md)
@@ -1563,6 +1563,18 @@ Else 的查询应能够直接：
 只有当前、输入 revision 匹配且预算有效的 approved RoutePlan 能触发计费能力。OCR 等能力发现信息
 不足时不得自行调用 Gemini，只能申请重新路由。完全重复和连拍等 cohort 中的原件全部保留，
 但昂贵处理优先只在 representative 上执行。
+
+### 9.1.1 当前 OCR 执行边界
+
+MVP 的第一个 capability executor 只处理被当前 RoutePlan 明确批准的 OCR。它以确定性 Cloud Tasks
+任务进入独立 worker，执行前重新验证计划 revision、source generation/hash、代表角色、预算和固定
+processor version。当前只支持受限 JPEG/PNG/WebP；PDF、Places、Embedding 和 Gemini 不得因为
+“未来会支持”而被伪装成已完成。
+
+OCR provider 原始结果与 normalized 结果只保存在服务端私有 artifact；Fragment 只接收带来源的
+suggested quality/page/result reference，不自动确认商户、地点或发现。调用状态不确定时进入
+`billing_uncertain` 并停止自动重试，由运维对账。默认 fake mode 对 Cloud Tasks 与 Document AI
+必须保持零调用。
 
 ## 9.2 高置信自动处理
 

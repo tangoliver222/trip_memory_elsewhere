@@ -1,7 +1,7 @@
 # Elsewhere Authoritative Routing & Budget Gate v1
 
 更新日期：2026-07-17
-状态：Module 4.5 已实现并通过本地与 Firebase Emulator 验证；未部署生产环境，Module 5 未实现。
+状态：Module 4.5 已实现并通过本地与 Firebase Emulator 验证；Module 5A OCR 已接在其后，均未部署生产环境。
 
 ## 1. 模块位置与完成边界
 
@@ -10,8 +10,8 @@
 ```text
 Module 3 Original Save
 → Module 4 deterministic-media/v1
-→ Module 4.5 fragment-routing/v1 + policy/v1 + cost model/v1
-→ Module 5 Capability Executors（本版本不包含）
+→ Module 4.5 fragment-routing/v1 + policy/v2 + cost model/v2
+→ Module 5A OCR Capability Executor
 ```
 
 Module 4.5 是权威执行计划编译器，不是建议分类器。它只消费 Source Descriptor、source
@@ -28,7 +28,7 @@ Module 4.5。
 每个 RoutePlan 固定保存：
 
 - owner、Fragment、ImportBatch 与完整 source revision；
-- `fragment-routing/v1`、`policy/v1`、`cost model/v1`；
+- `fragment-routing/v1`、`policy/v2`、`cost model/v2`；
 - `deterministic-media/v1` 输入、cohort revision 和用户决定版本；
 - 确定性 classification、代表角色与原因；
 - OCR、Places、Embedding、Gemini 各自独立的 decision；
@@ -76,7 +76,7 @@ v1 支持：
 - 带可靠 GPS 的普通照片：Places skipped；Embedding 可批准；
 - receipt/ticket/menu/screenshot：OCR 和 Embedding 可批准，Places/Gemini 先 deferred；
 - text：OCR skipped，Embedding 可批准；
-- PDF：OCR 可批准，但 Module 4 的 `pageCount` 仍为 null，不伪造页数验证；
+- PDF：Module 4 的 `pageCount` 仍为 null；policy/v2 不批准当前同步 OCR executor，且不伪造页数验证；
 - 低信息图片：全部 capability blocked；
 - deterministic terminal failure：全部 capability blocked；
 - feature read 失败：记录 `routing/feature-unavailable`，不得伪造成低信息。
@@ -87,7 +87,8 @@ Router 只读取 generation/hash 仍匹配的既有 WebP derivative；text/PDF �
 
 ## 5. 预算门禁
 
-所有金额均使用整数 USD micros。v1 的 admission ceiling 是服务端版本化配置，不是价格承诺：
+所有金额均使用整数 USD micros。当前 policy/cost-model v2 的 admission ceiling 是服务端版本化配置，
+不是价格承诺：
 
 | Scope | Ceiling |
 | --- | ---: |
@@ -97,7 +98,7 @@ Router 只读取 generation/hash 仍匹配的既有 WebP derivative；text/PDF �
 
 | Capability | estimated | ceiling | max billable attempts |
 | --- | ---: | ---: | ---: |
-| OCR | 20,000 | 100,000 | 1 |
+| OCR | 1,500 | 1,500 | 1 |
 | Places | 10,000 | 50,000 | 1 |
 | Embedding | 1,000 | 5,000 | 1 |
 | Gemini | 25,000 | 100,000 | 1 |
@@ -108,7 +109,8 @@ ceiling 并把实际费用加入 spent；无计费失败释放 reservation。
 
 ## 6. Module 5 执行授权边界
 
-本版本只实现 provider-free authorizer 和持久化生命周期，不实现 provider adapter。每次 claim
+Module 4.5 冻结 provider-independent authorizer 和持久化生命周期；后续 Module 5A 已实现受该
+边界约束的 Cloud Tasks 与固定版本 Document AI OCR adapter。每次 claim
 必须同时满足：
 
 - RoutePlan 是 RoutingHead 当前计划且状态为 approved；
@@ -147,7 +149,8 @@ original finalizer → deterministic processor → authoritative router
 terminal outcome 进入 Router 一次。只有 `drafted | approved | completed | terminal_noop` 成功返回后
 Eventarc 才收到 204。Router 持久化失败返回 503，重试正确性不依赖 `Retry-After`。
 
-Module 4.5 不新增 `/routing`、`/route-plans` 或其他生产端点。Firestore Rules 继续允许 owner 读取
+Module 4.5 不新增 `/routing`、`/route-plans` 或其他生产端点。Module 5A 只在独立 worker root
+增加内部 task route，不是用户业务 API。Firestore Rules 继续允许 owner 读取
 Fragment、ImportBatch 和 DuplicateCandidate，同时通过 catch-all 拒绝所有客户端读取或写入
 RoutePlan、RoutingHead、RoutingCohort、BudgetLedger、BudgetReservation、CapabilityExecution 和
 EscalationRequest。服务端仍依赖 Admin SDK 与独立 ingestion runtime service account。
@@ -161,7 +164,8 @@ EscalationRequest。服务端仍依赖 Admin SDK 与独立 ingestion runtime ser
 
 Emulator 系统测试验证输入反序不改变 cohort JSON、1/12/200 个原件全部保留、supporting 可读、
 重放不新增计划、generation 改变生成 revision 2、授权前 execution 数为 0、旧计划不能授权、当前
-approved 计划可由 fake Module 5 claim，且实际 provider 调用数始终为 0。
+approved 计划不会在 routing 阶段直接执行；Module 5A scheduler 仅为受支持的当前 OCR plan 创建
+执行。routing fixture 中的 Embedding approval 保持未执行，实际 provider 调用数为 0。
 
 ## 9. 验证证据
 
@@ -191,9 +195,11 @@ arm 并在真实调用前同步后，聚焦并发契约 2/2 和统一回归 68/6
 ## 10. 已知边界与下一模块
 
 - 当前 Router 的内容分类只使用 Fragment type 与 Module 4 技术事实，不增加默认 AI classifier；
-- Places、OCR、Embedding、Gemini 的 provider、结果 schema 与生产配额执行属于 Module 5；
+- OCR provider、结果 schema、Cloud Tasks 与生产配额结算已在 Module 5A 实现；Places、Embedding、
+  Gemini 仍未实现；
 - malware scanning、完整语义解析、地图 grounding、转码和 Agent 不在本模块；
 - `billing_uncertain` 不自动恢复调用；
 - 本地 Emulator 不证明 Cloud Run IAM、Eventarc invoker 或生产 service account 已正确部署。
 
-Module 4.5 完成后停止，不自行实现 Module 5。
+Module 4.5 的职责边界保持冻结；Module 5A 详情见
+`docs/implementation/capability-execution-ocr-v1.md`。

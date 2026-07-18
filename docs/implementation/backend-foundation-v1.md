@@ -107,3 +107,11 @@ PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" npm run test:emulator
 
 下一模块只实现 **Auth Boundary**：验证身份、把 uid 注入 use case，并用测试证明匿名请求与
 跨用户访问均在进入 Repository 之前被拒绝。导入和 AI 均不得提前混入该模块。
+
+## 8. 后续模块状态（2026-07-18）
+
+本文件保留 Module 1 当时的冻结记录；“尚无 Auth/导入”等描述是历史边界，不是当前仓库状态。
+后续已按独立提交完成 Auth Boundary、Original Save、Deterministic Facts、Authoritative Routing &
+Budget Gate，以及 Module 5A OCR。当前运行与配置入口以 `services/backend/README.md` 为准，OCR
+执行、隐私、IAM 和恢复语义见 `docs/implementation/capability-execution-ocr-v1.md`。Places、
+Embedding、Gemini 仍未实现。

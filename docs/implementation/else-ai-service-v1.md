@@ -17,6 +17,11 @@
 > capability。所有碎片付费处理必须先经过 Module 4.5 的当前 approved RoutePlan。完整边界见
 > `docs/superpowers/specs/2026-07-17-authoritative-routing-budget-gate-design.md`。
 
+> **2026-07-18 状态补充：** Module 5A 已只实现 approved OCR 的 Cloud Tasks / Document AI
+> 执行。它不会启用本文的 Gemini Query Router，也不会把 OCR 不足静默升级为 Gemini。Places、
+> Embedding、Gemini capability 与 legacy Else 的真实 Repository 接线仍未实现。OCR 详情见
+> `docs/implementation/capability-execution-ocr-v1.md`。
+
 ---
 
 ## 1. 本次要做什么（范围）

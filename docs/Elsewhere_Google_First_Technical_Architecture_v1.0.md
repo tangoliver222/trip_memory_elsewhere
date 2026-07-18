@@ -2,7 +2,7 @@
 
 **状态：** 产品技术总方案 / 技术栈唯一基线
 **首次冻结：** 2026-07-15
-**最近修订：** 2026-07-17（Authoritative Routing & Budget Gate）
+**最近修订：** 2026-07-18（Module 5A Authoritative OCR Execution）
 **适用对象：** 产品、前端、后端、AI、数据、隐私、安全、Coding Agent
 **产品依据：** `Elsewhere_PRD_v3.0.md`、`Elsewhere_Visual_Design_System_v3.0.md`、`ELSEWHERE_PAGE_LOGIC_MAP_v1.md`
 
@@ -580,6 +580,33 @@ duplicate 与 burst 的 supporting Fragment 仍完整保留，只跳过计划中
 预算采用 capability 级预留—结算：批准时按成本模型版本预留 ceiling，执行后记录实际成本并释放
 余额。预算不足产生 blocked decision，不把 Fragment 标记为失败。完整领域契约见
 `docs/superpowers/specs/2026-07-17-authoritative-routing-budget-gate-design.md`。
+
+## 5.8 Module 5A：受权威计划约束的 OCR
+
+当前只落地 OCR executor，链路为：
+
+```text
+current approved OCR RoutePlan
+→ deterministic named Cloud Task
+→ private capability-worker
+→ generation-pinned original
+→ fixed-version Enterprise Document OCR
+→ immutable private artifacts / CapabilityResult
+→ atomic budget settlement and suggested facts
+```
+
+API、ingestion 和 capability-worker 共用镜像但使用三个互斥 composition root、三个 runtime service
+account 与三个 IAM 边界。只有 ingestion 构造 Cloud Tasks，只有 worker 构造 Document AI；默认
+fake mode 两者均零构造、零调用。task header 只用于观测，worker 从 Firestore 当前状态重新授权，
+不信任 payload 中的计划副本。
+
+OCR policy v2 只允许 bounded JPEG/PNG/WebP。历史允许 PDF planning 的 policy v1 不可直接执行，
+因为当前 decoder 不能可靠提供 PDF pageCount；必须重新路由且不得伪造页数。provider 调用后若
+计费结果不确定，进入 `billing_uncertain` 并停止自动重试。详情与运维配置见
+`docs/implementation/capability-execution-ocr-v1.md`。
+
+Module 5A 不实现 Places、Embedding、Gemini、地图 grounding 或恶意内容扫描。任何 OCR 结果不足
+只能提交 escalation request，由 Module 4.5 生成新 RoutePlan revision。
 
 ---
 
