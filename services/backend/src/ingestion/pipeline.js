@@ -43,6 +43,19 @@ function normalizeOutcome(result, allowed) {
   return result.outcome;
 }
 
+function normalizeSchedulingOutcome(result) {
+  if (result && typeof result === 'object' && !Array.isArray(result)
+    && Object.keys(result).sort().join('\0') === 'outcome\0queued'
+    && SCHEDULING_OUTCOMES.has(result.outcome)
+    && Number.isSafeInteger(result.queued)
+    && result.queued >= 0
+    && ((result.outcome === 'queued' && result.queued > 0)
+      || (result.outcome === 'terminal_noop' && result.queued === 0))) {
+    return result.outcome;
+  }
+  return normalizeOutcome(result, SCHEDULING_OUTCOMES);
+}
+
 function normalizeEvent(input) {
   if (!input
     || typeof input !== 'object'
@@ -117,9 +130,8 @@ export function createStorageFinalizedPipeline({
         await router.handle(toProcessorEvent(event)),
         ROUTING_OUTCOMES,
       );
-      normalizeOutcome(
+      normalizeSchedulingOutcome(
         await scheduler.handle({ uid: event.uid, batchId: event.batchId }),
-        SCHEDULING_OUTCOMES,
       );
       return Object.freeze({ outcome: routingOutcome });
     },

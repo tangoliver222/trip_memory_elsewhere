@@ -315,3 +315,16 @@ test('router no-op still scans persisted current approved OCR plans', async () =
   assert.deepEqual(await pipeline.handle(event), { outcome: 'terminal_noop' });
   assert.deepEqual(calls, [{ uid: event.uid, batchId: event.batchId }]);
 });
+
+test('pipeline accepts the real capability scheduler outcome contract', async () => {
+  const pipeline = createStorageFinalizedPipeline({
+    originalFinalizer: { async handle() { return { outcome: 'applied' }; } },
+    deterministicProcessor: { async handle() { return { outcome: 'succeeded' }; } },
+    authoritativeRouter: { async handle() { return { outcome: 'approved' }; } },
+    capabilityScheduler: {
+      async handle() { return { outcome: 'queued', queued: 2 }; },
+    },
+  });
+
+  assert.deepEqual(await pipeline.handle(event), { outcome: 'approved' });
+});
