@@ -1,0 +1,4 @@
+Bangkok trip note
+
+The original note has a reliable source timestamp but no reliable place coordinate.
+Elsewhere should retain it as an unplaced original instead of guessing a location.

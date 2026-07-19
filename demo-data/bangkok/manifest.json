@@ -1,0 +1,66 @@
+{
+  "ari-2024-10-12.jpg": {
+    "demoSourcePath": "design-lab/prototypes-vanilla/public/assets/bangkok-photo-01-ari-morning.jpg",
+    "declaredContentType": "image/jpeg",
+    "sourceType": "photo",
+    "sourceCreatedAt": "2024-10-12T08:17:00+07:00",
+    "timezoneOffsetMinutes": 420,
+    "locationHint": { "lat": 13.7791, "lng": 100.5443, "accuracyMeters": 12, "source": "user_supplied" }
+  },
+  "ari-2024-10-16.png": {
+    "demoSourcePath": "design-lab/prototypes-vanilla/public/assets/bangkok-photo-04-ari-coffee.png",
+    "declaredContentType": "image/png",
+    "sourceType": "photo",
+    "sourceCreatedAt": "2024-10-16T08:22:00+07:00",
+    "timezoneOffsetMinutes": 420,
+    "locationHint": { "lat": 13.77912, "lng": 100.54431, "accuracyMeters": 10, "source": "user_supplied" }
+  },
+  "COMMON-GROUNDS-receipt-2024-10-19.png": {
+    "demoSourcePath": "design-lab/prototypes-vanilla/public/assets/bangkok-photo-04-ari-coffee.png",
+    "declaredContentType": "image/png",
+    "sourceType": "receipt",
+    "sourceCreatedAt": "2024-10-19T08:29:00+07:00",
+    "timezoneOffsetMinutes": 420,
+    "locationHint": { "lat": 13.77908, "lng": 100.54429, "accuracyMeters": 8, "source": "user_supplied" }
+  },
+  "riverside-2024-10-18.jpg": {
+    "demoSourcePath": "design-lab/prototypes-vanilla/public/assets/bangkok-photo-02-riverside.jpg",
+    "declaredContentType": "image/jpeg",
+    "sourceType": "photo",
+    "sourceCreatedAt": "2024-10-18T17:59:00+07:00",
+    "timezoneOffsetMinutes": 420,
+    "locationHint": { "lat": 13.7331, "lng": 100.5101, "accuracyMeters": 14, "source": "user_supplied" }
+  },
+  "riverside-ticket-2024-10-18.jpg": {
+    "demoSourcePath": "design-lab/prototypes-vanilla/public/assets/bangkok-photo-01-ari-morning.jpg",
+    "declaredContentType": "image/jpeg",
+    "sourceType": "ticket",
+    "sourceCreatedAt": "2024-10-18T17:42:00+07:00",
+    "timezoneOffsetMinutes": 420,
+    "locationHint": { "lat": 13.73308, "lng": 100.51012, "accuracyMeters": 16, "source": "user_supplied" }
+  },
+  "bangkok-map-screenshot-2024-10-22.png": {
+    "demoSourcePath": "design-lab/prototypes-vanilla/public/assets/earth-topology.png",
+    "declaredContentType": "image/png",
+    "sourceType": "screenshot",
+    "sourceCreatedAt": "2024-10-22T18:04:00+07:00",
+    "timezoneOffsetMinutes": 420,
+    "locationHint": { "lat": 13.73314, "lng": 100.51006, "accuracyMeters": 28, "source": "user_supplied" }
+  },
+  "old-town-2024-10-17.jpg": {
+    "demoSourcePath": "design-lab/prototypes-vanilla/public/assets/bangkok-photo-03-old-town.jpg",
+    "declaredContentType": "image/jpeg",
+    "sourceType": "photo",
+    "sourceCreatedAt": "2024-10-17T15:31:00+07:00",
+    "timezoneOffsetMinutes": 420,
+    "locationHint": null
+  },
+  "trip-note-2024-10-20.txt": {
+    "demoSourcePath": "demo-data/bangkok/trip-note-2024-10-20.txt",
+    "declaredContentType": "text/plain",
+    "sourceType": "text",
+    "sourceCreatedAt": "2024-10-20T21:10:00+07:00",
+    "timezoneOffsetMinutes": 420,
+    "locationHint": null
+  }
+}

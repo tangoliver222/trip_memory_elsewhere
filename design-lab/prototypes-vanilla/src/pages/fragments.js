@@ -1,4 +1,4 @@
-import { exceptions, fragments, importBatches, processingItems, reviewQueue } from '../fixtures/data.js';
+import { cities, exceptions, fragments, importBatches, processingItems, reviewQueue, world } from '../fixtures/data.js';
 import { createFieldController, createFieldLayout } from '../controllers/field-controller.js';
 import { escapeHtml, renderMedia } from '../components/primitives.js';
 
@@ -32,12 +32,7 @@ export function renderFragmentField(state) {
         </div>
       </header>
       <section class="field-viewport" data-field-viewport aria-label="可拖拽和缩放的碎片空间">
-        <div class="field-cluster-labels" aria-hidden="true">
-          <span class="field-cluster-label field-cluster-label--bangkok">Bangkok · 63 碎片</span>
-          <span class="field-cluster-label field-cluster-label--tokyo">Tokyo · 81 碎片</span>
-          <span class="field-cluster-label field-cluster-label--chiangmai">Chiang Mai · 28 碎片</span>
-          <span class="field-cluster-label field-cluster-label--unplaced">未安放</span>
-        </div>
+        <div class="field-cluster-labels" aria-hidden="true">${cities.map((city) => `<span class="field-cluster-label field-cluster-label--${city.slug}">${escapeHtml(city.name)} · ${city.fragmentCount} 碎片</span>`).join('')}<span class="field-cluster-label field-cluster-label--unplaced">未安放 · ${fragments.filter(({ cityId }) => !cityId).length}</span></div>
         <div class="field-depth-grid" aria-hidden="true"><span>NEAR</span><span>MID</span><span>DEEP</span></div>
         ${fragments.map((fragment, index) => {
           const node = positions[fragment.id];
@@ -50,7 +45,7 @@ export function renderFragmentField(state) {
         }).join('')}
         <div class="field-relation-flow" aria-hidden="true"><i></i><i></i><i></i></div>
       </section>
-      <aside class="field-legend"><strong>${fragments.length} 份代表原件</strong><span>完整索引共 172 个碎片</span><span>拖拽移动 · 滚轮或双指缩放</span></aside>
+      <aside class="field-legend"><strong>${fragments.length} 份代表原件</strong><span>完整索引共 ${world.totalFragments} 个碎片</span><span>拖拽移动 · 滚轮或双指缩放</span></aside>
       <div class="field-primary">${primary('导入更多碎片', '#/world/import')}</div>
     </main>`,
   };

@@ -16,7 +16,7 @@ export function createActionController({ root, store }) {
     if (!client || files.length === 0 || ['creating', 'uploading', 'processing'].includes(state.importFlow.status)) return;
     let manifestByName = {};
     try {
-      const response = await fetch('/demo-source-manifest.json');
+      const response = await fetch('/competition-source-manifest.json');
       if (response.ok) manifestByName = await response.json();
     } catch {
       // Sidecar metadata is optional; source bytes remain authoritative.

@@ -6,6 +6,8 @@ import {
   world,
 } from '../../src/fixtures/data.js';
 import { createSemanticTarget } from '../../src/visual/particle-targets.js';
+import { renderRoute } from '../../src/pages/render-route.js';
+import { createInitialState } from '../../src/store.js';
 import { hydrateLiveCollections } from '../../src/data/live-hydrator.js';
 import {
   bootstrapLiveData,
@@ -111,4 +113,17 @@ test('particle targets consume the changed live collections', () => {
   const emptyTarget = createSemanticTarget('globe', 120);
 
   assert.notDeepEqual([...oneCityTarget], [...emptyTarget]);
+});
+
+test('live World and Fragment Field copy contains no frozen fixture totals', () => {
+  hydrateLiveCollections(snapshotWith(['frag_live_a', 'frag_live_b']));
+  const state = createInitialState({ runtime: { mode: 'live' } });
+  const worldHtml = renderRoute('#/world', state).html;
+  const fieldHtml = renderRoute('#/world/fragments', state).html;
+
+  assert.match(worldHtml, /1 座城市/);
+  assert.match(worldHtml, /2 个碎片/);
+  assert.doesNotMatch(worldHtml, /三座城市/);
+  assert.match(fieldHtml, /Bangkok · 2 碎片/);
+  assert.doesNotMatch(fieldHtml, /172 个碎片|Tokyo · 81|Chiang Mai · 28/);
 });

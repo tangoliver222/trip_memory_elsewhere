@@ -42,16 +42,16 @@ export function renderWorldHome() {
 
       <section class="world-entries">
         <article class="world-entry world-entry--city will-flow" data-flow="2">
-          <div class="world-entry__visual">${bangkok.representativeAsset
+          <div class="world-entry__visual">${bangkok?.representativeAsset
     ? `<img src="${bangkok.representativeAsset}" alt="Bangkok 代表原件">`
     : '<div class="city-index__cluster" aria-label="Bangkok 记忆群"><i></i><i></i><i></i></div>'}</div>
           <div class="world-entry__copy">
             <span class="world-entry__label">最近的城市</span>
-            <h2>Bangkok</h2>
-            <p>10.12 – 10.22 · ${bangkok.fragmentCount} 碎片 · ${bangkok.placeCount} 地点</p>
-            <p class="world-entry__note">三个早晨都从 Ari 开始</p>
+            <h2>${escapeHtml(bangkok?.name || '等待第一座城市')}</h2>
+            <p>${escapeHtml(bangkok?.period || '尚未形成旅程')} · ${bangkok?.fragmentCount || 0} 碎片 · ${bangkok?.placeCount || 0} 地点</p>
+            <p class="world-entry__note">${escapeHtml(discoveries[0]?.title || '放入带有时间和地点的原件后，关系会从这里显影')}</p>
           </div>
-          <button class="world-entry__go" type="button" data-primary-action data-action="navigate" data-route="#/world/city/bangkok" aria-label="进入 Bangkok">→</button>
+          <button class="world-entry__go" type="button" data-primary-action data-action="navigate" data-route="${bangkok ? `#/world/city/${bangkok.slug}` : '#/world/import'}" aria-label="${bangkok ? `进入 ${escapeHtml(bangkok.name)}` : '放入第一批碎片'}">→</button>
         </article>
 
         <p class="world-happening will-flow" data-flow="3">世界正在发生：${pending} 个连接待你判断 · ${newDiscoveries} 条发现新显影 · ${processing} 组照片正在整理</p>
@@ -87,7 +87,7 @@ export function renderWorldHome() {
           <div class="world-entry__copy">
             <span class="world-entry__label">全部碎片</span>
             <h2>${world.totalFragments} 个碎片的私人数据库</h2>
-            <p class="world-entry__meta">三座城市 · 可搜索 · 可问 Else</p>
+            <p class="world-entry__meta">${world.totalCities} 座城市 · 可搜索 · 可问 Else</p>
           </div>
           <span class="world-entry__go" aria-hidden="true">→</span>
         </button>

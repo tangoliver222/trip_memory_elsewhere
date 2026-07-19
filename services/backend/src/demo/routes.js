@@ -158,6 +158,10 @@ export function registerDemoRoutes(app, {
       }));
       return reply.code(204).send();
     } catch (error) {
+      request.log.error({
+        errorCode: typeof error?.code === 'string' ? error.code : 'unknown',
+        errorName: typeof error?.name === 'string' ? error.name : 'Error',
+      }, 'demo finalize failed');
       const response = errorResponse(error, request.id);
       return reply.code(response.status).send(response.body);
     }
