@@ -5,7 +5,7 @@ import { IdSchema } from '../domain/index.js';
 import { CapabilityError, retryableCapabilityError } from '../capabilities/errors.js';
 import { assertOcrInput } from '../capabilities/ocr-policy.js';
 
-export const OCR_FIELD_MASK = [
+export const OCR_FIELD_MASK = Object.freeze([
   'text',
   'pages.pageNumber',
   'pages.dimension',
@@ -16,7 +16,7 @@ export const OCR_FIELD_MASK = [
   'pages.tokens',
   'pages.detectedLanguages',
   'pages.imageQualityScores',
-].join(',');
+]);
 
 const CONFIG_KEYS = ['endpoint', 'location', 'processorId', 'processorVersion', 'projectId'];
 const INPUT_KEYS = [
@@ -136,7 +136,7 @@ export function createDocumentAiOcr({
         response = await getClient().processDocument({
           name,
           rawDocument: { content, mimeType: input.mimeType },
-          fieldMask: OCR_FIELD_MASK,
+          fieldMask: { paths: [...OCR_FIELD_MASK] },
           labels: {
             execution: createHash('sha256').update(input.executionId).digest('hex').slice(0, 16),
             executor: 'v1',

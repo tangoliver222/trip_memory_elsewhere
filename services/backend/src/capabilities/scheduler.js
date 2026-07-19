@@ -5,6 +5,7 @@ import { retryableCapabilityError } from './errors.js';
 
 const PROVIDER_NAME = 'document-ai-enterprise-ocr';
 const PROVIDER_VERSION = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const SUPPORTED_ROUTING_VERSIONS = new Set(['v2', 'v3']);
 const INPUT_KEYS = ['batchId', 'uid'];
 const REPOSITORY_METHODS = [
   'loadRoutingSnapshot',
@@ -44,8 +45,8 @@ function currentApprovedOcrPlans(snapshot) {
         && head.currentRevision === plan.revision
         && JSON.stringify(head.sourceRevision) === JSON.stringify(plan.sourceRevision)
         && plan.router?.version === 'v1'
-        && plan.router?.policyVersion === 'v2'
-        && plan.router?.costModelVersion === 'v2'
+        && SUPPORTED_ROUTING_VERSIONS.has(plan.router?.policyVersion)
+        && plan.router.policyVersion === plan.router.costModelVersion
         && plan.representation?.role !== 'supporting'
         && plan.capabilities?.ocr?.decision === 'approved'
         && plan.capabilities.ocr.executorClass === 'document-ocr';
@@ -110,8 +111,8 @@ export function createCapabilityScheduler({
   if (typeof clock !== 'function') throw new TypeError('clock is required');
   const supportedVersions = Object.freeze({
     router: Object.freeze(['v1']),
-    policy: Object.freeze(['v2']),
-    costModel: Object.freeze(['v2']),
+    policy: Object.freeze(['v2', 'v3']),
+    costModel: Object.freeze(['v2', 'v3']),
     executors: Object.freeze({ 'document-ocr': Object.freeze(['v1']) }),
     providers: Object.freeze({ [PROVIDER_NAME]: Object.freeze([providerVersion]) }),
   });

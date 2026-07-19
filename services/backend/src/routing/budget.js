@@ -53,9 +53,20 @@ export const ROUTING_COST_MODEL_V2 = deepFreeze({
   },
 });
 
+export const ROUTING_BUDGET_POLICY_V3 = deepFreeze({
+  ...ROUTING_BUDGET_POLICY_V2,
+  version: 'v3',
+});
+
+export const ROUTING_COST_MODEL_V3 = deepFreeze({
+  ...ROUTING_COST_MODEL_V2,
+  version: 'v3',
+});
+
 const BUDGET_VERSIONS = new Map([
   ['v1:v1', { policy: ROUTING_BUDGET_POLICY_V1, costModel: ROUTING_COST_MODEL_V1 }],
   ['v2:v2', { policy: ROUTING_BUDGET_POLICY_V2, costModel: ROUTING_COST_MODEL_V2 }],
+  ['v3:v3', { policy: ROUTING_BUDGET_POLICY_V3, costModel: ROUTING_COST_MODEL_V3 }],
 ]);
 
 function budgetError(code, message) {

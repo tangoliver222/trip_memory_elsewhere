@@ -140,6 +140,15 @@ test('budget and cost constants are exact deeply frozen admission policy', () =>
     },
   });
   assert.equal(Object.isFrozen(routingBudget.ROUTING_COST_MODEL_V2.capabilities.ocr), true);
+  assert.deepEqual(routingBudget.ROUTING_BUDGET_POLICY_V3, {
+    ...routingBudget.ROUTING_BUDGET_POLICY_V2,
+    version: 'v3',
+  });
+  assert.deepEqual(routingBudget.ROUTING_COST_MODEL_V3, {
+    ...routingBudget.ROUTING_COST_MODEL_V2,
+    version: 'v3',
+  });
+  assert.equal(Object.isFrozen(routingBudget.ROUTING_COST_MODEL_V3.capabilities.ocr), true);
 });
 
 test('v2 route reserves exactly one bounded OCR image page while v1 remains valid', () => {
@@ -162,6 +171,19 @@ test('v2 route reserves exactly one bounded OCR image page while v1 remains vali
     costModelVersion: 'v2',
   });
   assert.equal(result.ledgers.every(({ policyVersion }) => policyVersion === 'v2'), true);
+});
+
+test('v3 route keeps the bounded OCR admission cost', () => {
+  const result = reserve(makeDraftPlan({
+    policyVersion: 'v3',
+    costModelVersion: 'v3',
+    capabilities: { ocr: intent('approve', 'ocr') },
+  }));
+
+  assert.equal(result.reservations.length, 1);
+  assert.equal(result.reservations[0].estimatedCostMicros, 1_500);
+  assert.equal(result.reservations[0].costModelVersion, 'v3');
+  assert.equal(result.ledgers.every(({ policyVersion }) => policyVersion === 'v3'), true);
 });
 
 test('only approve intents receive reservations and all decisions become persisted vocabulary', () => {

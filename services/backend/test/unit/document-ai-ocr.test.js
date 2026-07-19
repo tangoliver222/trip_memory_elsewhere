@@ -110,7 +110,7 @@ test('lazily calls one fixed processor version with bounded source bytes and fie
     ['processDocument', {
       name: 'projects/elsewhere/locations/us/processors/processor-1/processorVersions/version-1',
       rawDocument: { content: SOURCE_BYTES, mimeType: 'image/jpeg' },
-      fieldMask: OCR_FIELD_MASK,
+      fieldMask: { paths: [...OCR_FIELD_MASK] },
       labels: { execution: '5d47d44499f562c2', executor: 'v1' },
     }],
   ]);

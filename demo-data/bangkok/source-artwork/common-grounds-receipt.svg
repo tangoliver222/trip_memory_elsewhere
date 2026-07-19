@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1800" viewBox="0 0 1200 1800">
+  <rect width="1200" height="1800" fill="#d8d1c5"/>
+  <path d="M150 70h900l22 24-22 24 22 24-22 24 22 24-22 24 22 24-22 24 22 24-22 24v1320l-22 24 22 24-22 24 22 24-22 24 22 24-22 24 22 24-22 24 22 24H150l-22-24 22-24-22-24 22-24-22-24 22-24-22-24 22-24-22-24 22-24V286l-22-24 22-24-22-24 22-24-22-24 22-24-22-24 22-24-22-24z" fill="#f4efe6"/>
+  <g fill="#181818" font-family="Arial, Helvetica, sans-serif" text-anchor="middle">
+    <text x="600" y="245" font-size="82" font-weight="700" letter-spacing="8">COMMON GROUNDS</text>
+    <text x="600" y="320" font-size="34" letter-spacing="9">ARI · BANGKOK</text>
+    <text x="600" y="382" font-size="25" letter-spacing="4">DEMO RECEIPT</text>
+  </g>
+  <g fill="#202020" font-family="Courier New, monospace" font-size="34">
+    <text x="230" y="505">RECEIPT #1029</text>
+    <text x="230" y="565">19 OCT 2024</text>
+    <text x="785" y="565">08:29</text>
+    <path d="M225 625h750" stroke="#202020" stroke-width="4" stroke-dasharray="16 13"/>
+    <text x="230" y="715">AMERICANO</text>
+    <text x="900" y="715" text-anchor="end">90.00</text>
+    <text x="230" y="785">CROISSANT</text>
+    <text x="900" y="785" text-anchor="end">80.00</text>
+    <path d="M225 850h750" stroke="#202020" stroke-width="4" stroke-dasharray="16 13"/>
+    <text x="230" y="950" font-weight="700">TOTAL</text>
+    <text x="900" y="950" text-anchor="end" font-weight="700">THB 170.00</text>
+    <text x="230" y="1060">CARD</text>
+    <text x="900" y="1060" text-anchor="end">170.00</text>
+    <text x="230" y="1120">CHANGE</text>
+    <text x="900" y="1120" text-anchor="end">0.00</text>
+  </g>
+  <g fill="#202020" font-family="Arial, Helvetica, sans-serif" text-anchor="middle">
+    <text x="600" y="1260" font-size="31" letter-spacing="2">THANK YOU</text>
+    <text x="600" y="1315" font-size="24">Phahon Yothin Road · Bangkok</text>
+  </g>
+  <g fill="#202020">
+    <rect x="300" y="1415" width="12" height="170"/>
+    <rect x="326" y="1415" width="24" height="170"/>
+    <rect x="366" y="1415" width="10" height="170"/>
+    <rect x="393" y="1415" width="34" height="170"/>
+    <rect x="443" y="1415" width="16" height="170"/>
+    <rect x="476" y="1415" width="9" height="170"/>
+    <rect x="501" y="1415" width="29" height="170"/>
+    <rect x="547" y="1415" width="13" height="170"/>
+    <rect x="576" y="1415" width="40" height="170"/>
+    <rect x="632" y="1415" width="11" height="170"/>
+    <rect x="661" y="1415" width="27" height="170"/>
+    <rect x="705" y="1415" width="14" height="170"/>
+    <rect x="737" y="1415" width="36" height="170"/>
+    <rect x="789" y="1415" width="12" height="170"/>
+    <rect x="821" y="1415" width="25" height="170"/>
+    <rect x="863" y="1415" width="16" height="170"/>
+    <rect x="895" y="1415" width="8" height="170"/>
+  </g>
+  <text x="600" y="1640" fill="#202020" font-family="Courier New, monospace" font-size="25" text-anchor="middle" letter-spacing="8">001029 191024 0829</text>
+</svg>

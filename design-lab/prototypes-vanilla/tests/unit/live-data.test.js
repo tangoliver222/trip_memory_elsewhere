@@ -187,6 +187,20 @@ test('cloud requests use App Check without connecting either Firebase Emulator',
   assert.notEqual(request[1]['x-firebase-appcheck'], 'local-demo-app-check');
 });
 
+test('demo client deletes the signed-in test identity after owner data is cleared', async () => {
+  const user = Object.freeze({ getIdToken: async () => 'firebase-id-token' });
+  const deleted = [];
+  const client = createDemoClient(demoClientConfigFromEnv(cloudEnvironment), {
+    appCheckFactory: () => Object.freeze({ getToken: async () => 'app-check-token' }),
+    signInAnonymouslyFn: async () => ({ user }),
+    deleteUserFn: async (value) => { deleted.push(value); },
+  });
+
+  await client.deleteIdentity();
+
+  assert.deepEqual(deleted, [user]);
+});
+
 test('hydration changes world counts and fragment identities from the snapshot', () => {
   const snapshot = snapshotWith(['frag_real_1', 'frag_real_2']);
   hydrateLiveCollections(snapshot);

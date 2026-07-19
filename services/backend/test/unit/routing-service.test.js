@@ -142,8 +142,8 @@ test('one settled Fragment compiles a valid draft then atomically requests appro
   ]);
   const draft = parseRoutePlan(harness.drafts[0]);
   assert.equal(draft.state, 'draft');
-  assert.equal(draft.router.policyVersion, 'v2');
-  assert.equal(draft.router.costModelVersion, 'v2');
+  assert.equal(draft.router.policyVersion, 'v3');
+  assert.equal(draft.router.costModelVersion, 'v3');
   assert.equal(draft.sourceRevision.inputHash, fragment.hashes.sha256);
   assert.equal(draft.capabilities.embedding.decision, 'blocked');
   assert.deepEqual(draft.capabilities.embedding.reasonCodes, ['await-budget-gate']);

@@ -83,7 +83,7 @@ export function createDemoRepository({
         }
       }
       const artifacts = {};
-      for (const result of [...results.values()].sort(sortById)) {
+      for (const result of sortById([...results.values()])) {
         try {
           artifacts[result.id] = await artifactReader.readNormalizedArtifact({
             ownerId: uid,

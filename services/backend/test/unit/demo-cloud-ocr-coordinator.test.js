@@ -57,14 +57,21 @@ function execution(routePlan, id, overrides = {}) {
   };
 }
 
-test('runs only current queued approved OCR work in stable order with references only', async () => {
+test('runs current queued approved OCR work including a supporting receipt', async () => {
   const routeB = plan('fragment_b');
   const routeA = plan('fragment_a');
-  const supporting = plan('fragment_supporting', {
+  const supportingReceipt = plan('fragment_supporting', {
     representation: {
       role: 'supporting',
       representativeRef: ref('fragment', 'fragment_a'),
     },
+  });
+  const skippedSupportingPhoto = plan('fragment_skipped', {
+    representation: {
+      role: 'supporting',
+      representativeRef: ref('fragment', 'fragment_a'),
+    },
+    capabilities: { ocr: { decision: 'skipped', executorClass: null } },
   });
   const stale = plan('fragment_stale', { id: 'route_stale0001' });
   const currentForStale = plan('fragment_stale', { id: 'route_current01' });
@@ -72,12 +79,13 @@ test('runs only current queued approved OCR work in stable order with references
     capabilities: { ocr: { decision: 'deferred', executorClass: null } },
   });
   const before = {
-    routePlans: [routeB, supporting, stale, deferred, currentForStale, routeA],
-    routingHeads: [routeA, routeB, supporting, currentForStale, deferred].map(head),
+    routePlans: [routeB, supportingReceipt, skippedSupportingPhoto, stale, deferred, currentForStale, routeA],
+    routingHeads: [routeA, routeB, supportingReceipt, skippedSupportingPhoto, currentForStale, deferred].map(head),
     capabilityExecutions: [
       execution(routeB, 'execution_b0000001'),
       execution(routeA, 'execution_a0000001'),
-      execution(supporting, 'execution_support1'),
+      execution(supportingReceipt, 'execution_support1'),
+      execution(skippedSupportingPhoto, 'execution_skipped1'),
       execution(stale, 'execution_stale001'),
       execution(deferred, 'execution_defer001'),
       execution(routeA, 'execution_done0001', { state: 'completed' }),
@@ -86,7 +94,7 @@ test('runs only current queued approved OCR work in stable order with references
   const after = {
     ...before,
     capabilityExecutions: before.capabilityExecutions.map((value) => (
-      ['execution_a0000001', 'execution_b0000001'].includes(value.id)
+      ['execution_a0000001', 'execution_b0000001', 'execution_support1'].includes(value.id)
         ? { ...value, state: 'completed' }
         : value
     )),
@@ -111,7 +119,7 @@ test('runs only current queued approved OCR work in stable order with references
 
   assert.deepEqual(await coordinator.handle({ uid: OWNER_ID, batchId: BATCH_ID }), {
     outcome: 'completed',
-    executed: 2,
+    executed: 3,
   });
   assert.deepEqual(calls.filter(([name]) => name === 'worker').map(([, task]) => task), [
     {
@@ -125,6 +133,13 @@ test('runs only current queued approved OCR work in stable order with references
       capabilityExecutionId: 'execution_b0000001',
       ownerId: OWNER_ID,
       routePlanId: routeB.id,
+      routePlanRevision: 1,
+      taskDeliveryCount: 0,
+    },
+    {
+      capabilityExecutionId: 'execution_support1',
+      ownerId: OWNER_ID,
+      routePlanId: supportingReceipt.id,
       routePlanRevision: 1,
       taskDeliveryCount: 0,
     },

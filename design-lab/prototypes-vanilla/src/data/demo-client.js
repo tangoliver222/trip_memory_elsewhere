@@ -6,6 +6,7 @@ import {
 } from 'firebase/app-check';
 import {
   connectAuthEmulator,
+  deleteUser,
   getAuth,
   signInAnonymously,
 } from 'firebase/auth';
@@ -89,6 +90,7 @@ export function createDemoClient(config, {
   appCheckFactory = createAppCheckProvider,
   connectAuthEmulatorFn = connectAuthEmulator,
   connectStorageEmulatorFn = connectStorageEmulator,
+  deleteUserFn = deleteUser,
   fetchFn = globalThis.fetch,
   signInAnonymouslyFn = signInAnonymously,
 } = {}) {
@@ -188,6 +190,11 @@ export function createDemoClient(config, {
         method: 'POST',
         body: { confirm: 'reset-local-demo' },
       });
+    },
+    async deleteIdentity() {
+      const user = auth.currentUser || await signIn();
+      await deleteUserFn(user);
+      signInPromise = null;
     },
     resolveStoragePath(path) {
       return getDownloadURL(ref(storage, path));

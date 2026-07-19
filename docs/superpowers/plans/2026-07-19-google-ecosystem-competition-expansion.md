@@ -137,11 +137,11 @@
 
 **Produces:** One resettable command and one explicit-cost browser gate for real Firebase, Document AI, and Gemini.
 
-- [ ] Replace the receipt-labelled coffee photo with a genuinely readable receipt owned by the project. The manifest may contain type/time/GPS but no merchant, amount, or OCR text.
-- [ ] Write E2E: anonymous cloud sign-in; eight uploads; persisted counts; exactly one OCR execution/result; one OCR field absent from the manifest; World/City/Field/Lens/Discovery; Gemini answer with a valid source; source opens Lens; cleanup deletes only the test owner.
-- [ ] Guard the test with `RUN_REAL_GOOGLE_PROVIDER_TESTS=true`; otherwise skip rather than fake success.
-- [ ] Run `RUN_REAL_GOOGLE_PROVIDER_TESTS=true REQUIRE_GEMINI_DEMO=true node scripts/run-google-cloud-demo.mjs --verify`; expect one pass, one Document AI request, and one Gemini request.
-- [ ] Run backend ordinary tests, 70-test Emulator suite, frontend tests/build, old emulator demo E2E, new cloud E2E, and `git diff --check`.
+- [x] Replace the receipt-labelled coffee photo with a genuinely readable receipt owned by the project. The manifest may contain type/time/GPS but no merchant, amount, or OCR text.
+- [x] Write E2E: anonymous cloud sign-in; eight uploads; persisted counts; exactly one OCR execution/result; one OCR field absent from the manifest; World/City/Field/Lens/Discovery; Gemini answer with a valid source; source opens Lens; cleanup deletes only the test owner.
+- [x] Guard the test with `RUN_REAL_GOOGLE_PROVIDER_TESTS=true`; otherwise skip rather than fake success.
+- [x] Run `RUN_REAL_GOOGLE_PROVIDER_TESTS=true REQUIRE_GEMINI_DEMO=true node scripts/run-google-cloud-demo.mjs --verify`; result on 2026-07-19: `1 passed (1.8m)`, one Document AI request and one Gemini request.
+- [x] Run backend ordinary tests, 70-test Emulator suite, frontend tests/build, old emulator demo E2E, new cloud E2E, and `git diff --check`.
 - [ ] Commit: `test(cloud): verify Firebase Document AI and Gemini demo`.
 
 ### Task 7: Deploy existing service roots to Cloud Run after Task 6 is green

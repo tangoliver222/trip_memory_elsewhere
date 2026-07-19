@@ -74,7 +74,11 @@ function normalizePage(text, page, index) {
   if (!page || typeof page !== 'object' || Array.isArray(page)) {
     throw new TypeError('OCR page is invalid');
   }
-  const pageNumber = page.pageNumber ?? index + 1;
+  const pageNumber = page.pageNumber === undefined
+    || page.pageNumber === null
+    || page.pageNumber === 0
+    ? index + 1
+    : page.pageNumber;
   if (!Number.isSafeInteger(pageNumber) || pageNumber < 1) {
     throw new TypeError('OCR page number is invalid');
   }

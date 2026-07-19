@@ -33,8 +33,8 @@ function plan(fragmentId, overrides = {}) {
     router: {
       name: 'fragment-routing',
       version: 'v1',
-      policyVersion: 'v2',
-      costModelVersion: 'v2',
+      policyVersion: 'v3',
+      costModelVersion: 'v3',
     },
     representation: {
       role: 'independent',
@@ -144,7 +144,7 @@ test('schedules current approved OCR plans in stable Fragment order with referen
   )));
 });
 
-test('skips stale supporting non-approved non-v2 and already queued work', async () => {
+test('skips stale supporting non-approved unsupported-version and already queued work', async () => {
   const eligible = plan('fragment_a');
   const stale = plan('fragment_b', { id: 'route_stale0001' });
   const current = plan('fragment_b', {

@@ -48,8 +48,8 @@ export function createOcrWorkerRuntime({
     leaseOwnerFactory: () => `delivery_${randomUUID()}`,
     supportedVersions: Object.freeze({
       router: Object.freeze(['v1']),
-      policy: Object.freeze(['v2']),
-      costModel: Object.freeze(['v2']),
+      policy: Object.freeze(['v2', 'v3']),
+      costModel: Object.freeze(['v2', 'v3']),
       executors: Object.freeze({ 'document-ocr': Object.freeze(['v1']) }),
       providers: Object.freeze({
         'document-ai-enterprise-ocr': Object.freeze([providerVersion]),

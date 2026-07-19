@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import {
   COST_MODEL_V1,
   POLICY_V1,
+  POLICY_V3,
   ROUTER_V1,
   classifyRoutingInput,
   compileCapabilityIntents,
@@ -120,6 +121,22 @@ test('routing policy identifiers are frozen and version exact', () => {
   });
   assert.equal(Object.isFrozen(routingPolicy.POLICY_V2), true);
   assert.equal(Object.isFrozen(routingPolicy.COST_MODEL_V2), true);
+  assert.deepEqual(POLICY_V3, {
+    name: 'authoritative-routing-policy', version: 'v3',
+  });
+  assert.equal(Object.isFrozen(POLICY_V3), true);
+});
+
+test('policy v3 skips screenshot OCR when reliable source time and location are sufficient', () => {
+  const screenshot = makeRoutableFragment({
+    type: 'screenshot',
+    sourceCreatedAt: '2024-10-22T18:04:00.000+07:00',
+    locationHint,
+  });
+
+  const ocr = compile(screenshot, { policyVersion: 'v3' }).intents.ocr;
+  assert.equal(ocr.decision, 'skip');
+  assert.deepEqual(ocr.reasonCodes, ['source-context-sufficient']);
 });
 
 test('classification uses declared and deterministic fields without semantic guessing', () => {
@@ -293,6 +310,23 @@ test('exact near and burst supporting photos skip their paid work', () => {
     assert.equal(result.priority, 'low');
     assert.equal(result.budgetClass, 'deterministic_only');
   }
+});
+
+test('an exact duplicate supporting receipt reuses its representative without paid work', () => {
+  const fragment = makeRoutableFragment({ id: 'frag_receipt02', type: 'receipt' });
+  const result = compile(fragment, {
+    representation: representation(fragment, {
+      role: 'supporting',
+      representativeRef: fragmentRef('frag_receipt01'),
+      cohortRefs: [{ type: 'routingCohort', id: 'cohort_exact001' }],
+      reasonCodes: ['exact-duplicate-supporting'],
+    }),
+  });
+
+  assert.equal(Object.values(result.intents).every(({ decision }) => decision === 'skip'), true);
+  assert.equal(Object.values(result.intents).every(({ reasonCodes }) => (
+    reasonCodes[0] === 'exact-duplicate-reuse'
+  )), true);
 });
 
 test('low-information and deterministic terminal inputs block all paid capabilities', () => {

@@ -16,7 +16,7 @@
     "locationHint": { "lat": 13.77912, "lng": 100.54431, "accuracyMeters": 10, "source": "user_supplied" }
   },
   "COMMON-GROUNDS-receipt-2024-10-19.png": {
-    "demoSourcePath": "design-lab/prototypes-vanilla/public/assets/bangkok-photo-04-ari-coffee.png",
+    "demoSourcePath": "design-lab/prototypes-vanilla/public/assets/common-grounds-receipt.png",
     "declaredContentType": "image/png",
     "sourceType": "receipt",
     "sourceCreatedAt": "2024-10-19T08:29:00+07:00",

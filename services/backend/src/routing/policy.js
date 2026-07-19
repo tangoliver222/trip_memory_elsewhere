@@ -9,6 +9,10 @@ export const POLICY_V2 = Object.freeze({
   name: 'authoritative-routing-policy',
   version: 'v2',
 });
+export const POLICY_V3 = Object.freeze({
+  name: 'authoritative-routing-policy',
+  version: 'v3',
+});
 export const COST_MODEL_V1 = Object.freeze({
   name: 'routing-admission-costs',
   version: 'v1',
@@ -16,6 +20,10 @@ export const COST_MODEL_V1 = Object.freeze({
 export const COST_MODEL_V2 = Object.freeze({
   name: 'routing-admission-costs',
   version: 'v2',
+});
+export const COST_MODEL_V3 = Object.freeze({
+  name: 'routing-admission-costs',
+  version: 'v3',
 });
 
 const CAPABILITIES = Object.freeze(['ocr', 'places', 'embedding', 'gemini']);
@@ -149,10 +157,10 @@ function allCapabilities(factory) {
 }
 
 function supportingIntents(fragment, representation) {
-  if (fragment.type !== 'photo' || representation.role !== 'supporting') return null;
-  const reason = representation.reasonCodes
-    .map((code) => SUPPORTING_RULES[code])
-    .find(Boolean);
+  if (representation.role !== 'supporting') return null;
+  const reasonCode = representation.reasonCodes.find((code) => SUPPORTING_RULES[code]);
+  if (fragment.type !== 'photo' && reasonCode !== 'exact-duplicate-supporting') return null;
+  const reason = SUPPORTING_RULES[reasonCode];
   if (!reason) return null;
   return allCapabilities(() => skip(reason, 'representative'));
 }
@@ -235,6 +243,21 @@ function baseIntentsV2(fragment, classification, representation) {
   return baseIntentsV1(fragment, classification, representation);
 }
 
+function baseIntentsV3(fragment, classification, representation) {
+  if (classification.documentKind !== 'screenshot'
+    || !reliableTime(fragment)
+    || !hasReliableLocation(fragment)) {
+    return baseIntentsV2(fragment, classification, representation);
+  }
+  const scope = representation.role === 'independent' ? 'self' : 'representative';
+  return {
+    ocr: skip('source-context-sufficient', scope),
+    places: skip('gps-sufficient', scope),
+    embedding: defer('source-context-sufficient', ['policy-change', 'user-request'], scope),
+    gemini: defer('await-structured-results', GEMINI_RECONSIDER_ON, scope),
+  };
+}
+
 function applyPriorResults(intents, fragment, priorResults) {
   const ocr = priorResults?.ocr;
   if (ocr?.outcome !== 'completed' || ocr.structuredSufficient !== true) return intents;
@@ -289,13 +312,13 @@ export function compileCapabilityIntents({
   escalation = null,
   revision = 1,
   requestContext: requestContextInput,
-  policyVersion = POLICY_V2.version,
+  policyVersion = POLICY_V3.version,
 } = {}) {
   if (!Number.isSafeInteger(revision) || revision < 1) {
     throw new TypeError('revision is invalid');
   }
   if (revision > 5) throw revisionError();
-  if (![POLICY_V1.version, POLICY_V2.version].includes(policyVersion)) {
+  if (![POLICY_V1.version, POLICY_V2.version, POLICY_V3.version].includes(policyVersion)) {
     throw new TypeError('policyVersion is invalid');
   }
   const fragment = parseFragment(fragmentInput);
@@ -312,7 +335,9 @@ export function compileCapabilityIntents({
     intents = supportingIntents(fragment, representation)
       ?? (policyVersion === POLICY_V1.version
         ? baseIntentsV1(fragment, classification, representation)
-        : baseIntentsV2(fragment, classification, representation));
+        : policyVersion === POLICY_V2.version
+          ? baseIntentsV2(fragment, classification, representation)
+          : baseIntentsV3(fragment, classification, representation));
     intents = applyPriorResults(intents, fragment, priorResults);
     if (validGeminiEscalation(fragment, escalation, priorResults)) {
       intents = {

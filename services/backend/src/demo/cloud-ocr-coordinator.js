@@ -50,7 +50,6 @@ function currentQueuedExecutions(snapshot, uid) {
       && execution.fragmentRef?.id === plan.fragmentRef?.id
       && sameSource(head.sourceRevision, plan.sourceRevision)
       && sameSource(execution.sourceRevision, plan.sourceRevision)
-      && plan.representation?.role !== 'supporting'
       && plan.capabilities?.ocr?.decision === 'approved'
       && plan.capabilities.ocr.executorClass === 'document-ocr';
   }).sort((left, right) => left.id.localeCompare(right.id));

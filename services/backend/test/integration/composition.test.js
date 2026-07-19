@@ -310,6 +310,7 @@ test('production composition sources do not import test helpers', async () => {
 
 test('runtime isolates provider construction to the owning service root', async (t) => {
   const calls = [];
+  let workerConfig = null;
   const storage = { bucket() { return {}; } };
   const factories = {
     firebaseFactory({ appName }) {
@@ -336,8 +337,9 @@ test('runtime isolates provider construction to the owning service root', async 
       calls.push(['documentAi']);
       return { async process() { throw new Error('not reached'); } };
     },
-    capabilityWorkerFactory() {
+    capabilityWorkerFactory(config) {
       calls.push(['worker']);
+      workerConfig = config;
       return { async handle() { return { outcome: 'terminal_noop', retryable: false }; } };
     },
   };
@@ -374,6 +376,8 @@ test('runtime isolates provider construction to the owning service root', async 
   assert.deepEqual(calls.map(([name]) => name), [
     'firebase', 'sourceMaterializer', 'artifactStore', 'worker',
   ]);
+  assert.deepEqual(workerConfig.supportedVersions.policy, ['v2', 'v3']);
+  assert.deepEqual(workerConfig.supportedVersions.costModel, ['v2', 'v3']);
   assert.equal((await worker.inject({
     method: 'POST',
     url: '/internal/capabilities/ocr',

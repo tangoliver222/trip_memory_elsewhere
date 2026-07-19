@@ -21,7 +21,7 @@ The Firebase project, Web App, and the mandatory cloud-backed recording resource
 
 The local files are ignored by Git. The App Check debug token lives only in the backend cloud file and is injected only into the Vite development server; Vite production builds force it to `null`. Never commit Firebase Web API keys, App Check debug tokens, ADC files, Gemini keys, Document AI processor IDs, or billing data.
 
-`ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED` defaults to `false`. Keep it false while testing Auth, App Check, Firestore, and Storage. Set it to `true` only for an explicitly authorized recording run: that enables the approved OCR worker to send the selected original receipt bytes to the fixed Document AI processor. The coordinator still rejects stale, supporting, unapproved, or already-terminal work.
+`ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED` defaults to `false`. Keep it false while testing Auth, App Check, Firestore, and Storage. Set it to `true` only for an explicitly authorized recording run: that enables the approved OCR worker to send the selected original receipt bytes to the fixed Document AI processor. The coordinator still rejects stale, unapproved, or already-terminal work; a supporting Fragment executes only when its current authoritative RoutePlan explicitly approves that capability.
 
 ## Billing and cost guardrail
 
@@ -42,6 +42,16 @@ Billing can be reviewed at:
 7. Record only the processor project, location, ID, version, and endpoint in `services/backend/.env.cloud.local`.
 8. Keep Cloud Run, Cloud Tasks, Eventarc, and provider smoke tests disabled until the cloud-backed local gate is green.
 
+Firebase Storage Rules read the owner-scoped ImportBatch in Firestore before accepting an original. The Firebase
+Storage service agent therefore requires `roles/firebaserules.firestoreServiceAgent` on this project. The principal is:
+
+```text
+service-352557422052@gcp-sa-firebasestorage.iam.gserviceaccount.com
+```
+
+Do not grant this role to the similarly named Firebase Rules service agent; that principal does not authorize the
+Storage Rules cross-service read.
+
 ## Current verification
 
 - Firebase project: active
@@ -58,4 +68,10 @@ Billing can be reviewed at:
 - App Check: reCAPTCHA Enterprise, one-hour token TTL, one registered localhost debug token
 - Document AI: `OCR_PROCESSOR` enabled in `asia-southeast1`
 - Document AI version: `pretrained-ocr-v1.0-2020-09-23` (`stable` in this region)
-- provider document processing: not invoked during provisioning
+- Storage Rules cross-service IAM: verified with one authenticated browser upload
+- authoritative routing: policy/cost model v3; reliable time + location prevents redundant screenshot OCR
+- real provider browser gate: passed on 2026-07-19 (`1 passed`, 8 uploads, exactly 1 persisted receipt OCR)
+- Document AI: exactly one selected Common Grounds receipt returned persisted normalized text
+- Gemini: exactly one evidence-scoped answer returned at least one reviewable source
+- cleanup: test owner snapshot returned zero Fragments and zero ImportBatches before identity deletion
+- `ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED`: restored to `false` after verification

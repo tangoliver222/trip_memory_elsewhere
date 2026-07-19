@@ -40,6 +40,15 @@ test('normalizes one page in provider order and proposes only safe OCR facts', (
   assert.equal(Object.isFrozen(result), true);
 });
 
+test('uses provider page order when Document AI returns the protobuf default page number', () => {
+  const document = structuredClone(golden);
+  document.pages[0].pageNumber = 0;
+
+  const result = normalizeDocumentAiOcr({ document, ...CONTEXT });
+
+  assert.equal(result.normalized.pages[0].pageNumber, 1);
+});
+
 test('concatenates valid multi-segment anchors and rejects malformed or out-of-range offsets', () => {
   const document = structuredClone(golden);
   document.pages[0].tokens[0].layout.textAnchor.textSegments = [

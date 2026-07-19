@@ -100,7 +100,9 @@ test('real Google providers process one receipt and keep every answer reviewable
       const { runtimeState } = await import('/src/data/runtime.js');
       if (!runtimeState.client) return null;
       await runtimeState.client.reset();
-      return runtimeState.client.getSnapshot();
+      const snapshot = await runtimeState.client.getSnapshot();
+      await runtimeState.client.deleteIdentity();
+      return snapshot;
     }).catch(() => null);
     expect(remaining?.fragments).toHaveLength(0);
     expect(remaining?.importBatches).toHaveLength(0);
