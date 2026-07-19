@@ -1,0 +1,135 @@
+import { initializeApp } from 'firebase/app';
+import {
+  connectAuthEmulator,
+  getAuth,
+  signInAnonymously,
+} from 'firebase/auth';
+import {
+  connectStorageEmulator,
+  getDownloadURL,
+  getStorage,
+  ref,
+  uploadBytesResumable,
+} from 'firebase/storage';
+
+const DEMO_HEADER = 'local-competition-v1';
+const APP_CHECK_TOKEN = 'local-demo-app-check';
+
+function required(value, name) {
+  if (typeof value !== 'string' || !value) throw new TypeError(`${name} is required`);
+  return value;
+}
+
+function splitHost(value, name) {
+  const match = /^(?:https?:\/\/)?([^:/]+):(\d+)$/.exec(required(value, name));
+  if (!match) throw new TypeError(`${name} must be host:port`);
+  return { host: match[1], port: Number(match[2]) };
+}
+
+export function demoClientConfigFromEnv(environment = {}) {
+  return Object.freeze({
+    apiBaseUrl: environment.VITE_ELSEWHERE_API_BASE_URL || '',
+    authEmulatorUrl: environment.VITE_FIREBASE_AUTH_EMULATOR_URL || 'http://127.0.0.1:9099',
+    storageEmulator: environment.VITE_FIREBASE_STORAGE_EMULATOR || '127.0.0.1:9199',
+    firebase: Object.freeze({
+      apiKey: environment.VITE_FIREBASE_API_KEY || 'demo-api-key',
+      authDomain: environment.VITE_FIREBASE_AUTH_DOMAIN || 'demo-elsewhere.firebaseapp.com',
+      projectId: environment.VITE_FIREBASE_PROJECT_ID || 'demo-elsewhere',
+      storageBucket: environment.VITE_FIREBASE_STORAGE_BUCKET || 'demo-elsewhere.appspot.com',
+      appId: environment.VITE_FIREBASE_APP_ID || 'demo-elsewhere-web',
+    }),
+  });
+}
+
+export function createDemoClient(config) {
+  if (!config?.firebase) throw new TypeError('Firebase client config is required');
+  const app = initializeApp(config.firebase, `elsewhere-demo-${Date.now()}`);
+  const auth = getAuth(app);
+  const storage = getStorage(app);
+  const storageEmulator = splitHost(config.storageEmulator, 'storageEmulator');
+  connectAuthEmulator(auth, required(config.authEmulatorUrl, 'authEmulatorUrl'), {
+    disableWarnings: true,
+  });
+  connectStorageEmulator(storage, storageEmulator.host, storageEmulator.port);
+  const apiBaseUrl = config.apiBaseUrl || '';
+  let signInPromise = null;
+
+  async function signIn() {
+    if (!signInPromise) signInPromise = signInAnonymously(auth);
+    const credential = await signInPromise;
+    return credential.user;
+  }
+
+  async function request(path, { method = 'GET', body } = {}) {
+    const user = auth.currentUser || await signIn();
+    const idToken = await user.getIdToken();
+    const response = await fetch(`${apiBaseUrl}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${idToken}`,
+        'content-type': 'application/json',
+        'x-firebase-appcheck': APP_CHECK_TOKEN,
+        'x-elsewhere-demo': DEMO_HEADER,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      const error = new Error(payload?.error?.message || `Request failed (${response.status})`);
+      error.code = payload?.error?.code || 'demo/request-failed';
+      error.status = response.status;
+      throw error;
+    }
+    return response.status === 204 ? null : response.json();
+  }
+
+  return Object.freeze({
+    signIn,
+    createImportBatch(items) {
+      return request('/v1/import-batches', { method: 'POST', body: { items } });
+    },
+    uploadOriginal(upload, file, onProgress = () => {}) {
+      if (typeof upload?.originalPath !== 'string' || !file) {
+        return Promise.reject(new TypeError('Upload target and File are required'));
+      }
+      return new Promise((resolve, reject) => {
+        const task = uploadBytesResumable(ref(storage, upload.originalPath), file, {
+          contentType: file.type,
+        });
+        task.on('state_changed', (snapshot) => {
+          onProgress(snapshot.totalBytes === 0 ? 0 : snapshot.bytesTransferred / snapshot.totalBytes);
+        }, reject, () => resolve(task.snapshot));
+      });
+    },
+    finalizeUpload(batchId, fragmentId) {
+      return request('/demo/v1/finalize-upload', {
+        method: 'POST',
+        body: { batchId, fragmentId },
+      });
+    },
+    getReceipt(batchId) {
+      return request(`/v1/import-batches/${encodeURIComponent(batchId)}`);
+    },
+    getSnapshot() {
+      return request('/demo/v1/snapshot');
+    },
+    saveInboxDecision(itemId, decision) {
+      return request(`/demo/v1/inbox/${encodeURIComponent(itemId)}/decision`, {
+        method: 'POST',
+        body: decision,
+      });
+    },
+    askElse(question, scope) {
+      return request('/demo/v1/else/ask', { method: 'POST', body: { question, scope } });
+    },
+    reset() {
+      return request('/demo/v1/reset', {
+        method: 'POST',
+        body: { confirm: 'reset-local-demo' },
+      });
+    },
+    resolveStoragePath(path) {
+      return getDownloadURL(ref(storage, path));
+    },
+  });
+}

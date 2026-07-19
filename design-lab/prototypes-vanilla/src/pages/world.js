@@ -42,7 +42,9 @@ export function renderWorldHome() {
 
       <section class="world-entries">
         <article class="world-entry world-entry--city will-flow" data-flow="2">
-          <div class="world-entry__visual"><img src="${bangkok.representativeAsset}" alt="Bangkok 代表原件"></div>
+          <div class="world-entry__visual">${bangkok.representativeAsset
+    ? `<img src="${bangkok.representativeAsset}" alt="Bangkok 代表原件">`
+    : '<div class="city-index__cluster" aria-label="Bangkok 记忆群"><i></i><i></i><i></i></div>'}</div>
           <div class="world-entry__copy">
             <span class="world-entry__label">最近的城市</span>
             <h2>Bangkok</h2>
@@ -162,7 +164,7 @@ export function renderCityHome(routeId = 'bangkok') {
   const isBangkok = city.slug === 'bangkok';
   const cityFragments = getCityFragments(routeId);
   const byId = (id) => cityFragments.find((fragment) => fragment.id === id);
-  const clusters = isBangkok ? [
+  const fixtureClusters = [
     {
       key: 'ari',
       name: 'Ari 早晨',
@@ -181,7 +183,22 @@ export function renderCityHome(routeId = 'bangkok') {
       meta: '待确认的步行',
       fragments: [byId('frag-old-town-1017-photo'), byId('frag-old-town-1017-menu')],
     },
-  ] : [];
+  ];
+  const hasFixtureComposition = fixtureClusters.some(({ fragments: members }) => members.some(Boolean));
+  const liveGroups = new Map();
+  for (const fragment of cityFragments) {
+    const key = fragment.placeId || 'unplaced';
+    const group = liveGroups.get(key) || [];
+    group.push(fragment);
+    liveGroups.set(key, group);
+  }
+  const liveClusters = [...liveGroups.entries()].slice(0, 3).map(([key, members], index) => ({
+    key: ['ari', 'river', 'oldtown'][index],
+    name: key === 'unplaced' ? '地点待确认' : members[0].placeCandidate,
+    meta: `${members.length} 个真实碎片`,
+    fragments: members.slice(0, 3),
+  }));
+  const clusters = isBangkok ? (hasFixtureComposition ? fixtureClusters : liveClusters) : [];
 
   const clusterHtml = clusters.map((cluster, index) => `
     <div class="city-cluster city-cluster--${cluster.key}" data-cluster-anchor style="--cluster-order:${index}">

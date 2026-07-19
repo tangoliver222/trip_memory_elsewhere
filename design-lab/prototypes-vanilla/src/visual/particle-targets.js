@@ -117,7 +117,7 @@ export function loadLandMask(url = '/assets/earth-topology.png') {
 
 /* ------------------------------------------------------------------ 工具 */
 
-const cityDirs = cities.map((city) => ({
+const cityDirections = () => cities.map((city) => ({
   slug: city.slug,
   dir: dirFromLatLng(city.coordinates.lat, city.coordinates.lng),
   weight: city.fragmentCount,
@@ -154,6 +154,7 @@ function globe(count) {
   const mainEnd = Math.floor(count * POOL_MAIN);
   const haloEnd = Math.floor(count * POOL_HALO);
   const R = GLOBE_RADIUS;
+  const cityDirs = cityDirections();
 
   for (let i = 0; i < mainEnd; i += 1) {
     if (landDirs) {

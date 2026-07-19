@@ -20,10 +20,19 @@ import { MemorySceneManager } from './visual/scene-manager.js';
 import { renderRoute as renderPageRoute } from './pages/render-route.js';
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';
+import { createDemoClient, demoClientConfigFromEnv } from './data/demo-client.js';
+import { bootstrapLiveData, isLiveDataMode, runtimeState } from './data/runtime.js';
 
 const root = document.querySelector('#app-root');
 const initialHash = window.location.hash || '#/onboarding';
-const store = createStore(createInitialState({ route: initialHash }));
+const liveDataMode = isLiveDataMode(import.meta.env);
+const store = createStore(createInitialState({
+  route: initialHash,
+  runtime: {
+    mode: liveDataMode ? 'live' : 'fixture',
+    status: liveDataMode ? 'connecting' : 'ready',
+  },
+}));
 const sceneManager = new MemorySceneManager();
 let sceneKey = '';
 let pageCleanup = null;
@@ -183,7 +192,65 @@ window.addEventListener('hashchange', () => {
   store.dispatch({ type: 'NAVIGATE', route });
 });
 
-updateShell();
+async function bootApplication() {
+  if (!liveDataMode) {
+    updateShell();
+    return;
+  }
+
+  root.innerHTML = `<main class="runtime-gate" aria-live="polite">
+    <span class="world-brand__mark">Elsewhere</span>
+    <p>正在连接你的记忆空间</p>
+  </main>`;
+  try {
+    const client = createDemoClient(demoClientConfigFromEnv(import.meta.env));
+    const snapshot = await bootstrapLiveData({
+      client,
+      fetchSnapshot: async () => {
+        await client.signIn();
+        const snapshot = await client.getSnapshot();
+        const liveFragments = await Promise.all(snapshot.fragments.map(async (fragment) => {
+          const path = fragment.thumbnailPath || fragment.originalPath;
+          if (!path) return fragment;
+          try {
+            const resolvedUrl = await client.resolveStoragePath(path);
+            return fragment.thumbnailPath
+              ? { ...fragment, resolvedThumbnailUrl: resolvedUrl }
+              : { ...fragment, resolvedOriginalUrl: resolvedUrl };
+          } catch {
+            return fragment;
+          }
+        }));
+        return { ...snapshot, fragments: liveFragments };
+      },
+    });
+    if (snapshot.fragments.length === 0) {
+      window.history.replaceState(null, '', '#/world/import');
+      store.dispatch({ type: 'NAVIGATE', route: '#/world/import', silentRender: true });
+    }
+    store.dispatch({
+      type: 'SET_RUNTIME',
+      value: { mode: 'live', status: 'ready', client, error: null },
+      silentRender: true,
+    });
+    updateShell();
+  } catch {
+    store.dispatch({
+      type: 'SET_RUNTIME',
+      value: { mode: 'live', status: 'error', client: null, error: runtimeState.error },
+      silentRender: true,
+    });
+    root.innerHTML = `<main class="runtime-gate runtime-gate--error" role="alert">
+      <span class="world-brand__mark">Elsewhere</span>
+      <h1>真实数据服务尚未连接</h1>
+      <p>请先启动 Firebase Emulator 与本地 demo server，再刷新此页面。</p>
+    </main>`;
+    window.__ELSEWHERE_VISUAL_READY__ = true;
+    document.documentElement.dataset.visualReady = 'true';
+  }
+}
+
+void bootApplication();
 
 const syncVisualViewport = () => document.documentElement.style.setProperty('--visual-viewport-height', `${window.visualViewport?.height || window.innerHeight}px`);
 syncVisualViewport();

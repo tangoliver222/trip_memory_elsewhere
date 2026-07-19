@@ -36,14 +36,21 @@ export function createInitialState(overrides = {}) {
     notes: {},
     reviewDecisions: {},
     connectionDecisions: {},
+    runtime: {
+      mode: 'fixture',
+      status: 'ready',
+      client: null,
+      error: null,
+    },
     settings: { ...fixtureSettings },
     cacheCleared: false,
     deletedTargets: [],
   };
 
+  const { runtime: runtimeOverride, ...cloneableOverrides } = overrides;
   return {
     ...defaults,
-    ...clone(overrides),
+    ...clone(cloneableOverrides),
     field: {
       ...defaults.field,
       ...(overrides.field || {}),
@@ -53,6 +60,7 @@ export function createInitialState(overrides = {}) {
     else: { ...defaults.else, ...(overrides.else || {}) },
     settings: { ...defaults.settings, ...(overrides.settings || {}) },
     overlays: clone(overrides.overlays || []),
+    runtime: { ...defaults.runtime, ...(runtimeOverride || {}) },
   };
 }
 
@@ -203,6 +211,8 @@ function reduce(state, action) {
       return { state: { ...state, reviewDecisions: { ...state.reviewDecisions, [action.reviewId]: action.value } }, result: {} };
     case 'SET_CONNECTION_DECISION':
       return { state: { ...state, connectionDecisions: { ...state.connectionDecisions, [action.connectionId || 'current']: action.value } }, result: {} };
+    case 'SET_RUNTIME':
+      return { state: { ...state, runtime: { ...state.runtime, ...action.value } }, result: {} };
     case 'SET_SETTING':
       return { state: { ...state, settings: { ...state.settings, [action.key]: action.value } }, result: {} };
     case 'CLEAR_CACHE':

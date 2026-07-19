@@ -21,26 +21,33 @@ function indexById(collection, name) {
   return Object.freeze(result);
 }
 
-export const indexes = Object.freeze({
-  citiesById: indexById(cities, 'cities'),
-  journeysById: indexById(journeys, 'journeys'),
-  fragmentsById: indexById(fragments, 'fragments'),
-  scenesById: indexById(scenes, 'scenes'),
-  placesById: indexById(places, 'places'),
-  connectionsById: indexById(connections, 'connections'),
-  discoveriesById: indexById(discoveries, 'discoveries'),
-  importBatchesById: indexById(importBatches, 'importBatches'),
-  userNotesById: indexById(userNotes, 'userNotes'),
-});
+export const indexes = {};
+export const cityRouteIds = {};
+let knownIds = new Set();
 
-export const cityRouteIds = Object.freeze(Object.fromEntries(
-  cities.flatMap((city) => [[city.id, city.id], [city.slug, city.id]]),
-));
+export function rebuildFixtureIndexes() {
+  Object.assign(indexes, {
+    citiesById: indexById(cities, 'cities'),
+    journeysById: indexById(journeys, 'journeys'),
+    fragmentsById: indexById(fragments, 'fragments'),
+    scenesById: indexById(scenes, 'scenes'),
+    placesById: indexById(places, 'places'),
+    connectionsById: indexById(connections, 'connections'),
+    discoveriesById: indexById(discoveries, 'discoveries'),
+    importBatchesById: indexById(importBatches, 'importBatches'),
+    userNotesById: indexById(userNotes, 'userNotes'),
+  });
+  for (const key of Object.keys(cityRouteIds)) delete cityRouteIds[key];
+  Object.assign(cityRouteIds, Object.fromEntries(
+    cities.flatMap((city) => [[city.id, city.id], [city.slug, city.id]]),
+  ));
+  knownIds = new Set([
+    world.id,
+    ...Object.values(indexes).flatMap((index) => Object.keys(index)),
+  ]);
+}
 
-const knownIds = new Set([
-  world.id,
-  ...Object.values(indexes).flatMap((index) => Object.keys(index)),
-]);
+rebuildFixtureIndexes();
 
 const missing = (problems, collection, id, field, value) => {
   if (value && !knownIds.has(value)) problems.push({ collection, id, field, missing: value });

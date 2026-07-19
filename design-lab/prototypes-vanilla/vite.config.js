@@ -5,6 +5,10 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 4174,
+    proxy: {
+      '/v1': 'http://127.0.0.1:8787',
+      '/demo': 'http://127.0.0.1:8787',
+    },
   },
   build: {
     outDir: 'dist',
