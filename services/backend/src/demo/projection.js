@@ -6,6 +6,9 @@ const VISIT_GAP_MS = 45 * 60 * 1000;
 const MORNING_START_MINUTES = 5 * 60;
 const MORNING_END_MINUTES = (11 * 60) + 30;
 const ACCEPTED_FACT_STATES = new Set(['suggested', 'confirmed', 'corrected']);
+const PROCESSING_STAGES = Object.freeze([
+  'original', 'deterministic', 'routing', 'ocr', 'relationship',
+]);
 
 export const DEMO_ANCHORS = Object.freeze([
   Object.freeze({
@@ -133,10 +136,186 @@ function nearestAnchor(geo) {
   return matches[0] ?? null;
 }
 
-function projectedFragment(fragment) {
+function addUnique(map, key, value, label) {
+  const serialized = JSON.stringify(value);
+  const existing = map.get(key);
+  if (existing && existing.serialized !== serialized) {
+    throw new TypeError(`Conflicting ${label}`);
+  }
+  if (!existing) map.set(key, { value, serialized });
+}
+
+function processingIndex(routingSnapshots, normalizedArtifacts, ownerId) {
+  if (!Array.isArray(routingSnapshots)
+    || !normalizedArtifacts
+    || typeof normalizedArtifacts !== 'object'
+    || Array.isArray(normalizedArtifacts)) {
+    throw new TypeError('Processing projection inputs are invalid');
+  }
+  const plans = new Map();
+  const heads = new Map();
+  const executions = new Map();
+  const results = new Map();
+  for (const snapshot of routingSnapshots) {
+    if (!snapshot || typeof snapshot !== 'object') {
+      throw new TypeError('Routing snapshot is invalid');
+    }
+    for (const plan of snapshot.routePlans ?? []) {
+      if (plan.ownerId !== ownerId) throw new TypeError('RoutePlan owner is invalid');
+      addUnique(plans, plan.id, plan, 'RoutePlan');
+    }
+    for (const head of snapshot.routingHeads ?? []) {
+      addUnique(heads, head.fragmentRef.id, head, 'RoutingHead');
+    }
+    for (const execution of snapshot.capabilityExecutions ?? []) {
+      if (execution.ownerId !== ownerId) throw new TypeError('CapabilityExecution owner is invalid');
+      addUnique(executions, execution.id, execution, 'CapabilityExecution');
+    }
+    for (const result of snapshot.capabilityResults ?? []) {
+      if (result.ownerId !== ownerId) throw new TypeError('CapabilityResult owner is invalid');
+      addUnique(results, result.id, result, 'CapabilityResult');
+    }
+  }
+  return Object.freeze({
+    plans: new Map([...plans].map(([id, entry]) => [id, entry.value])),
+    heads: new Map([...heads].map(([id, entry]) => [id, entry.value])),
+    executions: [...executions.values()].map(({ value }) => value).sort(compareIds),
+    results: new Map([...results].map(([id, entry]) => [id, entry.value])),
+    artifacts: new Map(Object.entries(normalizedArtifacts).sort(([left], [right]) => (
+      left.localeCompare(right)
+    ))),
+  });
+}
+
+function traceStage(stage, status, label, provider, detail) {
+  return { stage, status, label, provider, detail };
+}
+
+function deterministicStage(fragment) {
+  const state = fragment.processing?.deterministic?.state;
+  if (state === 'succeeded') {
+    return traceStage(
+      'deterministic', 'completed', '确定性整理', 'Elsewhere',
+      '格式、时间、GPS、Hash 与重复信息已读取',
+    );
+  }
+  if (state === 'failed_terminal') {
+    return traceStage(
+      'deterministic', 'failed', '确定性整理', 'Elsewhere',
+      '原件已保留，确定性处理未完成',
+    );
+  }
+  return traceStage('deterministic', 'pending', '确定性整理', 'Elsewhere', '等待确定性事实');
+}
+
+function routingStage(fragment, plan) {
+  if (!plan) {
+    return traceStage(
+      'routing',
+      fragment.processing?.deterministic?.state === 'failed_terminal' ? 'skipped' : 'pending',
+      '执行计划',
+      'Authoritative Router',
+      '等待确定性事实后编译计划',
+    );
+  }
+  if (plan.state === 'rejected') {
+    return traceStage('routing', 'failed', '执行计划', 'Authoritative Router', '执行计划未获批准');
+  }
+  if (['draft', 'superseded'].includes(plan.state)) {
+    return traceStage('routing', 'pending', '执行计划', 'Authoritative Router', '执行计划正在更新');
+  }
+  const role = plan.representation?.role === 'supporting' ? '辅助原件' : '代表原件';
+  return traceStage('routing', 'completed', '执行计划', 'Authoritative Router', `${role}的能力清单已确定`);
+}
+
+function readableOcrSkip(reasonCodes = []) {
+  if (reasonCodes.includes('not-document-like')) return '普通影像无需票据识别';
+  if (reasonCodes.includes('result-already-available')) return '已有可验证识别结果';
+  if (reasonCodes.includes('exact-duplicate')) return '重复原件复用代表项结果';
+  return '路由策略判定无需票据识别';
+}
+
+function boundedOcr(result, artifact) {
+  if (!result || !artifact
+    || artifact.executionId !== result.executionRef?.id
+    || artifact.fragmentId !== result.fragmentRef?.id
+    || typeof artifact.text !== 'string'
+    || !Number.isSafeInteger(artifact.pageCount)
+    || artifact.pageCount !== result.pageCount
+    || !Array.isArray(artifact.languageCodes)
+    || artifact.languageCodes.some((code) => typeof code !== 'string')) return null;
+  const textExcerpt = artifact.text.trim().slice(0, 320);
+  return {
+    provider: 'Google Document AI',
+    outcome: result.outcome,
+    pageCount: result.pageCount,
+    actualCostMicros: result.actualCostMicros,
+    textExcerpt,
+    languageCodes: [...new Set(artifact.languageCodes)].sort(),
+  };
+}
+
+function ocrStage(plan, execution, result, ocr) {
+  const decision = plan?.capabilities?.ocr;
+  if (!decision) {
+    return traceStage('ocr', 'pending', '票据识别', 'Google Document AI', '等待执行计划');
+  }
+  if (['skipped', 'blocked'].includes(decision.decision)) {
+    return traceStage('ocr', 'skipped', '票据识别', 'Google Document AI', readableOcrSkip(decision.reasonCodes));
+  }
+  if (decision.decision === 'deferred') {
+    return traceStage('ocr', 'unresolved', '票据识别', 'Google Document AI', '等待前置事实');
+  }
+  if (!execution || ['reserved', 'queued', 'claimed', 'calling', 'provider_succeeded', 'settling'].includes(execution.state)) {
+    return traceStage('ocr', 'pending', '票据识别', 'Google Document AI', '已批准，等待持久化结果');
+  }
+  if (execution.state === 'failed_terminal') {
+    return traceStage('ocr', 'failed', '票据识别', 'Google Document AI', '识别未完成，原件仍保留');
+  }
+  if (['failed_retryable', 'billing_uncertain'].includes(execution.state)) {
+    return traceStage('ocr', 'unresolved', '票据识别', 'Google Document AI', '识别结果尚未确认');
+  }
+  if (result?.outcome === 'unsupported') {
+    return traceStage('ocr', 'skipped', '票据识别', 'Google Document AI', '当前格式不支持识别');
+  }
+  if (result?.outcome === 'insufficient_input') {
+    return traceStage('ocr', 'unresolved', '票据识别', 'Google Document AI', '文字不足，未生成结构化结论');
+  }
+  if (execution.state === 'completed' && result?.outcome === 'completed' && ocr) {
+    return traceStage('ocr', 'completed', '票据识别', 'Google Document AI', `${ocr.pageCount} 页文字已验证`);
+  }
+  return traceStage('ocr', 'unresolved', '票据识别', 'Google Document AI', '持久化 artifact 尚未通过验证');
+}
+
+function processingFor(fragment, index) {
+  const head = index.heads.get(fragment.id);
+  const plan = head ? index.plans.get(head.currentPlanRef.id) : null;
+  const execution = plan ? index.executions.find((value) => (
+    value.routePlanRef?.id === plan.id
+      && value.routePlanRevision === plan.revision
+      && value.fragmentRef?.id === fragment.id
+      && value.capability === 'ocr'
+  )) : null;
+  const result = execution?.resultRef ? index.results.get(execution.resultRef.id) : null;
+  const artifact = result ? index.artifacts.get(result.id) : null;
+  const ocr = boundedOcr(result, artifact);
+  return {
+    trace: [
+      traceStage('original', 'completed', '原件已保存', 'Firebase Storage', '原件完整保留'),
+      deterministicStage(fragment),
+      routingStage(fragment, plan),
+      ocrStage(plan, execution, result, ocr),
+      traceStage('relationship', 'skipped', '记忆关系', 'Firestore projection', '尚未形成关系'),
+    ],
+    ocr,
+  };
+}
+
+function projectedFragment(fragment, index) {
   const temporal = resolveTemporal(fragment);
   const geo = resolveGeo(fragment);
   const place = nearestAnchor(geo);
+  const processing = processingFor(fragment, index);
   return {
     id: fragment.id,
     ownerId: fragment.ownerId,
@@ -156,6 +335,8 @@ function projectedFragment(fragment) {
     placeDistanceMeters: place ? Math.round(place.distanceMeters * 10) / 10 : null,
     cityId: place ? 'city-bangkok' : null,
     sourceIds: [fragment.id],
+    processingTrace: processing.trace,
+    ...(processing.ocr ? { ocr: processing.ocr } : {}),
     terminalFailure: fragment.status === 'failed'
       || fragment.processing?.deterministic?.state === 'failed_terminal',
   };
@@ -274,7 +455,29 @@ function makeInboxItems(fragments, decisions) {
   })).filter(({ id }) => !Object.hasOwn(decisions, id)).sort(compareIds);
 }
 
-function projectBatches(importBatches) {
+function aggregateStage(members, stage) {
+  const statuses = members.map((fragment) => (
+    fragment.processingTrace.find((item) => item.stage === stage)?.status ?? 'pending'
+  ));
+  if (statuses.length === 0) return 'pending';
+  if (statuses.includes('failed')) return 'failed';
+  if (statuses.includes('unresolved')) return 'unresolved';
+  if (statuses.includes('pending')) return 'pending';
+  if (statuses.every((status) => status === 'skipped')) return 'skipped';
+  return 'completed';
+}
+
+function emptyStage(stage) {
+  return {
+    original: traceStage('original', 'pending', '原件已保存', 'Firebase Storage', '等待原件'),
+    deterministic: traceStage('deterministic', 'pending', '确定性整理', 'Elsewhere', '等待确定性事实'),
+    routing: traceStage('routing', 'pending', '执行计划', 'Authoritative Router', '等待执行计划'),
+    ocr: traceStage('ocr', 'pending', '票据识别', 'Google Document AI', '等待执行计划'),
+    relationship: traceStage('relationship', 'skipped', '记忆关系', 'Firestore projection', '尚未形成关系'),
+  }[stage];
+}
+
+function projectBatches(importBatches, fragments) {
   return importBatches.map((batch) => ({
     id: batch.id,
     status: batch.status,
@@ -282,6 +485,12 @@ function projectBatches(importBatches) {
     inputCount: batch.inputCount,
     counters: { ...batch.counters },
     sourceIds: Object.keys(batch.uploads).sort(),
+    processingTrace: PROCESSING_STAGES.map((stage) => {
+      const members = fragments.filter((fragment) => fragment.batchId === batch.id);
+      const example = members[0]?.processingTrace.find((item) => item.stage === stage)
+        ?? emptyStage(stage);
+      return { ...example, status: aggregateStage(members, stage) };
+    }),
   })).sort(compareIds);
 }
 
@@ -294,6 +503,8 @@ export function projectCompetitionSnapshot({
   fragments,
   importBatches,
   decisions = {},
+  routingSnapshots = [],
+  normalizedArtifacts = {},
 } = {}) {
   if (typeof ownerId !== 'string' || ownerId.length === 0) throw new TypeError('ownerId is required');
   if (!Array.isArray(fragments) || !Array.isArray(importBatches)) {
@@ -307,14 +518,33 @@ export function projectCompetitionSnapshot({
     throw new TypeError('projection inputs must belong to ownerId');
   }
 
-  const projectedFragments = [...fragments].sort(compareIds).map(projectedFragment);
+  const index = processingIndex(routingSnapshots, normalizedArtifacts, ownerId);
+  let projectedFragments = [...fragments].sort(compareIds).map((fragment) => (
+    projectedFragment(fragment, index)
+  ));
   const places = makePlaces(projectedFragments);
   const placesById = new Map(places.map((place) => [place.id, place]));
   const visits = makeVisits(projectedFragments, placesById);
   const connections = makeConnections(visits, places);
   const discoveries = makeDiscoveries(projectedFragments, placesById);
+  const relatedSourceIds = new Set([
+    ...connections.flatMap(({ sourceIds }) => sourceIds),
+    ...discoveries.flatMap(({ sourceIds }) => sourceIds),
+  ]);
+  projectedFragments = projectedFragments.map((fragment) => ({
+    ...fragment,
+    processingTrace: fragment.processingTrace.map((item) => item.stage === 'relationship'
+      ? traceStage(
+        'relationship',
+        relatedSourceIds.has(fragment.id) ? 'completed' : 'skipped',
+        '记忆关系',
+        'Firestore projection',
+        relatedSourceIds.has(fragment.id) ? '已形成可回看的关系' : '尚未形成关系',
+      )
+      : item),
+  }));
   const inboxItems = makeInboxItems(projectedFragments, decisions);
-  const batches = projectBatches(importBatches);
+  const batches = projectBatches(importBatches, projectedFragments);
   const placedFragments = projectedFragments.filter(({ cityId }) => cityId !== null);
   const cities = placedFragments.length === 0 ? [] : [{
     id: 'city-bangkok',

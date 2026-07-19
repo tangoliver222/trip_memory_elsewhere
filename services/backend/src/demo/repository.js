@@ -22,11 +22,23 @@ function positiveIntegerString(value, name) {
   return normalized;
 }
 
-export function createDemoRepository({ db, storage, storageBucket }) {
+export function createDemoRepository({
+  db,
+  storage,
+  storageBucket,
+  routingRepository,
+  artifactReader,
+}) {
   if (!db) throw new TypeError('Firestore database is required');
   if (!storage) throw new TypeError('Storage manager is required');
   if (typeof storageBucket !== 'string' || !storageBucket) {
     throw new TypeError('storageBucket is required');
+  }
+  if (typeof routingRepository?.loadRoutingSnapshot !== 'function') {
+    throw new TypeError('routingRepository is required');
+  }
+  if (typeof artifactReader?.readNormalizedArtifact !== 'function') {
+    throw new TypeError('artifactReader is required');
   }
 
   const collection = (ownerId, name) => db.collection(`users/${ownerId}/${name}`);
@@ -44,6 +56,45 @@ export function createDemoRepository({ db, storage, storageBucket }) {
 
     listImportBatches(ownerId) {
       return list(ownerId, 'importBatches', parseImportBatch);
+    },
+
+    async listRoutingSnapshots(ownerId, batchIds) {
+      const uid = IdSchema.parse(ownerId);
+      if (!Array.isArray(batchIds)
+        || batchIds.length > 100
+        || batchIds.some((id) => !IdSchema.safeParse(id).success)
+        || new Set(batchIds).size !== batchIds.length) {
+        throw new TypeError('batchIds are invalid');
+      }
+      const snapshots = await Promise.all([...batchIds].sort().map((batchId) => (
+        routingRepository.loadRoutingSnapshot(uid, { batchId })
+      )));
+      return Object.freeze(snapshots.filter(Boolean));
+    },
+
+    async readNormalizedArtifacts(ownerId, routingSnapshots) {
+      const uid = IdSchema.parse(ownerId);
+      if (!Array.isArray(routingSnapshots)) throw new TypeError('routingSnapshots are invalid');
+      const results = new Map();
+      for (const snapshot of routingSnapshots) {
+        for (const result of snapshot?.capabilityResults ?? []) {
+          if (result.ownerId !== uid) throw new TypeError('CapabilityResult owner is invalid');
+          if (result.normalizedArtifactRef) results.set(result.id, result);
+        }
+      }
+      const artifacts = {};
+      for (const result of [...results.values()].sort(sortById)) {
+        try {
+          artifacts[result.id] = await artifactReader.readNormalizedArtifact({
+            ownerId: uid,
+            executionId: result.executionRef.id,
+            artifactRef: result.normalizedArtifactRef,
+          });
+        } catch {
+          // A missing or unverifiable private artifact remains unresolved in the public projection.
+        }
+      }
+      return Object.freeze(artifacts);
     },
 
     async listDecisions(ownerId) {

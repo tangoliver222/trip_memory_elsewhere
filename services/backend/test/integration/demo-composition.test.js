@@ -46,6 +46,14 @@ function demoHarness() {
       calls.push(['listDecisions', uid]);
       return { ...decisions };
     },
+    async listRoutingSnapshots(uid, batchIds) {
+      calls.push(['listRoutingSnapshots', uid, batchIds]);
+      return [{ batch: { id: BATCH_ID }, capabilityResults: [] }];
+    },
+    async readNormalizedArtifacts(uid, snapshots) {
+      calls.push(['readNormalizedArtifacts', uid, snapshots]);
+      return {};
+    },
     async getImportBatch(uid, batchId) {
       calls.push(['getImportBatch', uid, batchId]);
       return batchId === BATCH_ID ? batch : null;
@@ -134,7 +142,7 @@ test('demo routes remain absent from the production API composition', async (t) 
 });
 
 test('snapshot requires both verified identity and the isolated demo gate', async (t) => {
-  const { app } = demoHarness();
+  const { app, calls } = demoHarness();
   t.after(() => app.close());
   const {
     'x-elsewhere-demo': omittedDemoHeader,
@@ -155,6 +163,14 @@ test('snapshot requires both verified identity and the isolated demo gate', asyn
   });
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().ownerId, OWNER_ID);
+  assert.deepEqual(calls.find(([name]) => name === 'listRoutingSnapshots').slice(1), [
+    OWNER_ID,
+    [BATCH_ID],
+  ]);
+  assert.equal(calls.find(([name]) => name === 'readNormalizedArtifacts')[1], OWNER_ID);
+  const projectionInput = calls.find(([name]) => name === 'projectSnapshot')[1];
+  assert.equal(projectionInput.routingSnapshots.length, 1);
+  assert.deepEqual(projectionInput.normalizedArtifacts, {});
 });
 
 test('finalize accepts references only and uses server-read owner and object facts', async (t) => {

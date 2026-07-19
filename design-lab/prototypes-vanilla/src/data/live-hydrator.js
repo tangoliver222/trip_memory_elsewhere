@@ -48,6 +48,10 @@ function mappedFragments(snapshot) {
     evidencePreview: `${fragment.type} · ${dateLabel(fragment.capturedAt)} · ${timeLabel(fragment.capturedAt)}`,
     source: '持久化原件与确定性 metadata',
     sourceIds: [fragment.id],
+    processingTrace: Array.isArray(fragment.processingTrace)
+      ? fragment.processingTrace.map((stage) => ({ ...stage }))
+      : [],
+    ...(fragment.ocr ? { ocr: { ...fragment.ocr } } : {}),
   }));
 }
 
@@ -163,6 +167,9 @@ export function hydrateLiveCollections(snapshot) {
       failed: batch.counters.failed,
     },
     status: batch.status,
+    processingTrace: Array.isArray(batch.processingTrace)
+      ? batch.processingTrace.map((stage) => ({ ...stage }))
+      : [],
   }));
   const liveReviews = snapshot.inboxItems.map((item) => ({
     id: item.id,
@@ -190,12 +197,17 @@ export function hydrateLiveCollections(snapshot) {
   replace(discoveries, liveDiscoveries);
   replace(importBatches, liveBatches);
   replace(reviewQueue, liveReviews);
-  replace(processingItems, liveFragments.filter(({ status }) => ['uploaded', 'processing'].includes(status)).map((fragment) => ({
-    id: `processing-${fragment.id}`,
-    label: `${fragment.evidencePreview} 正在进行确定性处理`,
-    stage: 'deterministic',
-    status: 'processing',
-  })));
+  replace(processingItems, liveFragments.flatMap((fragment) => {
+    const stage = fragment.processingTrace.find(({ status }) => (
+      ['pending', 'unresolved'].includes(status)
+    ));
+    return stage ? [{
+      id: `processing-${fragment.id}`,
+      label: `${fragment.evidencePreview} · ${stage.detail}`,
+      stage: stage.stage,
+      status: stage.status,
+    }] : [];
+  }));
   replace(exceptions, liveFragments.filter(({ status }) => status === 'failed').map((fragment) => ({
     id: `exception-${fragment.id}`,
     kind: 'processing_failed',

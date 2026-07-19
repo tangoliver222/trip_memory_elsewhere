@@ -5,6 +5,22 @@ import { escapeHtml, renderMedia } from '../components/primitives.js';
 const primary = (label, route) => `<button class="primary-action" type="button" data-primary-action data-action="navigate" data-route="${route}">${label}</button>`;
 
 const typeLabel = { photo: '照片', receipt: '小票', ticket: '票根', menu: '菜单', screenshot: '截图' };
+const processingStatusLabel = {
+  pending: '等待', completed: '完成', skipped: '跳过', unresolved: '待确认', failed: '失败',
+};
+
+function renderProcessingTrace(trace = []) {
+  if (!Array.isArray(trace) || trace.length === 0) return '';
+  return `<section class="processing-provenance" aria-label="真实处理轨迹">
+    <div class="processing-provenance__heading"><p class="eyebrow">PERSISTED PROCESSING</p><h2>这次真实执行</h2></div>
+    <ol>${trace.map((stage, index) => `<li class="processing-stage processing-stage--${escapeHtml(stage.status)}">
+      <span class="processing-stage__index">${String(index + 1).padStart(2, '0')}</span>
+      <i aria-hidden="true"></i>
+      <div><strong>${escapeHtml(stage.label)}</strong><small>${escapeHtml(stage.provider)} · ${escapeHtml(stage.detail)}</small></div>
+      <em>${processingStatusLabel[stage.status] || escapeHtml(stage.status)}</em>
+    </li>`).join('')}</ol>
+  </section>`;
+}
 
 export function renderFragmentField(state) {
   const query = state.field?.filters?.query || '';
@@ -41,6 +57,7 @@ export function renderFragmentField(state) {
             ${renderMedia(fragment, { className: 'field-node__media' })}
             <span class="field-node__type">${typeLabel[fragment.type] || fragment.type}</span>
             <span class="field-node__label">${escapeHtml(fragment.evidencePreview)}</span>
+            ${fragment.ocr ? `<span class="field-node__provenance">Document AI · ${fragment.ocr.pageCount} 页</span>` : ''}
           </button>`;
         }).join('')}
         <div class="field-relation-flow" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -122,6 +139,7 @@ export function renderReceiptPage(batchId) {
         <div class="receipt-stream receipt-stream--review" aria-label="${batch.result.needsReview} 项待判断"><i></i><strong>${batch.result.needsReview}</strong><span>项待判断</span></div>
       </section>
       <p class="receipt-truth">${batch.result.failed === 0 ? '没有终态失败项。' : `${batch.result.failed} 个原件处理失败。`} 待判断内容不会被当作已确认事实。</p>
+      ${renderProcessingTrace(batch.processingTrace)}
       ${primary('进入 Bangkok 看变化', '#/world/city/bangkok')}
     </main>`,
   };

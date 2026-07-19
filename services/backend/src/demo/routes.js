@@ -72,6 +72,8 @@ export function registerDemoRoutes(app, {
   const repository = assertPort(demoRepository, [
     'listFragments',
     'listImportBatches',
+    'listRoutingSnapshots',
+    'readNormalizedArtifacts',
     'listDecisions',
     'getImportBatch',
     'getObjectFacts',
@@ -103,7 +105,22 @@ export function registerDemoRoutes(app, {
       repository.listImportBatches(ownerId),
       repository.listDecisions(ownerId),
     ]);
-    return projectSnapshot({ ownerId, fragments, importBatches, decisions });
+    const routingSnapshots = await repository.listRoutingSnapshots(
+      ownerId,
+      importBatches.map(({ id }) => id),
+    );
+    const normalizedArtifacts = await repository.readNormalizedArtifacts(
+      ownerId,
+      routingSnapshots,
+    );
+    return projectSnapshot({
+      ownerId,
+      fragments,
+      importBatches,
+      decisions,
+      routingSnapshots,
+      normalizedArtifacts,
+    });
   };
 
   app.get('/demo/v1/snapshot', { preHandler: guards }, async (request, reply) => {

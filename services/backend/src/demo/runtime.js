@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { GoogleGenAI } from '@google/genai';
 import { createFirebaseDerivativeStore } from '../adapters/firebase-derivative-store.js';
+import { createFirebaseCapabilityArtifactReader } from '../adapters/firebase-capability-artifact-reader.js';
 import { createFirebaseObjectInspector } from '../adapters/firebase-object-inspector.js';
 import { createFirebaseSourceMaterializer } from '../adapters/firebase-source-materializer.js';
 import { createFirebaseThumbnailReader } from '../adapters/firebase-thumbnail-reader.js';
@@ -77,6 +78,8 @@ export function createDemoRuntime({
     db: firebase.db,
     storage: firebase.storage,
     storageBucket,
+    routingRepository: repository,
+    artifactReader: createFirebaseCapabilityArtifactReader(storageConfig),
   });
   const hasGemini = Boolean(
     appConfig.apiKey || (appConfig.useVertex && appConfig.vertexProject),
