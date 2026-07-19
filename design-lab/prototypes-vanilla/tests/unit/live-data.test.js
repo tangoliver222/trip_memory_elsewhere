@@ -201,6 +201,69 @@ test('demo client deletes the signed-in test identity after owner data is cleare
   assert.deepEqual(deleted, [user]);
 });
 
+test('cloud upload completion polls the authoritative receipt and never calls demo finalize', async () => {
+  const requests = [];
+  const waits = [];
+  const receipts = [
+    { items: [{ fragmentId: 'frag_cloud01', state: 'pending' }] },
+    { items: [{ fragmentId: 'frag_cloud01', state: 'finalized' }] },
+  ];
+  const client = createDemoClient(demoClientConfigFromEnv(cloudEnvironment), {
+    appCheckFactory: () => Object.freeze({ getToken: async () => 'app-check-token' }),
+    signInAnonymouslyFn: async () => ({
+      user: Object.freeze({ getIdToken: async () => 'firebase-id-token' }),
+    }),
+    waitFn: async (milliseconds) => { waits.push(milliseconds); },
+    fetchFn: async (url, init) => {
+      requests.push([url, init.method]);
+      return Object.freeze({
+        ok: true,
+        status: 200,
+        json: async () => receipts.shift(),
+      });
+    },
+  });
+
+  await client.finalizeUpload('batch_cloud01', 'frag_cloud01');
+
+  assert.deepEqual(requests, [
+    ['http://127.0.0.1:8787/v1/import-batches/batch_cloud01', 'GET'],
+    ['http://127.0.0.1:8787/v1/import-batches/batch_cloud01', 'GET'],
+  ]);
+  assert.deepEqual(waits, [500]);
+});
+
+test('cloud snapshot waits through a retryable projection gap', async () => {
+  let calls = 0;
+  const waits = [];
+  const client = createDemoClient(demoClientConfigFromEnv(cloudEnvironment), {
+    appCheckFactory: () => Object.freeze({ getToken: async () => 'app-check-token' }),
+    signInAnonymouslyFn: async () => ({
+      user: Object.freeze({ getIdToken: async () => 'firebase-id-token' }),
+    }),
+    waitFn: async (milliseconds) => { waits.push(milliseconds); },
+    fetchFn: async () => {
+      calls += 1;
+      if (calls === 1) {
+        return Object.freeze({
+          ok: false,
+          status: 503,
+          json: async () => ({ error: { code: 'internal/error', message: 'retry' } }),
+        });
+      }
+      return Object.freeze({
+        ok: true,
+        status: 200,
+        json: async () => ({ revision: 'cloud-ready' }),
+      });
+    },
+  });
+
+  assert.deepEqual(await client.getSnapshot(), { revision: 'cloud-ready' });
+  assert.equal(calls, 2);
+  assert.deepEqual(waits, [500]);
+});
+
 test('hydration changes world counts and fragment identities from the snapshot', () => {
   const snapshot = snapshotWith(['frag_real_1', 'frag_real_2']);
   hydrateLiveCollections(snapshot);
