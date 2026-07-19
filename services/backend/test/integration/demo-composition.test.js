@@ -76,6 +76,12 @@ function demoHarness() {
       return { outcome: 'approved' };
     },
   });
+  const afterFinalize = Object.freeze({
+    async handle(input) {
+      calls.push(['afterFinalize', input]);
+      return { outcome: 'terminal_noop', executed: 0 };
+    },
+  });
   const projectSnapshot = (input) => {
     calls.push(['projectSnapshot', input]);
     return { ownerId: input.ownerId, revision: 'revision-1', fragments: input.fragments };
@@ -101,6 +107,7 @@ function demoHarness() {
     allowedAppIds: ['elsewhere-web-local'],
     demoRepository,
     finalizeUpload,
+    afterFinalize,
     elseService,
     projectSnapshot,
     storageBucket: BUCKET,
@@ -181,6 +188,10 @@ test('finalize accepts references only and uses server-read owner and object fac
   assert.equal(event.generation, '1740000000000001');
   assert.equal(Object.hasOwn(event, 'sizeBytes'), false);
   assert.equal(Object.hasOwn(event, 'contentType'), false);
+  assert.deepEqual(calls.find(([name]) => name === 'afterFinalize').slice(1), [{
+    uid: OWNER_ID,
+    batchId: BATCH_ID,
+  }]);
 });
 
 test('missing manifests and internal failures return stable redacted server request IDs', async (t) => {
