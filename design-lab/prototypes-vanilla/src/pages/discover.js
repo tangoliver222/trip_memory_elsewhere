@@ -31,10 +31,9 @@ export function renderDiscoverHome(state) {
           <svg aria-hidden="true" viewBox="0 0 900 520"><path d="M150 110 C 270 250, 300 90, 440 250 S 650 440, 770 180"/><circle cx="450" cy="255" r="60"/></svg>
           <div class="feature-entity"><i></i><span>${escapeHtml(context.entity?.name || '地点仍待确认')}</span></div>
         </div>
-        <div class="featured-copy"><span>${statusLabel[discovery.status]} · ${escapeHtml(discovery.timeRange)}</span><h2>${escapeHtml(discovery.title)}</h2><p>${escapeHtml(discovery.observation)}</p><button type="button" data-action="navigate" data-route="#/discover/${discovery.id}">打开这次显影 →</button></div>
+        <div class="featured-copy"><span>${statusLabel[discovery.status]} · ${escapeHtml(discovery.timeRange)}</span><h2>${escapeHtml(discovery.title)}</h2><p>${escapeHtml(discovery.observation)}</p><button type="button" data-primary-action data-action="navigate" data-route="#/discover/${discovery.id}">打开这次显影 →</button></div>
       </article>
       <div class="discovery-pager" aria-label="发现位置">${discoveries.map((item, index) => `<button type="button" data-action="navigate" data-route="#/discover/${item.id}" class="${index === activeIndex ? 'is-active' : ''}" aria-label="${escapeHtml(item.title)}"></button>`).join('')}</div>
-      ${primary('进入当前发现', `#/discover/${discovery.id}`)}
     </main>`,
   };
 }

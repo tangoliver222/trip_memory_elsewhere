@@ -50,13 +50,20 @@ gsap.registerPlugin(Flip);
  * Playwright 等待 window.__ELSEWHERE_VISUAL_READY__ === true。
  */
 window.__ELSEWHERE_VISUAL_READY__ = false;
-function scheduleVisualReady(route) {
+function scheduleVisualReady(route, sceneMode) {
   window.__ELSEWHERE_VISUAL_READY__ = false;
   delete document.documentElement.dataset.visualReady;
   clearTimeout(visualReadyTimer);
   const reduced = sceneManager.reducedMotion;
   const firstWorld = route?.pageId === 'world-home' && !window.sessionStorage.getItem('elsewhere:world-formed');
-  const wait = reduced ? 160 : (firstWorld ? 3400 : 1900);
+  const wait = reduced ? 160
+    : sceneMode === 'else' ? 2000
+      : sceneMode === 'lens' ? 1400
+        : firstWorld ? 4400
+          : route?.pageId === 'discover-detail' ? 4200
+            : route?.pageId === 'discover-home' ? 3400
+              : route?.pageId === 'world-city-home' ? 3200
+                : 1900;
   visualReadyTimer = setTimeout(async () => {
     try { await document.fonts?.ready; } catch { /* noop */ }
     window.__ELSEWHERE_VISUAL_READY__ = true;
@@ -154,7 +161,8 @@ function updateShell() {
   const desiredMode = topOverlay === 'fragmentLens' ? 'lens'
     : (state.else.open ? 'else' : view.sceneMode);
   const nextSceneKey = `${route.path}|${desiredMode}|${topOverlay}|${state.else.state}|${state.field.filters.query}`;
-  if (sceneKey !== nextSceneKey && sceneManager.debug().particlePoolId) {
+  const sceneChanged = sceneKey !== nextSceneKey;
+  if (sceneChanged && sceneManager.debug().particlePoolId) {
     const isFirstWorld = route.pageId === 'world-home' && !window.sessionStorage.getItem('elsewhere:world-formed');
     const mode = isFirstWorld ? 'world-intro' : desiredMode;
     const transition = route.pageId === 'world-city-home' && window.sessionStorage.getItem('elsewhere:previous-page') === 'world-home'
@@ -180,7 +188,7 @@ function updateShell() {
     route,
   });
   if (typeof cleanup === 'function') pageCleanup = cleanup;
-  if (routeChanged || renderedRoute === null) scheduleVisualReady(route);
+  if (routeChanged || renderedRoute === null || sceneChanged) scheduleVisualReady(route, desiredMode);
   renderedRoute = state.route;
   syncElseOrbPlacement(state);
 }

@@ -65,7 +65,6 @@ export function renderFragmentField(state) {
             ${fragment.ocr ? `<span class="field-node__provenance">Document AI · ${fragment.ocr.pageCount} 页</span>` : ''}
           </button>`;
         }).join('')}
-        <div class="field-relation-flow" aria-hidden="true"><i></i><i></i><i></i></div>
       </section>
       <aside class="field-legend"><strong>${fragments.length} 份代表原件</strong><span>完整索引共 ${world.totalFragments} 个碎片</span><span>拖拽移动 · 滚轮或双指缩放</span></aside>
       <div class="field-primary">${primary('导入更多碎片', '#/world/import')}</div>

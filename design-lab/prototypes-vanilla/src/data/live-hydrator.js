@@ -30,6 +30,15 @@ function journeyId(cityId) {
   return `journey-${cityId}`;
 }
 
+const fragmentTypeLabel = Object.freeze({
+  photo: '照片',
+  receipt: '小票',
+  ticket: '票根',
+  menu: '菜单',
+  screenshot: '截图',
+  text: '文字',
+});
+
 function mappedFragments(snapshot) {
   return snapshot.fragments.map((fragment) => ({
     id: fragment.id,
@@ -45,7 +54,7 @@ function mappedFragments(snapshot) {
     placeCandidate: fragment.placeName || '地点待确认',
     status: fragment.status === 'placed' ? 'confirmed' : fragment.status,
     displayRole: fragment.placeId ? 'primary-original' : 'unplaced-edge',
-    evidencePreview: `${fragment.type} · ${dateLabel(fragment.capturedAt)} · ${timeLabel(fragment.capturedAt)}`,
+    evidencePreview: `${fragmentTypeLabel[fragment.type] || '原件'} · ${dateLabel(fragment.capturedAt)} · ${timeLabel(fragment.capturedAt)}`,
     source: '持久化原件与确定性 metadata',
     sourceIds: [fragment.id],
     processingTrace: Array.isArray(fragment.processingTrace)
