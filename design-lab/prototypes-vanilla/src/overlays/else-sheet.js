@@ -21,7 +21,7 @@ export function renderElseSheet(state, route = state.route) {
       <p class="else-answer__text">${escapeHtml(answer.answer)}</p>
       <section class="else-sources"><span>支持这个回答的来源</span>${answer.sources.map((source) => `<button type="button" data-action="open-lens" data-fragment-id="${source.fragmentId}"><i></i><strong>${escapeHtml(source.label)}</strong><small>${escapeHtml(source.kind)}</small></button>`).join('')}</section>
       <section class="else-uncertainty"><span>${currentState === 'conflict' ? '两组来源为何没有合并' : '仍需要保留的边界'}</span><p>${escapeHtml(answer.uncertainty)}</p></section>
-      <button class="else-next-action" type="button" data-else-next-action data-action="navigate" data-route="${escapeHtml(answer.nextAction.href)}">${escapeHtml(answer.nextAction.label)} →</button>
+      ${answer.nextAction ? `<button class="else-next-action" type="button" data-else-next-action data-action="navigate" data-route="${escapeHtml(answer.nextAction.href)}">${escapeHtml(answer.nextAction.label)} →</button>` : ''}
     </div>` : `<div class="else-quick">
       <p>我会先看当前范围里的原件、时间、地点与连接，再回答。</p>
       <div class="else-suggestions">${(scope.suggestedQuestions || ['我反复去过哪里？','哪些碎片还没有落点？']).map((question) => `<button type="button" data-action="ask-else" data-question="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join('')}</div>

@@ -11,6 +11,14 @@ const DecisionSchema = z.strictObject({
   placeId: IdSchema.optional(),
 });
 const ResetSchema = z.strictObject({ confirm: z.literal('reset-local-demo') });
+const ElseScopeSchema = z.strictObject({
+  type: z.enum(['world', 'city', 'fragments', 'fragment', 'discovery']),
+  id: IdSchema.optional(),
+});
+const ElseQuestionSchema = z.strictObject({
+  question: z.string().trim().min(1).max(500),
+  scope: ElseScopeSchema,
+});
 
 const STATUS = Object.freeze({
   'demo/invalid-request': 400,
@@ -54,6 +62,7 @@ export function registerDemoRoutes(app, {
   requireAuth,
   demoRepository,
   finalizeUpload,
+  elseService,
   projectSnapshot,
   storageBucket,
   clock = () => new Date().toISOString(),
@@ -71,6 +80,7 @@ export function registerDemoRoutes(app, {
   if (typeof finalizeUpload?.handle !== 'function') {
     throw new TypeError('Finalize upload must implement handle()');
   }
+  const elseAnswers = assertPort(elseService, ['ask'], 'Else service');
   if (typeof projectSnapshot !== 'function') throw new TypeError('projectSnapshot is required');
   if (typeof storageBucket !== 'string' || !storageBucket) throw new TypeError('storageBucket is required');
   if (typeof clock !== 'function') throw new TypeError('clock is required');
@@ -83,20 +93,35 @@ export function registerDemoRoutes(app, {
   };
   const guards = [requireAuth, requireDemo];
 
+  const loadSnapshot = async (ownerId) => {
+    const [fragments, importBatches, decisions] = await Promise.all([
+      repository.listFragments(ownerId),
+      repository.listImportBatches(ownerId),
+      repository.listDecisions(ownerId),
+    ]);
+    return projectSnapshot({ ownerId, fragments, importBatches, decisions });
+  };
+
   app.get('/demo/v1/snapshot', { preHandler: guards }, async (request, reply) => {
     try {
-      const ownerId = request.authContext.uid;
-      const [fragments, importBatches, decisions] = await Promise.all([
-        repository.listFragments(ownerId),
-        repository.listImportBatches(ownerId),
-        repository.listDecisions(ownerId),
-      ]);
-      return reply.code(200).send(projectSnapshot({
-        ownerId,
-        fragments,
-        importBatches,
-        decisions,
-      }));
+      return reply.code(200).send(await loadSnapshot(request.authContext.uid));
+    } catch (error) {
+      const response = errorResponse(error, request.id);
+      return reply.code(response.status).send(response.body);
+    }
+  });
+
+  app.post('/demo/v1/else/ask', { preHandler: guards }, async (request, reply) => {
+    try {
+      const body = ElseQuestionSchema.safeParse(request.body);
+      if (!body.success) throw new DemoError('demo/invalid-request');
+      const snapshot = await loadSnapshot(request.authContext.uid);
+      const answer = await elseAnswers.ask({
+        snapshot,
+        question: body.data.question,
+        scope: body.data.scope,
+      });
+      return reply.code(200).send(answer);
     } catch (error) {
       const response = errorResponse(error, request.id);
       return reply.code(response.status).send(response.body);

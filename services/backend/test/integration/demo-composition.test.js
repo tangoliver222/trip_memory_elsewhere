@@ -80,6 +80,20 @@ function demoHarness() {
     calls.push(['projectSnapshot', input]);
     return { ownerId: input.ownerId, revision: 'revision-1', fragments: input.fragments };
   };
+  const elseService = Object.freeze({
+    async ask(input) {
+      calls.push(['elseAsk', input]);
+      return {
+        status: 'completed',
+        state: 'found',
+        answer: '只使用这位用户刚保存的原件回答。',
+        sources: [{ fragmentId: FRAGMENT_ID, label: 'Bangkok photo.jpg', kind: 'photo' }],
+        uncertainty: '仍需保留确定性边界。',
+        nextAction: null,
+        scope: { label: '全部旅行世界' },
+      };
+    },
+  });
   const app = createDemoComposition({
     appConfig,
     repository: createMemoryRepository(),
@@ -87,6 +101,7 @@ function demoHarness() {
     allowedAppIds: ['elsewhere-web-local'],
     demoRepository,
     finalizeUpload,
+    elseService,
     projectSnapshot,
     storageBucket: BUCKET,
     randomUUID: () => '00000000-0000-4000-8000-000000000001',
@@ -208,4 +223,35 @@ test('decisions and reset stay scoped to the verified owner', async (t) => {
   });
   assert.equal(reset.statusCode, 204);
   assert.equal(calls.find(([name]) => name === 'resetOwner')[1], OWNER_ID);
+});
+
+test('Else receives a server-projected owner snapshot and rejects forged client evidence', async (t) => {
+  const { app, calls } = demoHarness();
+  t.after(() => app.close());
+
+  const forged = await app.inject({
+    method: 'POST',
+    url: '/demo/v1/else/ask',
+    headers: authHeaders,
+    payload: {
+      question: '我反复去过哪里？',
+      scope: { type: 'world' },
+      evidence: [{ id: 'invented-fragment' }],
+    },
+  });
+  assert.equal(forged.statusCode, 400);
+  assert.equal(calls.some(([name]) => name === 'elseAsk'), false);
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/demo/v1/else/ask',
+    headers: authHeaders,
+    payload: { question: '我反复去过哪里？', scope: { type: 'world' } },
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().answer, '只使用这位用户刚保存的原件回答。');
+  const input = calls.find(([name]) => name === 'elseAsk')[1];
+  assert.equal(input.snapshot.ownerId, OWNER_ID);
+  assert.equal(input.snapshot.revision, 'revision-1');
+  assert.equal(input.question, '我反复去过哪里？');
 });

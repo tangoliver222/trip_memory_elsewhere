@@ -3,6 +3,7 @@ import { answerElse } from '../else/answer-engine.js';
 import { hydrateLiveCollections } from '../data/live-hydrator.js';
 import { runLiveImport } from '../data/live-import.js';
 import { resolveSnapshotMedia } from '../data/runtime.js';
+import { askElseWithRuntime } from '../data/live-else.js';
 
 const valueFor = (element) => element.dataset.value ?? element.value;
 
@@ -41,13 +42,43 @@ export function createActionController({ root, store }) {
       });
     }
   };
-  const askElse = (question) => {
+  const askElse = async (question) => {
     const query = question?.trim();
     if (!query) return;
     store.dispatch({ type: 'SET_ELSE', value: { open: true, state: 'reading', query, answer: null, sources: [] } });
-    const timer = setTimeout(() => {
+    const state = store.getState();
+    if (state.runtime.mode === 'live') {
+      try {
+        const answer = await askElseWithRuntime({
+          runtime: state.runtime,
+          route: state.route,
+          selectedFragmentId: state.selectedFragmentId,
+          question: query,
+          fixtureAnswer: answerElse,
+        });
+        store.dispatch({ type: 'SET_ELSE', value: { open: true, state: answer.state, query, answer, sources: answer.sources } });
+      } catch {
+        const answer = {
+          state: 'uncertain',
+          answer: 'Else 当前无法连接 Gemini，请检查后端配置与网络后重试。',
+          sources: [],
+          uncertainty: '这次没有生成模型回答，也没有用固定文案替代。',
+          nextAction: null,
+          scope: { label: '当前记忆范围' },
+        };
+        store.dispatch({ type: 'SET_ELSE', value: { open: true, state: answer.state, query, answer, sources: [] } });
+      }
+      return;
+    }
+    const timer = setTimeout(async () => {
       timers.delete(timer);
-      const answer = answerElse({ route: store.getState().route, question: query });
+      const answer = await askElseWithRuntime({
+        runtime: state.runtime,
+        route: state.route,
+        selectedFragmentId: state.selectedFragmentId,
+        question: query,
+        fixtureAnswer: answerElse,
+      });
       store.dispatch({ type: 'SET_ELSE', value: { open: true, state: answer.state, query, answer, sources: answer.sources } });
     }, 520);
     timers.add(timer);
@@ -76,8 +107,8 @@ export function createActionController({ root, store }) {
     if (action === 'connection-decision') store.dispatch({ type: 'SET_CONNECTION_DECISION', value: target.dataset.value });
     if (action === 'set-discovery-filter') store.dispatch({ type: 'SET_DISCOVERY_FILTER', filter: target.dataset.value });
     if (action === 'save-discovery') store.dispatch({ type: 'SAVE_DISCOVERY', discoveryId: target.dataset.discoveryId });
-    if (action === 'ask-else') askElse(target.dataset.question);
-    if (action === 'submit-else') askElse(store.getState().else.query);
+    if (action === 'ask-else') void askElse(target.dataset.question);
+    if (action === 'submit-else') void askElse(store.getState().else.query);
     if (action === 'open-delete') store.dispatch({ type: 'OPEN_DELETE', targetId: target.dataset.targetId });
     if (action === 'confirm-delete') store.dispatch({ type: 'CONFIRM_DELETE', targetId: target.dataset.targetId });
     if (action === 'clear-cache') store.dispatch({ type: 'CLEAR_CACHE' });

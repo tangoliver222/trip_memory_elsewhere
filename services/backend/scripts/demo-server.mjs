@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { GoogleGenAI } from '@google/genai';
 import { createFirebaseDerivativeStore } from '../src/adapters/firebase-derivative-store.js';
 import { createFirebaseObjectInspector } from '../src/adapters/firebase-object-inspector.js';
 import { createFirebaseSourceMaterializer } from '../src/adapters/firebase-source-materializer.js';
@@ -8,8 +9,9 @@ import { createMediaMetadataReader } from '../src/adapters/media-metadata-reader
 import { createSharpImageProcessor } from '../src/adapters/sharp-image-processor.js';
 import { createSharpRoutingFeatureReader } from '../src/adapters/sharp-routing-feature-reader.js';
 import { createCapabilityScheduler } from '../src/capabilities/scheduler.js';
-import { config } from '../src/config.js';
+import { config, hasCredentials } from '../src/config.js';
 import { createDemoComposition } from '../src/demo/composition.js';
+import { createDemoElseService, createGeminiElseProvider } from '../src/demo/else-service.js';
 import { projectCompetitionSnapshot } from '../src/demo/projection.js';
 import { createDemoRepository } from '../src/demo/repository.js';
 import { createStorageFinalizedPipeline } from '../src/ingestion/pipeline.js';
@@ -98,6 +100,16 @@ const demoRepository = createDemoRepository({
   storage: firebase.storage,
   storageBucket,
 });
+const geminiClient = hasCredentials()
+  ? new GoogleGenAI(config.useVertex
+    ? { vertexai: true, project: config.vertexProject, location: config.vertexLocation }
+    : { apiKey: config.apiKey })
+  : null;
+const elseService = createDemoElseService({
+  provider: geminiClient
+    ? createGeminiElseProvider({ client: geminiClient, model: config.models.FAST_MULTIMODAL })
+    : null,
+});
 const app = createDemoComposition({
   appConfig: config,
   repository,
@@ -105,6 +117,7 @@ const app = createDemoComposition({
   allowedAppIds: ['elsewhere-web-local'],
   demoRepository,
   finalizeUpload,
+  elseService,
   projectSnapshot: projectCompetitionSnapshot,
   storageBucket,
   randomUUID,
