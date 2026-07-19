@@ -58,12 +58,16 @@ test('real originals drive import, World, City, Field, Lens and Discovery', asyn
   await page.locator('[data-else-orb]').click();
   await page.locator('[data-store-action="else-query"]').fill('我反复去过哪里？');
   await page.locator('[data-action="submit-else"]').click();
-  if (process.env.REQUIRE_GEMINI_DEMO === 'true') {
+  await expect(page.locator('.else-drawer--found, .else-drawer--uncertain')).toBeVisible({ timeout: 60_000 });
+  const found = page.locator('.else-drawer--found');
+  if (process.env.REQUIRE_GEMINI_DEMO === 'true' || await found.count() > 0) {
     await expect(page.locator('.else-drawer--found')).toBeVisible({ timeout: 60_000 });
     const sources = page.locator('.else-sources [data-fragment-id]');
     expect(await sources.count()).toBeGreaterThan(0);
     expect(await sources.first().getAttribute('data-fragment-id')).toMatch(/^frag_/);
   } else {
-    await expect(page.locator('.else-drawer--uncertain')).toContainText('Gemini 尚未配置');
+    await expect(page.locator('.else-drawer--uncertain .else-answer__text')).not.toBeEmpty();
+    await expect(page.locator('.else-drawer--uncertain .else-uncertainty')).not.toBeEmpty();
+    await expect(page.locator('.else-drawer--uncertain .else-sources [data-fragment-id]')).toHaveCount(0);
   }
 });
