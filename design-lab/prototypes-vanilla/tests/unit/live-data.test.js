@@ -291,6 +291,50 @@ test('particle targets consume the changed live collections', () => {
   assert.notDeepEqual([...oneCityTarget], [...emptyTarget]);
 });
 
+test('empty live data renders a stable city state instead of dereferencing fixture data', () => {
+  hydrateLiveCollections(snapshotWith([]));
+  const state = createInitialState({ runtime: { mode: 'live' } });
+
+  assert.doesNotThrow(() => renderRoute('#/world/city/bangkok', state));
+  const html = renderRoute('#/world/city/bangkok', state).html;
+  assert.match(html, /还没有形成城市记忆群/);
+  assert.match(html, /放入碎片/);
+});
+
+test('live route copy contains neither mojibake nor unresolved JavaScript values', () => {
+  hydrateLiveCollections(snapshotWith(['frag_clean_copy']));
+  const state = createInitialState({ runtime: { mode: 'live' } });
+  const html = [
+    renderRoute('#/world', state).html,
+    renderRoute('#/world/city/bangkok', state).html,
+    renderRoute('#/world/fragments', state).html,
+  ].join('\n');
+
+  assert.doesNotMatch(html, /\uFFFD|Ã.|Â.|â.|undefined|null|\[object Object\]/i);
+});
+
+test('Fragment Field compiles particle clusters from the current live collections', () => {
+  hydrateLiveCollections(snapshotWith(['frag_field_a', 'frag_field_b']));
+  const state = createInitialState({ runtime: { mode: 'live' } });
+  const payload = renderRoute('#/world/fragments', state).scenePayload;
+
+  assert.deepEqual(payload.clusters.map(({ slug, weight }) => ({ slug, weight })), [
+    { slug: 'bangkok', weight: 2 },
+  ]);
+
+  const small = createSemanticTarget('multiCityField', 180, {
+    clusters: [{ slug: 'bangkok', weight: 2 }],
+  });
+  const large = createSemanticTarget('multiCityField', 180, {
+    clusters: [
+      { slug: 'bangkok', weight: 20 },
+      { slug: 'tokyo', weight: 8 },
+      { slug: 'unplaced', weight: 4 },
+    ],
+  });
+  assert.notDeepEqual([...small], [...large]);
+});
+
 test('live World and Fragment Field copy contains no frozen fixture totals', () => {
   hydrateLiveCollections(snapshotWith(['frag_live_a', 'frag_live_b']));
   const state = createInitialState({ runtime: { mode: 'live' } });

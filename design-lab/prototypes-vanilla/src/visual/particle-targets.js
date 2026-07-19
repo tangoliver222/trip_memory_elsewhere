@@ -277,12 +277,25 @@ function cityCluster(count, payload = {}) {
 /** 全部碎片：多城市星团。focusCity 时目标城市入中心，其余退远。 */
 function multiCityField(count, payload = {}) {
   const focus = payload.focusCity || null;
-  const clusters = [
-    { slug: 'bangkok', x: -2.6, y: 2.2, z: -6, r: 4.6, weight: 63 },
-    { slug: 'tokyo', x: 5.4, y: 5.4, z: -30, r: 3.6, weight: 81 },
-    { slug: 'chiang-mai', x: -6.6, y: -3.4, z: -22, r: 2.8, weight: 28 },
-    { slug: 'unplaced', x: 3.4, y: -6.4, z: -12, r: 2.2, weight: 10 },
-  ].map((cluster) => {
+  const slots = [
+    { x: -2.6, y: 2.2, z: -6, r: 4.6 },
+    { x: 5.4, y: 5.4, z: -30, r: 3.6 },
+    { x: -6.6, y: -3.4, z: -22, r: 2.8 },
+    { x: 3.4, y: -6.4, z: -12, r: 2.2 },
+  ];
+  const source = Array.isArray(payload.clusters) && payload.clusters.length
+    ? payload.clusters.filter(({ weight }) => Number(weight) > 0)
+    : [{ slug: 'unplaced', weight: 1 }];
+  const clusters = source.map((item, index) => {
+    const angle = index * 2.399963229728653;
+    const ring = 4.2 + Math.floor(index / slots.length) * 2.4;
+    const slot = slots[index] || {
+      x: Math.cos(angle) * ring,
+      y: Math.sin(angle) * ring,
+      z: -12 - (index % 4) * 7,
+      r: 2.2,
+    };
+    const cluster = { ...slot, slug: item.slug, weight: Number(item.weight) };
     if (!focus) return cluster;
     if (cluster.slug === focus) return { ...cluster, x: 0, y: 0.6, z: -3, r: cluster.r * 1.15 };
     return { ...cluster, x: cluster.x * 1.7, y: cluster.y * 1.55, z: cluster.z - 26 };
@@ -328,7 +341,7 @@ function multiCityField(count, payload = {}) {
   }
 
   // 强调层：聚焦城市核心（或 Bangkok 默认）
-  const core = clusters.find((cluster) => cluster.slug === (focus || 'bangkok')) || clusters[0];
+  const core = clusters.find((cluster) => cluster.slug === focus) || clusters[0];
   for (let i = haloEnd; i < count; i += 1) {
     write(result, i, core.x + gaussian(i, 37) * 0.8, core.y + gaussian(i, 38) * 0.8, core.z + 1.2);
   }

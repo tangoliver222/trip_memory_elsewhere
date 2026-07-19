@@ -26,13 +26,18 @@ export function renderFragmentField(state) {
   const query = state.field?.filters?.query || '';
   const layout = createFieldLayout(query, { compact: Boolean(globalThis.innerWidth && globalThis.innerWidth <= 700) });
   const positions = Object.fromEntries(layout.map((node) => [node.id, node]));
+  const clusters = cities
+    .filter(({ fragmentCount }) => fragmentCount > 0)
+    .map((city) => ({ slug: city.slug, weight: city.fragmentCount }));
+  const unplacedCount = fragments.filter(({ cityId }) => !cityId).length;
+  if (unplacedCount > 0) clusters.push({ slug: 'unplaced', weight: unplacedCount });
   return {
     sceneMode: 'fragment-field',
-    scenePayload: { target: 'field', query, filters: state.field?.filters },
+    scenePayload: { target: 'field', query, filters: state.field?.filters, clusters },
     afterRender({ pageRoot, store, sceneManager }) {
       const viewport = pageRoot?.querySelector?.('[data-field-viewport]');
       if (!viewport) return null;
-      const controller = createFieldController({ viewport, store, sceneManager });
+      const controller = createFieldController({ viewport, store, sceneManager, scenePayload: { clusters } });
       const search = pageRoot.querySelector('[data-field-search]');
       const onSearch = (event) => controller.search(event.target.value);
       search?.addEventListener('input', onSearch);

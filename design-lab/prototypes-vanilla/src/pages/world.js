@@ -158,9 +158,28 @@ export function renderWorldCities() {
   };
 }
 
+function renderEmptyCityHome() {
+  return {
+    sceneMode: 'quiet-tool',
+    scenePayload: { target: 'quiet', opacity: 0.2 },
+    html: `<main class="page city-world city-world--empty" data-page-id="world-city-home">
+      <header class="city-head">
+        <p class="eyebrow">城市记忆群</p>
+        <h1>还没有形成城市记忆群</h1>
+        <p>带有时间或地点的真实原件进入世界后，城市会在这里显影。</p>
+      </header>
+      <button class="primary-action primary-action--filled" type="button" data-primary-action data-action="navigate" data-route="#/world/import">放入碎片</button>
+      <button class="text-action" type="button" data-action="navigate" data-route="#/world">返回世界</button>
+    </main>`,
+    afterRender: null,
+  };
+}
+
 /** 城市世界：三个记忆聚类（混合媒介）+ 两个主方向。 */
-export function renderCityHome(routeId = 'bangkok') {
+export function renderCityHome(routeId = 'bangkok', state = {}) {
   const city = getCityByRouteId(routeId) || cities[0];
+  if (!city) return renderEmptyCityHome();
+  const isLive = state.runtime?.mode === 'live';
   const isBangkok = city.slug === 'bangkok';
   const cityFragments = getCityFragments(routeId);
   const byId = (id) => cityFragments.find((fragment) => fragment.id === id);
@@ -198,7 +217,9 @@ export function renderCityHome(routeId = 'bangkok') {
     meta: `${members.length} 个真实碎片`,
     fragments: members.slice(0, 3),
   }));
-  const clusters = isBangkok ? (hasFixtureComposition ? fixtureClusters : liveClusters) : [];
+  const clusters = isLive
+    ? liveClusters
+    : (isBangkok && hasFixtureComposition ? fixtureClusters : []);
 
   const clusterHtml = clusters.map((cluster, index) => `
     <div class="city-cluster city-cluster--${cluster.key}" data-cluster-anchor style="--cluster-order:${index}">
@@ -222,14 +243,14 @@ export function renderCityHome(routeId = 'bangkok') {
         </div>
       </header>
 
-      ${isBangkok ? `<section class="city-cluster-space" aria-label="城市碎片场">${clusterHtml}</section>
+      ${clusters.length ? `<section class="city-cluster-space" aria-label="城市碎片场">${clusterHtml}</section>
       <div class="city-observation will-flow">
-        <p>照片、小票、菜单与地图在同一空间中靠近；三个早晨都从 Ari 开始。</p>
+        <p>${escapeHtml(isLive ? city.fact : '照片、小票、菜单与地图在同一空间中靠近；三个早晨都从 Ari 开始。')}</p>
         <strong>${city.fragmentCount} 个碎片 · ${city.placeCount} 个地点</strong>
       </div>` : `<section class="city-cluster-space city-cluster-space--empty"><p>${escapeHtml(city.fact)}</p></section>`}
 
       <div class="city-foot will-flow">
-        <button class="primary-action primary-action--filled" type="button" data-primary-action data-action="navigate" data-route="#/world/city/${city.slug}/capsule">${isBangkok ? '回到这段日子' : '查看城市索引'}</button>
+        <button class="primary-action primary-action--filled" type="button" data-primary-action data-action="navigate" data-route="#/world/city/${city.slug}/capsule">${isLive || isBangkok ? '回到这段日子' : '查看城市索引'}</button>
         <div class="city-foot__aux">
           <button class="text-action" type="button" data-action="navigate" data-route="#/world/inbox">待确认 ${reviewQueue.length}</button>
           <button class="text-action" type="button" data-action="navigate" data-route="#/world/fragments">查看该城市全部碎片 →</button>
