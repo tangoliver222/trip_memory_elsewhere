@@ -142,25 +142,30 @@
 - [x] Guard the test with `RUN_REAL_GOOGLE_PROVIDER_TESTS=true`; otherwise skip rather than fake success.
 - [x] Run `RUN_REAL_GOOGLE_PROVIDER_TESTS=true REQUIRE_GEMINI_DEMO=true node scripts/run-google-cloud-demo.mjs --verify`; result on 2026-07-19: `1 passed (1.8m)`, one Document AI request and one Gemini request.
 - [x] Run backend ordinary tests, 70-test Emulator suite, frontend tests/build, old emulator demo E2E, new cloud E2E, and `git diff --check`.
-- [ ] Commit: `test(cloud): verify Firebase Document AI and Gemini demo`.
+- [x] Commit: `test(cloud): verify Firebase Document AI and Gemini demo` (`6f5b5fe`).
 
 ### Task 7: Deploy existing service roots to Cloud Run after Task 6 is green
 
 **Files:**
+- Create: `.gcloudignore`
+- Create: `cloudbuild.yaml`
 - Create: `scripts/deploy-google-cloud-services.sh`
+- Create: `services/backend/scripts/cloud-run-ingestion-smoke.mjs`
+- Modify: `services/backend/package.json`
+- Modify: `design-lab/prototypes-vanilla/vite.config.js`
 - Modify: `firebase/firebase.json`
 - Create: `docs/demo/2026-07-19-cloud-run-deployment.md`
 
 **Produces:** One image, three services (`api`, `ingestion`, `capability-worker`), one Cloud Tasks queue, Eventarc trigger, and least-privilege identities.
 
-- [ ] Create separate API, ingestion, worker, Eventarc invoker, and task invoker service accounts using only roles frozen in `docs/implementation/capability-execution-ocr-v1.md`.
-- [ ] Create Artifact Registry and one Cloud Tasks queue in Singapore.
-- [ ] Build one image digest with Cloud Build and deploy all three mutually exclusive service modes with minimum instances zero.
-- [ ] Keep API browser-accessible behind Auth/App Check; ingestion allows only Eventarc; worker allows only Cloud Tasks OIDC.
-- [ ] Connect Storage finalized Eventarc and Cloud Tasks. Store Gemini key in Secret Manager; ingestion cannot access Gemini/Document AI and worker cannot enqueue Tasks.
-- [ ] Build/deploy Hosting with cloud public values and API rewrite, then run health checks and a new-owner import without the local coordinator.
-- [ ] If IAM/deployment is not green before recording freeze, retain Task 6 as the verified path and document Cloud Run as not staging-verified.
-- [ ] Commit: `chore(cloud): deploy isolated Elsewhere services`.
+- [x] Create separate API, ingestion, worker, Eventarc invoker, and task invoker service accounts using only roles frozen in `docs/implementation/capability-execution-ocr-v1.md`.
+- [x] Create Artifact Registry and one Cloud Tasks queue in Singapore.
+- [x] Build one image digest with Cloud Build and deploy all three mutually exclusive service modes with minimum instances zero.
+- [x] Keep API browser-accessible behind Auth/App Check; ingestion allows only Eventarc; worker allows only Cloud Tasks OIDC.
+- [x] Connect Storage finalized Eventarc and Cloud Tasks. Do not deploy an unused Gemini secret; ingestion cannot access Gemini/Document AI and worker cannot enqueue Tasks.
+- [x] Run readiness/IAM checks and a real new-owner ImportBatch → Storage → Eventarc → Tasks → Document AI import without the local coordinator.
+- [x] Retain Task 6 as the verified recording path and document Hosting as intentionally not deployed until the reviewed production snapshot/Else read model exists.
+- [x] Commit: `chore(cloud): deploy isolated Elsewhere services`.
 
 ### Task 8: Freeze recording evidence
 

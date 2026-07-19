@@ -20,6 +20,14 @@
     ],
     "rewrites": [
       {
+        "source": "/v1/**",
+        "run": {
+          "serviceId": "elsewhere-api",
+          "region": "asia-southeast1",
+          "pinTag": true
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

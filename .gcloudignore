@@ -1,0 +1,17 @@
+**
+!.gcloudignore
+!cloudbuild.yaml
+!services/
+!services/backend/
+!services/backend/Dockerfile
+!services/backend/package.json
+!services/backend/package-lock.json
+!services/backend/src/
+!services/backend/src/**
+!services/backend/scripts/
+!services/backend/scripts/**
+!design-lab/
+!design-lab/prototypes-vanilla/
+!design-lab/prototypes-vanilla/src/
+!design-lab/prototypes-vanilla/src/fixtures/
+!design-lab/prototypes-vanilla/src/fixtures/**
