@@ -520,6 +520,11 @@ export class MemorySceneManager {
       paused: this.paused,
       trackedTimelines: flowDebug.tracked,
       activeTimelines: flowDebug.active,
+      trackedAnchorCount: this.trackedAnchorLayout?.elements.length || 0,
+      tracksWorldElement: Boolean(this.trackedWorldElement),
+      groupPosition: this.group
+        ? { x: this.group.position.x, y: this.group.position.y, z: this.group.position.z }
+        : null,
     };
   }
 
