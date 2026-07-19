@@ -5,6 +5,7 @@ const EMULATOR_HOSTS = Object.freeze([
   'FIREBASE_EMULATOR_HUB',
 ]);
 const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LABEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 function invalid(field) {
   throw new Error(`Invalid cloud demo environment: ${field}`);
@@ -44,5 +45,43 @@ export function loadCloudDemoEnvironment(environment = {}) {
     allowedAppIds,
     storageBucket: expectedBucket,
     appCheckDebugToken,
+  });
+}
+
+export function loadCloudOcrEnvironment(environment = {}, projectId) {
+  const invalidOcr = (field) => {
+    throw new Error(`Invalid cloud OCR environment: ${field}`);
+  };
+  if (environment.ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED === undefined
+    || environment.ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED === 'false') return null;
+  if (environment.ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED !== 'true') {
+    invalidOcr('ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED');
+  }
+  const providerVersion = environment.OCR_PROVIDER_VERSION;
+  const location = environment.DOCUMENT_AI_LOCATION;
+  const processorVersion = environment.DOCUMENT_AI_PROCESSOR_VERSION;
+  const endpoint = environment.DOCUMENT_AI_ENDPOINT;
+  if (environment.CAPABILITY_EXECUTION_MODE !== 'google') invalidOcr('CAPABILITY_EXECUTION_MODE');
+  if (typeof projectId !== 'string'
+    || environment.DOCUMENT_AI_PROJECT_ID !== projectId) invalidOcr('DOCUMENT_AI_PROJECT_ID');
+  for (const [field, value] of [
+    ['OCR_PROVIDER_VERSION', providerVersion],
+    ['DOCUMENT_AI_LOCATION', location],
+    ['DOCUMENT_AI_PROCESSOR_ID', environment.DOCUMENT_AI_PROCESSOR_ID],
+    ['DOCUMENT_AI_PROCESSOR_VERSION', processorVersion],
+  ]) {
+    if (typeof value !== 'string' || !LABEL.test(value)) invalidOcr(field);
+  }
+  if (processorVersion !== providerVersion) invalidOcr('DOCUMENT_AI_PROCESSOR_VERSION');
+  if (endpoint !== `${location}-documentai.googleapis.com`) invalidOcr('DOCUMENT_AI_ENDPOINT');
+  return Object.freeze({
+    providerVersion,
+    documentAi: Object.freeze({
+      projectId,
+      location,
+      processorId: environment.DOCUMENT_AI_PROCESSOR_ID,
+      processorVersion,
+      endpoint,
+    }),
   });
 }

@@ -24,6 +24,7 @@ export function createDemoRuntime({
   tokenVerifier,
   allowedAppIds,
   storageBucket,
+  afterFinalize,
   clock = () => new Date().toISOString(),
   uuid = randomUUID,
 }) {
@@ -98,6 +99,7 @@ export function createDemoRuntime({
     allowedAppIds,
     demoRepository,
     finalizeUpload,
+    afterFinalize,
     elseService,
     projectSnapshot: projectCompetitionSnapshot,
     storageBucket,

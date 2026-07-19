@@ -62,6 +62,7 @@ export function registerDemoRoutes(app, {
   requireAuth,
   demoRepository,
   finalizeUpload,
+  afterFinalize,
   elseService,
   projectSnapshot,
   storageBucket,
@@ -79,6 +80,9 @@ export function registerDemoRoutes(app, {
   ], 'Demo repository');
   if (typeof finalizeUpload?.handle !== 'function') {
     throw new TypeError('Finalize upload must implement handle()');
+  }
+  if (afterFinalize !== undefined && typeof afterFinalize?.handle !== 'function') {
+    throw new TypeError('After finalize hook must implement handle()');
   }
   const elseAnswers = assertPort(elseService, ['ask'], 'Else service');
   if (typeof projectSnapshot !== 'function') throw new TypeError('projectSnapshot is required');
@@ -156,6 +160,9 @@ export function registerDemoRoutes(app, {
         batchId: parsed.data.batchId,
         fragmentId: parsed.data.fragmentId,
       }));
+      if (afterFinalize) {
+        await afterFinalize.handle(Object.freeze({ uid: ownerId, batchId: parsed.data.batchId }));
+      }
       return reply.code(204).send();
     } catch (error) {
       request.log.error({

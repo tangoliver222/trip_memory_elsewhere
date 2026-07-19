@@ -21,6 +21,8 @@ The Firebase project, Web App, and the mandatory cloud-backed recording resource
 
 The local files are ignored by Git. The App Check debug token lives only in the backend cloud file and is injected only into the Vite development server; Vite production builds force it to `null`. Never commit Firebase Web API keys, App Check debug tokens, ADC files, Gemini keys, Document AI processor IDs, or billing data.
 
+`ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED` defaults to `false`. Keep it false while testing Auth, App Check, Firestore, and Storage. Set it to `true` only for an explicitly authorized recording run: that enables the approved OCR worker to send the selected original receipt bytes to the fixed Document AI processor. The coordinator still rejects stale, supporting, unapproved, or already-terminal work.
+
 ## Billing and cost guardrail
 
 Cloud Billing is linked and the project is on Blaze. A project-filtered monthly budget alerts the default Billing IAM recipients at 50%, 90%, and 100% of 5 USD. Budget alerts are notifications, not a hard spending cap.

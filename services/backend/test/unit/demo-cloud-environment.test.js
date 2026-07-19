@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadCloudDemoEnvironment } from '../../src/demo/cloud-environment.js';
+import {
+  loadCloudDemoEnvironment,
+  loadCloudOcrEnvironment,
+} from '../../src/demo/cloud-environment.js';
 
 const validEnvironment = Object.freeze({
   NODE_ENV: 'development',
@@ -55,5 +58,59 @@ test('cloud demo rejects every Firebase Emulator host before composition', () =>
       ...validEnvironment,
       [name]: '127.0.0.1:9999',
     }), new RegExp(name));
+  }
+});
+
+test('cloud OCR environment is absent unless the original-byte consent gate is explicit', () => {
+  assert.equal(loadCloudOcrEnvironment({
+    ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED: 'false',
+  }, 'elsewhere-memory-tyx-2026'), null);
+  assert.equal(loadCloudOcrEnvironment({}, 'elsewhere-memory-tyx-2026'), null);
+  assert.throws(() => loadCloudOcrEnvironment({
+    ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED: 'yes',
+  }, 'elsewhere-memory-tyx-2026'), /cloud OCR environment/i);
+});
+
+test('cloud OCR environment binds one fixed Document AI processor to the Firebase project', () => {
+  const input = {
+    ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED: 'true',
+    CAPABILITY_EXECUTION_MODE: 'google',
+    OCR_PROVIDER_VERSION: 'pretrained-ocr-v1.0-2020-09-23',
+    DOCUMENT_AI_PROJECT_ID: 'elsewhere-memory-tyx-2026',
+    DOCUMENT_AI_LOCATION: 'asia-southeast1',
+    DOCUMENT_AI_PROCESSOR_ID: 'processor123',
+    DOCUMENT_AI_PROCESSOR_VERSION: 'pretrained-ocr-v1.0-2020-09-23',
+    DOCUMENT_AI_ENDPOINT: 'asia-southeast1-documentai.googleapis.com',
+  };
+  assert.deepEqual(loadCloudOcrEnvironment(input, 'elsewhere-memory-tyx-2026'), {
+    providerVersion: 'pretrained-ocr-v1.0-2020-09-23',
+    documentAi: {
+      projectId: 'elsewhere-memory-tyx-2026',
+      location: 'asia-southeast1',
+      processorId: 'processor123',
+      processorVersion: 'pretrained-ocr-v1.0-2020-09-23',
+      endpoint: 'asia-southeast1-documentai.googleapis.com',
+    },
+  });
+});
+
+test('cloud OCR environment rejects provider, project, version, and endpoint drift', () => {
+  const valid = {
+    ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED: 'true',
+    CAPABILITY_EXECUTION_MODE: 'google',
+    OCR_PROVIDER_VERSION: 'processor-v1',
+    DOCUMENT_AI_PROJECT_ID: 'elsewhere-memory-tyx-2026',
+    DOCUMENT_AI_LOCATION: 'asia-southeast1',
+    DOCUMENT_AI_PROCESSOR_ID: 'processor123',
+    DOCUMENT_AI_PROCESSOR_VERSION: 'processor-v1',
+    DOCUMENT_AI_ENDPOINT: 'asia-southeast1-documentai.googleapis.com',
+  };
+  for (const override of [
+    { CAPABILITY_EXECUTION_MODE: 'fake' },
+    { DOCUMENT_AI_PROJECT_ID: 'another-project' },
+    { DOCUMENT_AI_PROCESSOR_VERSION: 'processor-v2' },
+    { DOCUMENT_AI_ENDPOINT: 'us-documentai.googleapis.com' },
+  ]) {
+    assert.throws(() => loadCloudOcrEnvironment({ ...valid, ...override }, valid.DOCUMENT_AI_PROJECT_ID), /cloud OCR environment/i);
   }
 });
