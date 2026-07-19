@@ -12,7 +12,7 @@
     "rules": "storage.rules"
   },
   "hosting": {
-    "public": "../design-lab/prototypes-vanilla/dist",
+    "public": "hosting",
     "ignore": [
       "firebase.json",
       "**/.*",
