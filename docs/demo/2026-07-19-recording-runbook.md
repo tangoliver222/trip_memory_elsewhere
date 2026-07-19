@@ -4,7 +4,8 @@
 
 录制优先使用真实 Google Cloud 路径：真实文件字节、Firebase Anonymous Auth、App Check、Firestore、
 Storage、正式的确定性处理与权威路由、Google Document AI OCR，以及 Gemini。Emulator 路径仍保留为
-无云费用的回归方案；两条路径都不使用前端固定结果冒充后端处理。Cloud Run 是否已部署以最后的验证记录为准。
+无云费用的回归方案；两条路径都不使用前端固定结果冒充后端处理。Cloud Run ingestion 主链已经部署，
+完整生产前端尚未部署；录制使用本地视觉应用连接真实 Google Cloud 数据链。
 
 ## 1. 配置 Gemini（录制 Else 前必需）
 
@@ -52,11 +53,13 @@ CAPABILITY_EXECUTION_MODE=google
 ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED=true
 ```
 
-只有在明确同意把本次演示小票原始字节发送给 Google Document AI 后，才把第二项设为 `true`。该开关
-不会被提交。运行验证命令本身还需要第二道显式费用门禁：
+只有在明确同意把本次演示小票原始字节发送给 Google Document AI 后，才允许在单次命令中覆盖第二项。
+不要修改文件中的静态值；它在闲置时必须保持 `false`。自动验证还需要第二道显式费用门禁：
 
 ```bash
-RUN_REAL_GOOGLE_PROVIDER_TESTS=true node scripts/run-google-cloud-demo.mjs --verify
+RUN_REAL_GOOGLE_PROVIDER_TESTS=true \
+ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED=true \
+node scripts/run-google-cloud-demo.mjs --verify
 ```
 
 脚本会启动本地 cloud-demo backend 与 cloud-mode Vite，但 Auth、App Check、Firestore、Storage、
@@ -68,13 +71,29 @@ Document AI 和 Gemini 都使用真实 Google 服务。验收只允许 1 次 Doc
 类型、时间和位置提示，不保存商户、金额或 OCR 文本；页面显示的 OCR 摘要必须来自持久化的
 Document AI normalized artifact。
 
-最近一次完整门禁于 2026-07-19 通过：Playwright `1 passed (1.8m)`，8 个原件全部保存，只有 1 个
+修复 Storage Eventarc 与旧手动 finalize 的重复消费竞态后，最近一次完整门禁于 2026-07-20 通过：
+Playwright `1 passed (46.7s)`，8 个原件全部保存，只有 1 个
 receipt 产生 Google Document AI artifact，Else 完成 1 次真实 Gemini 问答且来源可打开；清理后 snapshot
 为零，测试身份随后删除。门禁结束后 `ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED` 已恢复为 `false`。
 
 同一提交前的无费用回归结果：后端普通测试 610 项（602 通过、8 项为未启动 Emulator 的预期跳过）、
-Firebase Emulator 70/70、前端单元测试 81/81、本地完整浏览器演示 1/1、默认与 cloud 生产构建均成功。
+Firebase Emulator 70/70、前端单元测试 83/83、本地完整浏览器演示 1/1、默认与 cloud 生产构建均成功。
 Emulator 命令需要 Homebrew OpenJDK 21 位于 PATH。
+
+### 手动录制启动
+
+下列命令会启动 cloud-demo backend 与 Vite，随后停在可操作页面；按 `Ctrl+C` 结束。它会允许真实
+Document AI 和 Gemini 调用，因此只在录制窗口执行：
+
+```bash
+RUN_REAL_GOOGLE_PROVIDER_TESTS=true \
+ELSEWHERE_DOCUMENT_AI_DEMO_ALLOWED=true \
+node scripts/run-google-cloud-demo.mjs
+```
+
+打开 `http://127.0.0.1:4174/#/world/import`。浏览器使用真实 Firebase Auth、App Check、Firestore 和
+Storage；上传会触发生产 Eventarc、Cloud Run ingestion、Cloud Tasks 和 Document AI。页面 snapshot、
+Discovery projection 与 Gemini Else 由本地隔离的录制 composition 提供，并读取同一份真实持久化数据。
 
 ## 4. 录制顺序
 
@@ -101,6 +120,15 @@ node scripts/run-competition-demo.mjs --verify
 ```bash
 REQUIRE_GEMINI_DEMO=true GEMINI_API_KEY=你的_Key node scripts/run-competition-demo.mjs --verify
 ```
+
+真实云自动演练使用第 3 节带 `--verify` 的命令。生产 ingestion 可单独复核：
+
+```bash
+RUN_REAL_GOOGLE_PROVIDER_TESTS=true npm --prefix services/backend run smoke:cloud-run
+```
+
+每次成功 smoke 会产生一次 Document AI 请求。完整执行证据、云资源 revision、费用口径和未部署边界见
+`docs/demo/2026-07-19-google-ecosystem-verification.md`。
 
 ## 6. 录制前硬检查
 

@@ -173,9 +173,9 @@
 - Modify: `docs/demo/2026-07-19-recording-runbook.md`
 - Create: `docs/demo/2026-07-19-google-ecosystem-verification.md`
 
-- [ ] Re-run every Task 6 gate after the last change and record fresh counts/timestamps.
-- [ ] Separate `real-cloud verified`, `Emulator verified`, `implemented not deployed`, and `excluded` capabilities.
-- [ ] Record actual provider calls and expected costs without secrets or user identifiers.
-- [ ] Verify clean git status, `git diff --check`, intended Cloud Run services, and intended Tasks queue.
-- [ ] Commit: `docs(demo): freeze Google ecosystem recording evidence`.
-- [ ] Stop feature work; do not enter Places, Embedding, Agent Engine, external imports, or non-core backend wiring before recording.
+- [x] Re-run every Task 6 gate after the last change and record fresh counts/timestamps.
+- [x] Separate `real-cloud verified`, `Emulator verified`, `implemented not deployed`, and `excluded` capabilities.
+- [x] Record actual provider calls and expected costs without secrets or user identifiers.
+- [x] Verify clean git status, `git diff --check`, intended Cloud Run services, and intended Tasks queue.
+- [x] Commit: `docs(demo): freeze Google ecosystem recording evidence`.
+- [x] Stop feature work; do not enter Places, Embedding, Agent Engine, external imports, or non-core backend wiring before recording.
