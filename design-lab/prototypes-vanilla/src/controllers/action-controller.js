@@ -1,10 +1,46 @@
 import { navigate, safeBack } from '../router.js';
 import { answerElse } from '../else/answer-engine.js';
+import { hydrateLiveCollections } from '../data/live-hydrator.js';
+import { runLiveImport } from '../data/live-import.js';
+import { resolveSnapshotMedia } from '../data/runtime.js';
 
 const valueFor = (element) => element.dataset.value ?? element.value;
 
 export function createActionController({ root, store }) {
   const timers = new Set();
+  const startLiveImport = async () => {
+    const state = store.getState();
+    const { client } = state.runtime;
+    const files = state.importFlow.files;
+    if (!client || files.length === 0 || ['creating', 'uploading', 'processing'].includes(state.importFlow.status)) return;
+    let manifestByName = {};
+    try {
+      const response = await fetch('/demo-source-manifest.json');
+      if (response.ok) manifestByName = await response.json();
+    } catch {
+      // Sidecar metadata is optional; source bytes remain authoritative.
+    }
+    try {
+      const result = await runLiveImport({
+        client,
+        files,
+        manifestByName,
+        onState(value) {
+          store.dispatch({ type: 'SET_IMPORT_FLOW', value });
+        },
+        async onSnapshot(snapshot) {
+          const resolved = await resolveSnapshotMedia(snapshot, client);
+          hydrateLiveCollections(resolved);
+        },
+      });
+      if (result.batchId) navigate(`#/world/inbox/receipt/${result.batchId}`);
+    } catch (error) {
+      store.dispatch({
+        type: 'SET_IMPORT_FLOW',
+        value: { status: 'failed', error: error?.code || 'import/failed' },
+      });
+    }
+  };
   const askElse = (question) => {
     const query = question?.trim();
     if (!query) return;
@@ -23,6 +59,7 @@ export function createActionController({ root, store }) {
     const action = target.dataset.action;
 
     if (action === 'navigate') navigate(target.dataset.route);
+    if (action === 'run-live-import') void startLiveImport();
     if (action === 'back') safeBack(target.dataset.fallback);
     if (action === 'toggle-else') store.dispatch({ type: 'TOGGLE_ELSE' });
     if (action === 'close-overlay') {
@@ -79,6 +116,9 @@ export function createActionController({ root, store }) {
     if (target.dataset.storeAction === 'setting') store.dispatch({ type: 'SET_SETTING', key: target.dataset.key, value: target.type === 'checkbox' ? target.checked : valueFor(target) });
     if (target.dataset.storeAction === 'else-query') store.dispatch({ type: 'SET_ELSE', value: { query: target.value }, silentRender: true });
     if (target.dataset.storeAction === 'note-editor') store.dispatch({ type: 'SET_NOTE', noteId: target.dataset.noteId, text: target.value, silentRender: true });
+    if (target.dataset.storeAction === 'live-files') {
+      store.dispatch({ type: 'SET_IMPORT_FILES', files: [...(target.files || [])] });
+    }
   };
 
   root.addEventListener('click', onClick);

@@ -36,6 +36,15 @@ export function createInitialState(overrides = {}) {
     notes: {},
     reviewDecisions: {},
     connectionDecisions: {},
+    importFlow: {
+      status: 'idle',
+      files: [],
+      progress: {},
+      batchId: null,
+      receipt: null,
+      failures: [],
+      error: null,
+    },
     runtime: {
       mode: 'fixture',
       status: 'ready',
@@ -61,6 +70,7 @@ export function createInitialState(overrides = {}) {
     settings: { ...defaults.settings, ...(overrides.settings || {}) },
     overlays: clone(overrides.overlays || []),
     runtime: { ...defaults.runtime, ...(runtimeOverride || {}) },
+    importFlow: { ...defaults.importFlow, ...(overrides.importFlow || {}) },
   };
 }
 
@@ -213,6 +223,25 @@ function reduce(state, action) {
       return { state: { ...state, connectionDecisions: { ...state.connectionDecisions, [action.connectionId || 'current']: action.value } }, result: {} };
     case 'SET_RUNTIME':
       return { state: { ...state, runtime: { ...state.runtime, ...action.value } }, result: {} };
+    case 'SET_IMPORT_FILES':
+      return {
+        state: {
+          ...state,
+          importFlow: {
+            ...state.importFlow,
+            status: action.files.length > 0 ? 'selected' : 'idle',
+            files: [...action.files],
+            progress: {},
+            batchId: null,
+            receipt: null,
+            failures: [],
+            error: null,
+          },
+        },
+        result: {},
+      };
+    case 'SET_IMPORT_FLOW':
+      return { state: { ...state, importFlow: { ...state.importFlow, ...action.value } }, result: {} };
     case 'SET_SETTING':
       return { state: { ...state, settings: { ...state.settings, [action.key]: action.value } }, result: {} };
     case 'CLEAR_CACHE':

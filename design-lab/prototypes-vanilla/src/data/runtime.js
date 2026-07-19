@@ -12,6 +12,23 @@ export function isLiveDataMode(environment = {}) {
   return environment.VITE_ELSEWHERE_DATA_MODE === 'live';
 }
 
+export async function resolveSnapshotMedia(snapshot, client) {
+  if (!snapshot?.fragments || typeof client?.resolveStoragePath !== 'function') return snapshot;
+  const fragments = await Promise.all(snapshot.fragments.map(async (fragment) => {
+    const path = fragment.thumbnailPath || fragment.originalPath;
+    if (!path) return fragment;
+    try {
+      const resolvedUrl = await client.resolveStoragePath(path);
+      return fragment.thumbnailPath
+        ? { ...fragment, resolvedThumbnailUrl: resolvedUrl }
+        : { ...fragment, resolvedOriginalUrl: resolvedUrl };
+    } catch {
+      return fragment;
+    }
+  }));
+  return { ...snapshot, fragments };
+}
+
 export async function bootstrapLiveData({
   client = null,
   fetchSnapshot = null,

@@ -56,7 +56,43 @@ export function renderFragmentField(state) {
   };
 }
 
-export function renderImportPage() {
+export function renderImportPage(state = {}) {
+  if (state.runtime?.mode === 'live') {
+    const flow = state.importFlow || { status: 'idle', files: [], progress: {}, failures: [] };
+    const busy = ['creating', 'uploading', 'processing'].includes(flow.status);
+    const progressValues = Object.values(flow.progress || {});
+    const progress = progressValues.length > 0
+      ? Math.round((progressValues.reduce((sum, value) => sum + value, 0) / progressValues.length) * 100)
+      : 0;
+    const statusLabel = {
+      idle: '请选择 1–15 个真实原件',
+      selected: `已选择 ${flow.files.length} 个原件`,
+      creating: '正在创建安全上传清单',
+      uploading: `正在上传原件 · ${progress}%`,
+      processing: '正在读取格式、时间、地点与重复关系',
+      complete: '全部原件已完成确定性处理',
+      partial: `${flow.failures.length} 个原件需要重试，其余已保留`,
+      failed: '这批原件尚未完成，请检查本地服务后重试',
+    }[flow.status] || '准备导入';
+    return {
+      sceneMode: 'import',
+      scenePayload: { target: 'import', itemCount: flow.files.length },
+      afterRender: null,
+      html: `<main class="page import-page import-page--live" data-page-id="world-import">
+        <header><p class="eyebrow">真实原件导入</p><h1>把这一段旅行交给记忆空间</h1><p>原件会先保存，再进行确定性的格式、时间、地点、哈希与重复检测。无法确认的内容会留在收件箱，不会被猜测。</p></header>
+        <label class="drop-field drop-field--live" for="live-import-files">
+          <div class="drop-field__orbit" aria-hidden="true"><i></i><i></i><i></i></div>
+          <strong>${escapeHtml(statusLabel)}</strong>
+          <span>JPEG · PNG · WebP · TXT</span>
+          <small>点击选择，或把文件拖到这里</small>
+          <input id="live-import-files" data-live-files data-store-action="live-files" type="file" accept="image/jpeg,image/png,image/webp,text/plain" multiple ${busy ? 'disabled' : ''}>
+        </label>
+        ${flow.files.length > 0 ? `<ol class="live-file-list">${flow.files.map((file, index) => `<li><span>${String(index + 1).padStart(2, '0')}</span><strong>${escapeHtml(file.name)}</strong><small>${Math.max(1, Math.round(file.size / 1024))} KB</small></li>`).join('')}</ol>` : ''}
+        <section class="import-boundary"><h2>这次真实执行</h2><ol><li><span>01</span>创建 owner-scoped 上传清单</li><li><span>02</span>保存并校验真实文件字节</li><li><span>03</span>确定性处理后重组页面与粒子</li></ol></section>
+        <button class="primary-action" type="button" data-primary-action data-action="run-live-import" ${(flow.files.length === 0 || busy) ? 'disabled' : ''}>${busy ? statusLabel : `开始整理 ${flow.files.length || ''} 个原件`}</button>
+      </main>`,
+    };
+  }
   const batch = importBatches[0];
   return {
     sceneMode: 'import', scenePayload: { target: 'quiet', itemCount: batch.itemCount }, afterRender: null,
@@ -71,6 +107,14 @@ export function renderImportPage() {
 
 export function renderReceiptPage(batchId) {
   const batch = importBatches.find((item) => item.id === batchId) || importBatches[0];
+  if (!batch) {
+    return {
+      sceneMode: 'import',
+      scenePayload: { target: 'quiet' },
+      afterRender: null,
+      html: `<main class="page receipt-page" data-page-id="world-receipt"><header><p class="eyebrow">整理回执</p><h1>这批原件仍在处理中</h1><p>回执会在服务器保存首个真实原件后出现。</p></header>${primary('返回导入', '#/world/import')}</main>`,
+    };
+  }
   return {
     sceneMode: 'import', scenePayload: { target: 'city-field', distribution: batch.result }, afterRender: null,
     html: `<main class="page receipt-page" data-page-id="world-receipt">
@@ -82,7 +126,7 @@ export function renderReceiptPage(batchId) {
         <div class="receipt-stream receipt-stream--relation" aria-label="${batch.result.connections} 条新连接"><i></i><strong>${batch.result.connections}</strong><span>条新连接</span></div>
         <div class="receipt-stream receipt-stream--review" aria-label="${batch.result.needsReview} 项待判断"><i></i><strong>${batch.result.needsReview}</strong><span>项待判断</span></div>
       </section>
-      <p class="receipt-truth">没有失败项，也没有重复原件。待判断内容不会被当作已确认事实。</p>
+      <p class="receipt-truth">${batch.result.failed === 0 ? '没有终态失败项。' : `${batch.result.failed} 个原件处理失败。`} 待判断内容不会被当作已确认事实。</p>
       ${primary('进入 Bangkok 看变化', '#/world/city/bangkok')}
     </main>`,
   };

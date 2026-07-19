@@ -21,7 +21,12 @@ import { renderRoute as renderPageRoute } from './pages/render-route.js';
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';
 import { createDemoClient, demoClientConfigFromEnv } from './data/demo-client.js';
-import { bootstrapLiveData, isLiveDataMode, runtimeState } from './data/runtime.js';
+import {
+  bootstrapLiveData,
+  isLiveDataMode,
+  resolveSnapshotMedia,
+  runtimeState,
+} from './data/runtime.js';
 
 const root = document.querySelector('#app-root');
 const initialHash = window.location.hash || '#/onboarding';
@@ -209,19 +214,7 @@ async function bootApplication() {
       fetchSnapshot: async () => {
         await client.signIn();
         const snapshot = await client.getSnapshot();
-        const liveFragments = await Promise.all(snapshot.fragments.map(async (fragment) => {
-          const path = fragment.thumbnailPath || fragment.originalPath;
-          if (!path) return fragment;
-          try {
-            const resolvedUrl = await client.resolveStoragePath(path);
-            return fragment.thumbnailPath
-              ? { ...fragment, resolvedThumbnailUrl: resolvedUrl }
-              : { ...fragment, resolvedOriginalUrl: resolvedUrl };
-          } catch {
-            return fragment;
-          }
-        }));
-        return { ...snapshot, fragments: liveFragments };
+        return resolveSnapshotMedia(snapshot, client);
       },
     });
     if (snapshot.fragments.length === 0) {
