@@ -8,6 +8,7 @@
   },
   "scripts": {
     "demo": "node --env-file-if-exists=.env scripts/demo-server.mjs",
+    "demo:cloud": "node --env-file-if-exists=.env --env-file-if-exists=.env.cloud.local scripts/cloud-demo-server.mjs",
     "dev": "node --env-file-if-exists=.env --watch src/server.js",
     "start": "node --env-file-if-exists=.env src/server.js",
     "smoke:media": "node --env-file-if-exists=.env scripts/media-capability-smoke.mjs",
