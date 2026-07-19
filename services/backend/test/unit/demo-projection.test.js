@@ -90,6 +90,105 @@ function threeAriMorningInput() {
   ]);
 }
 
+function withDeterministic(fragmentInput) {
+  return {
+    ...fragmentInput,
+    processing: {
+      deterministic: {
+        taskId: `task_${fragmentInput.id}`,
+        processorName: 'deterministic-media',
+        processorVersion: 'v1',
+        state: 'succeeded',
+        metadataStatus: 'complete',
+        thumbnailStatus: 'complete',
+        perceptualHashStatus: 'complete',
+        updatedAt: '2026-07-19T00:00:00.000Z',
+      },
+    },
+  };
+}
+
+function processingSnapshot(fragmentInput, { ocrDecision = 'skipped', withResult = false } = {}) {
+  const routePlanId = `route_${fragmentInput.id}`;
+  const executionId = `execution_${fragmentInput.id}`;
+  const resultId = `result_${fragmentInput.id}`;
+  const sourceRevision = {
+    bucket: fragmentInput.storage.bucket,
+    objectName: fragmentInput.storage.originalPath,
+    generation: fragmentInput.storage.generation,
+    inputHash: 'a'.repeat(64),
+  };
+  const plan = {
+    id: routePlanId,
+    ownerId: OWNER_ID,
+    revision: 1,
+    state: withResult ? 'completed' : 'approved',
+    fragmentRef: { type: 'fragment', id: fragmentInput.id },
+    sourceRevision,
+    representation: {
+      role: 'independent',
+      representativeRef: { type: 'fragment', id: fragmentInput.id },
+      reasonCodes: ['not-near-duplicate'],
+    },
+    capabilities: {
+      ocr: ocrDecision === 'approved'
+        ? {
+          decision: 'approved',
+          executorClass: 'document-ocr',
+          reasonCodes: ['declared-document-type'],
+        }
+        : {
+          decision: 'skipped',
+          executorClass: null,
+          reasonCodes: ['not-document-like'],
+        },
+    },
+  };
+  return {
+    routePlans: [plan],
+    routingHeads: [{
+      currentPlanRef: { type: 'routePlan', id: routePlanId },
+      currentRevision: 1,
+      fragmentRef: plan.fragmentRef,
+      sourceRevision,
+    }],
+    capabilityExecutions: withResult ? [{
+      id: executionId,
+      ownerId: OWNER_ID,
+      routePlanRef: { type: 'routePlan', id: routePlanId },
+      routePlanRevision: 1,
+      fragmentRef: plan.fragmentRef,
+      sourceRevision,
+      capability: 'ocr',
+      state: 'completed',
+      resultRef: { type: 'capabilityResult', id: resultId },
+    }] : [],
+    capabilityResults: withResult ? [{
+      id: resultId,
+      ownerId: OWNER_ID,
+      executionRef: { type: 'capabilityExecution', id: executionId },
+      routePlanRef: { type: 'routePlan', id: routePlanId },
+      routePlanRevision: 1,
+      fragmentRef: plan.fragmentRef,
+      capability: 'ocr',
+      providerName: 'document-ai-enterprise-ocr',
+      providerVersion: 'pretrained-ocr-v1.0-2020-09-23',
+      outcome: 'completed',
+      pageCount: 1,
+      actualCostMicros: 1_500,
+      normalizedArtifactRef: {
+        kind: 'normalized',
+        bucket: fragmentInput.storage.bucket,
+        objectName: `users/${OWNER_ID}/capability-results/${executionId}/normalized.json.gz`,
+        generation: '1740000000000999',
+        contentType: 'application/gzip',
+        sizeBytes: 500,
+        sha256: 'b'.repeat(64),
+      },
+    }] : [],
+  };
+}
+
 test('empty owner produces an empty honest snapshot', () => {
   const snapshot = projectCompetitionSnapshot(input([]));
 
@@ -210,4 +309,91 @@ test('deterministic presentation never invents emotional meaning', () => {
   const serialized = JSON.stringify(projectCompetitionSnapshot(threeAriMorningInput()));
 
   assert.doesNotMatch(serialized, /治愈|浪漫|喜欢|怀念|meaningful|felt|emotion/i);
+});
+
+test('processing trace uses only the frozen persisted stage vocabulary', () => {
+  const source = withDeterministic(fragment({
+    id: 'frag_trace',
+    capturedAt: '2024-10-12T08:17:00+07:00',
+  }));
+  const projected = projectCompetitionSnapshot({
+    ...input([source]),
+    routingSnapshots: [processingSnapshot(source)],
+    normalizedArtifacts: {},
+  });
+  const trace = projected.fragments[0].processingTrace;
+
+  assert.deepEqual(trace.map(({ stage, status }) => [stage, status]), [
+    ['original', 'completed'],
+    ['deterministic', 'completed'],
+    ['routing', 'completed'],
+    ['ocr', 'skipped'],
+    ['relationship', 'skipped'],
+  ]);
+  assert.ok(trace.every(({ status }) => [
+    'pending', 'completed', 'skipped', 'unresolved', 'failed',
+  ].includes(status)));
+  assert.equal(Object.hasOwn(projected.fragments[0], 'ocr'), false);
+  assert.deepEqual(projected.importBatches[0].processingTrace.map(({ status }) => status), [
+    'completed', 'completed', 'completed', 'skipped', 'skipped',
+  ]);
+});
+
+test('verified normalized OCR artifact changes only bounded OCR projection fields', () => {
+  const source = withDeterministic(fragment({
+    id: 'frag_receipt',
+    capturedAt: '2024-10-19T08:29:00+07:00',
+    type: 'receipt',
+  }));
+  const routing = processingSnapshot(source, { ocrDecision: 'approved', withResult: true });
+  const resultId = routing.capabilityResults[0].id;
+  const artifact = {
+    schemaVersion: 1,
+    executionId: routing.capabilityExecutions[0].id,
+    fragmentId: source.id,
+    text: 'COMMON GROUNDS\nAmericano 90.00\n',
+    pageCount: 1,
+    languageCodes: ['en'],
+    qualitySummary: { averageConfidence: 0.94, defectCodes: [] },
+    pages: [],
+  };
+  const withoutArtifact = projectCompetitionSnapshot({
+    ...input([source]),
+    routingSnapshots: [routing],
+    normalizedArtifacts: {},
+  });
+  const withArtifact = projectCompetitionSnapshot({
+    ...input([source]),
+    routingSnapshots: [routing],
+    normalizedArtifacts: { [resultId]: artifact },
+  });
+
+  assert.equal(Object.hasOwn(withoutArtifact.fragments[0], 'ocr'), false);
+  assert.equal(withoutArtifact.fragments[0].processingTrace[3].status, 'unresolved');
+  assert.deepEqual(withArtifact.fragments[0].ocr, {
+    provider: 'Google Document AI',
+    outcome: 'completed',
+    pageCount: 1,
+    actualCostMicros: 1_500,
+    textExcerpt: 'COMMON GROUNDS\nAmericano 90.00',
+    languageCodes: ['en'],
+  });
+  assert.equal(withArtifact.fragments[0].processingTrace[3].status, 'completed');
+  assert.equal(Object.hasOwn(withArtifact.fragments[0].ocr, 'merchant'), false);
+  assert.equal(Object.hasOwn(withArtifact.fragments[0].ocr, 'amount'), false);
+});
+
+test('processing projection is invariant to routing snapshot input order', () => {
+  const first = withDeterministic(fragment({
+    id: 'frag_order_a', capturedAt: '2024-10-12T08:17:00+07:00',
+  }));
+  const second = withDeterministic(fragment({
+    id: 'frag_order_b', capturedAt: '2024-10-13T08:17:00+07:00',
+  }));
+  const base = input([first, second]);
+  const routing = [processingSnapshot(first), processingSnapshot(second)];
+  assert.deepEqual(
+    projectCompetitionSnapshot({ ...base, routingSnapshots: routing }),
+    projectCompetitionSnapshot({ ...base, routingSnapshots: [...routing].reverse() }),
+  );
 });

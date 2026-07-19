@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import {
   cities,
   fragments,
+  importBatches,
   world,
 } from '../../src/fixtures/data.js';
 import { createSemanticTarget } from '../../src/visual/particle-targets.js';
 import { renderRoute } from '../../src/pages/render-route.js';
 import { createInitialState } from '../../src/store.js';
 import { hydrateLiveCollections } from '../../src/data/live-hydrator.js';
+import { renderFragmentLens } from '../../src/overlays/fragment-lens.js';
+import { getFragmentContext } from '../../src/selectors.js';
 import {
   createDemoClient,
   demoClientConfigFromEnv,
@@ -222,4 +225,50 @@ test('live World and Fragment Field copy contains no frozen fixture totals', () 
   assert.doesNotMatch(worldHtml, /三座城市/);
   assert.match(fieldHtml, /Bangkok · 2 碎片/);
   assert.doesNotMatch(fieldHtml, /172 个碎片|Tokyo · 81|Chiang Mai · 28/);
+});
+
+test('persisted processing provenance reaches receipt and Fragment Lens without internal ids', () => {
+  const snapshot = snapshotWith(['frag_trace_receipt']);
+  snapshot.fragments[0].processingTrace = [
+    { stage: 'original', status: 'completed', label: '原件已保存', provider: 'Firebase Storage', detail: '原件完整保留' },
+    { stage: 'deterministic', status: 'completed', label: '确定性整理', provider: 'Elsewhere', detail: '格式、时间、GPS 与哈希已读取' },
+    { stage: 'routing', status: 'completed', label: '执行计划', provider: 'Authoritative Router', detail: '只批准必要能力' },
+    { stage: 'ocr', status: 'completed', label: '票据识别', provider: 'Google Document AI', detail: '1 页文字已验证' },
+    { stage: 'relationship', status: 'skipped', label: '记忆关系', provider: 'Firestore projection', detail: '未形成关系' },
+  ];
+  snapshot.fragments[0].ocr = {
+    provider: 'Google Document AI',
+    outcome: 'completed',
+    pageCount: 1,
+    actualCostMicros: 1_500,
+    textExcerpt: 'COMMON GROUNDS\nAmericano 90.00',
+    languageCodes: ['en'],
+  };
+  snapshot.importBatches = [{
+    id: 'batch_trace',
+    status: 'processing',
+    uploadStatus: 'complete',
+    inputCount: 1,
+    counters: { saved: 1, processed: 1, failed: 0, needsReview: 0 },
+    sourceIds: ['frag_trace_receipt'],
+    processingTrace: snapshot.fragments[0].processingTrace,
+  }];
+
+  hydrateLiveCollections(snapshot);
+  assert.deepEqual(fragments[0].processingTrace, snapshot.fragments[0].processingTrace);
+  assert.deepEqual(fragments[0].ocr, snapshot.fragments[0].ocr);
+  assert.deepEqual(importBatches[0].processingTrace, snapshot.importBatches[0].processingTrace);
+
+  const receipt = renderRoute('#/world/inbox/receipt/batch_trace', createInitialState({
+    runtime: { mode: 'live' },
+  })).html;
+  const lens = renderFragmentLens(getFragmentContext('frag_trace_receipt'));
+  for (const html of [receipt, lens]) {
+    assert.match(html, /Firebase Storage/);
+    assert.match(html, /Authoritative Router/);
+    assert.match(html, /Google Document AI/);
+    assert.doesNotMatch(html, /users\/user_demo|execution_|processor123|capability-results/);
+  }
+  assert.match(lens, /COMMON GROUNDS/);
+  assert.match(lens, /1 页/);
 });
