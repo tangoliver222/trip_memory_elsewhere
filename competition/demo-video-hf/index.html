@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080">
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #040506; color: #eef0ed; }
+      body { font-family: Inter, Arial, sans-serif; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #040506; }
+      .scene { position: absolute; inset: 0; overflow: hidden; background-color: #040506; opacity: 0; visibility: hidden; }
+      .scene:first-of-type { opacity: 1; visibility: visible; }
+      .scene-content { position: relative; z-index: 4; display: flex; width: 100%; height: 100%; padding: 100px 124px; gap: 72px; align-items: center; }
+      .copy-column { display: flex; flex: 1 1 54%; min-width: 0; flex-direction: column; align-items: flex-start; gap: 26px; }
+      .visual-column { display: flex; flex: 0 0 620px; height: 880px; align-items: center; justify-content: center; perspective: 1200px; }
+      .kicker { color: #959b9f; font-size: 18px; letter-spacing: .22em; text-transform: uppercase; }
+      .headline { max-width: 1040px; margin: 0; font: 300 76px/1.03 Georgia, serif; letter-spacing: -.035em; }
+      .headline em { color: #b8ad9b; font-weight: 300; }
+      .copy { max-width: 920px; margin: 0; color: #cdd2cf; font-size: 26px; line-height: 1.65; }
+      .rule { width: 170px; height: 1px; background: #b8ad9b; transform-origin: left center; }
+      .micro { color: #8c9396; font-size: 17px; letter-spacing: .1em; font-variant-numeric: tabular-nums; }
+      .chips { display: flex; max-width: 940px; flex-wrap: wrap; gap: 12px; }
+      .chip { padding: 13px 18px; border: 1px solid rgba(230,234,231,.22); border-radius: 999px; background: #0c1013; color: #cdd2cf; font-size: 18px; }
+      .chip.is-approved { border-color: rgba(184,173,155,.55); color: #eef0ed; }
+      .chip.is-muted { color: #62696e; }
+      .visual-card { position: relative; width: 430px; height: 880px; overflow: hidden; border: 1px solid rgba(230,234,231,.22); border-radius: 36px; background: #0c1013; box-shadow: 0 40px 120px rgba(0,0,0,.55); }
+      .visual-card img { width: 100%; height: 100%; object-fit: cover; }
+      .visual-card::after { content: ''; position: absolute; inset: 0; border: 1px solid rgba(238,240,237,.08); border-radius: inherit; pointer-events: none; }
+      .topology { position: absolute; z-index: 1; right: 90px; top: 20px; width: 980px; height: 980px; object-fit: contain; opacity: .16; filter: grayscale(1) contrast(1.2); }
+      .aura { position: absolute; z-index: 0; width: 900px; height: 900px; right: -120px; top: 90px; border: 1px solid rgba(205,210,207,.08); border-radius: 50%; box-shadow: inset 0 0 120px rgba(132,149,155,.04), 0 0 100px rgba(184,173,155,.025); }
+      .aura::before, .aura::after { content: ''; position: absolute; inset: 18%; border: 1px dotted rgba(205,210,207,.12); border-radius: 50%; }
+      .aura::after { inset: 38%; border-color: rgba(184,173,155,.18); }
+      .constellation { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
+      .constellation i { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #eef0ed; box-shadow: 0 0 18px rgba(238,240,237,.65); }
+      .constellation i:nth-child(1) { left: 12%; top: 21%; }
+      .constellation i:nth-child(2) { left: 32%; top: 72%; }
+      .constellation i:nth-child(3) { left: 48%; top: 31%; }
+      .constellation i:nth-child(4) { left: 68%; top: 63%; }
+      .constellation i:nth-child(5) { left: 84%; top: 18%; }
+      .constellation i:nth-child(6) { left: 91%; top: 79%; }
+      .service-flow { display: grid; width: 100%; max-width: 930px; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 11px; }
+      .service { min-height: 112px; padding: 18px; border: 1px solid rgba(230,234,231,.12); border-radius: 18px; background: #0c1013; }
+      .service b { display: block; margin-bottom: 10px; font: 400 22px Georgia, serif; }
+      .service span { color: #959b9f; font-size: 16px; line-height: 1.4; }
+      .service.is-paid { border-color: rgba(184,173,155,.5); }
+      .route-ledger { display: flex; gap: 42px; padding: 22px 0; border-top: 1px solid rgba(230,234,231,.12); border-bottom: 1px solid rgba(230,234,231,.12); }
+      .route-ledger strong { font: 300 42px Georgia, serif; font-variant-numeric: tabular-nums; }
+      .route-ledger span { display: block; margin-top: 5px; color: #959b9f; font-size: 16px; }
+      .source-order { display: flex; align-items: center; gap: 14px; color: #cdd2cf; font-size: 22px; }
+      .source-order i { width: 34px; height: 1px; background: #b8ad9b; }
+      .orb { display: flex; width: 110px; height: 110px; align-items: center; justify-content: center; border: 1px solid rgba(238,240,237,.35); border-radius: 50%; background: radial-gradient(circle at 36% 30%, #eef0ed 0, #84959b 8%, #151a1b 50%, #040506 100%); box-shadow: 0 0 60px rgba(205,210,207,.14); font: italic 34px Georgia, serif; }
+      .proof-grid { display: grid; width: 100%; max-width: 980px; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .proof { padding: 20px; border: 1px solid rgba(230,234,231,.12); border-radius: 16px; background: #0c1013; }
+      .proof strong { display: block; font: 300 28px Georgia, serif; }
+      .proof span { display: block; margin-top: 7px; color: #959b9f; font-size: 16px; }
+      .url { color: #b8ad9b; font-size: 21px; letter-spacing: .04em; }
+      .chapter { position: absolute; z-index: 20; left: 52px; top: 42px; color: #8c9396; font-size: 16px; letter-spacing: .2em; }
+      .live-badge { position: absolute; z-index: 12; right: 112px; top: 58px; padding: 11px 17px; border: 1px solid rgba(184,173,155,.4); border-radius: 999px; background: #0c1013; color: #cdd2cf; font-size: 16px; letter-spacing: .1em; }
+      .demo-video { position: absolute; z-index: 10; right: 218px; top: 88px; width: 405px; height: 880px; object-fit: cover; border: 1px solid rgba(230,234,231,.28); border-radius: 36px; background: #0c1013; box-shadow: 0 45px 140px rgba(0,0,0,.62); }
+      .caption-note { position: absolute; z-index: 14; right: 690px; bottom: 84px; max-width: 560px; padding: 16px 20px; border-left: 1px solid #b8ad9b; background: #0c1013; color: #cdd2cf; font-size: 19px; line-height: 1.45; }
+      .final-mark { display: flex; align-items: center; gap: 22px; }
+      .final-mark img { width: 58px; height: 58px; }
+      .final-mark span { font: 300 64px Georgia, serif; letter-spacing: .08em; }
+    </style>
+  </head>
+  <body>
+    <div data-hf-id="hf-w6rj" id="root" data-composition-id="elsewhere-demo" data-start="0" data-duration="278.14" data-width="1920" data-height="1080">
+      <audio data-hf-id="hf-ztuc" id="narration" src="narration.wav" data-start="0" data-duration="278.14" data-track-index="0" data-volume="1"></audio>
+
+      <video data-hf-id="hf-0dg9" id="demo-input" class="demo-video" src="assets/browser-demo.webm" muted playsinline data-start="33.15" data-duration="41.87" data-media-start="0" data-track-index="2"></video>
+      <div data-hf-id="hf-lio4" id="scene-1" class="scene">
+        <img data-hf-id="hf-5q81" class="topology" src="assets/earth-topology.png" alt="">
+        <div data-hf-id="hf-ykwx" class="aura"></div><div data-hf-id="hf-sazd" class="constellation"><i data-hf-id="hf-wt6k"></i><i data-hf-id="hf-zeb8"></i><i data-hf-id="hf-y7e5"></i><i data-hf-id="hf-ylp6"></i><i data-hf-id="hf-0l8b"></i><i data-hf-id="hf-0zjc"></i></div>
+        <div data-hf-id="hf-jcl9" class="chapter">01 · PRIVATE MEMORY WORLD</div>
+        <div data-hf-id="hf-cn5c" class="scene-content">
+          <div data-hf-id="hf-bjn2" class="copy-column">
+            <span data-hf-id="hf-lrqz" class="kicker">照片散落，记忆没有消失</span>
+            <h1 data-hf-id="hf-edcb" class="headline">不是另一个旅行相册。<em data-hf-id="hf-aez2">是一座可以进入的私人记忆世界。</em></h1>
+            <div data-hf-id="hf-a46i" class="rule"></div>
+            <p data-hf-id="hf-20b7" class="copy">真实照片、小票、截图和文字，在同一空间里重新相连。</p>
+            <span data-hf-id="hf-ytgo" class="micro">ELSEWHERE · TRAVEL MEMORY DATABASE</span>
+          </div>
+          <div data-hf-id="hf-c6qz" class="visual-column"><div data-hf-id="hf-j8ef" class="visual-card"><img data-hf-id="hf-d154" src="assets/world.png" alt="Elsewhere 世界首页"></div></div>
+        </div>
+      </div>
+
+      <div data-hf-id="hf-we5r" id="scene-2" class="scene">
+        <div data-hf-id="hf-43g5" class="aura"></div><div data-hf-id="hf-5lrh" class="constellation"><i data-hf-id="hf-zsm9"></i><i data-hf-id="hf-06xa"></i><i data-hf-id="hf-26gf"></i><i data-hf-id="hf-2krg"></i><i data-hf-id="hf-oz7w"></i><i data-hf-id="hf-okwv"></i></div>
+        <div data-hf-id="hf-ao08" class="chapter">02 · REAL INPUT</div><div data-hf-id="hf-etsg" class="live-badge">REAL FILE BYTES · 8</div>
+        <div data-hf-id="hf-o0eg" class="scene-content">
+          <div data-hf-id="hf-1a2a" class="copy-column">
+            <span data-hf-id="hf-bl3w" class="kicker">从真实输入开始</span>
+            <h2 data-hf-id="hf-pw0h" class="headline">八个文件，<em data-hf-id="hf-13s4">不是预写好的演示结论。</em></h2>
+            <p data-hf-id="hf-g6n2" class="copy">身份、应用完整性、原件保存和批次状态都有独立边界。</p>
+            <div data-hf-id="hf-exrd" class="chips"><span data-hf-id="hf-i6ds" class="chip">Firebase Auth</span><span data-hf-id="hf-507q" class="chip">App Check</span><span data-hf-id="hf-2pz9" class="chip">Cloud Storage</span><span data-hf-id="hf-d8uk" class="chip">Firestore</span></div>
+          </div>
+          <div data-hf-id="hf-h6ob" class="visual-column"></div>
+        </div>
+        <div data-hf-id="hf-6ri5" class="caption-note">浏览器实际选择本地原件；上传、处理与回执读取同一份持久化数据。</div>
+      </div>
+
+      <div data-hf-id="hf-q8fy" id="scene-3" class="scene">
+        <div data-hf-id="hf-5ad8" class="aura"></div><div data-hf-id="hf-auno" class="constellation"><i data-hf-id="hf-o6lu"></i><i data-hf-id="hf-jqbp"></i><i data-hf-id="hf-qkg0"></i><i data-hf-id="hf-q64z"></i><i data-hf-id="hf-prty"></i><i data-hf-id="hf-pdix"></i></div>
+        <div data-hf-id="hf-uo0v" class="chapter">03 · DETERMINISTIC FIRST</div>
+        <div data-hf-id="hf-mthd" class="scene-content">
+          <div data-hf-id="hf-1odb" class="copy-column">
+            <span data-hf-id="hf-45tr" class="kicker">AI 永远不是第一步</span>
+            <h2 data-hf-id="hf-ni1e" class="headline">先把问题用确定性工程<em data-hf-id="hf-bcjg">解决到极限。</em></h2>
+            <div data-hf-id="hf-t8sa" class="service-flow">
+              <div data-hf-id="hf-9y3d" class="service"><b data-hf-id="hf-myqa">Format</b><span data-hf-id="hf-f8um">magic bytes · MIME</span></div><div data-hf-id="hf-n9v1" class="service"><b data-hf-id="hf-3n4h">Hash</b><span data-hf-id="hf-k760">SHA-256 · dHash</span></div><div data-hf-id="hf-ogs4" class="service"><b data-hf-id="hf-i0qo">Metadata</b><span data-hf-id="hf-3wrt">time · GPS · source</span></div><div data-hf-id="hf-o2h3" class="service"><b data-hf-id="hf-fhxy">Duplicate</b><span data-hf-id="hf-18ix">exact · near · cohort</span></div>
+              <div data-hf-id="hf-p9e6" class="service"><b data-hf-id="hf-ixs1">Eventarc</b><span data-hf-id="hf-xfi8">Storage finalized</span></div><div data-hf-id="hf-ov35" class="service"><b data-hf-id="hf-zsyx">Routing</b><span data-hf-id="hf-wujn">authoritative plan</span></div><div data-hf-id="hf-q208" class="service"><b data-hf-id="hf-ba3w">Cloud Tasks</b><span data-hf-id="hf-o0fs">approved capability</span></div><div data-hf-id="hf-db86" class="service is-paid"><b data-hf-id="hf-77fu">Document AI</b><span data-hf-id="hf-w4un">receipt only</span></div>
+            </div>
+            <div data-hf-id="hf-gx1v" class="route-ledger"><div data-hf-id="hf-yeow"><strong data-hf-id="hf-i6ra">8</strong><span data-hf-id="hf-cjja">原件保留</span></div><div data-hf-id="hf-y7yw"><strong data-hf-id="hf-em01">1</strong><span data-hf-id="hf-4dz5">OCR 获批</span></div><div data-hf-id="hf-x11t"><strong data-hf-id="hf-f0b2">0</strong><span data-hf-id="hf-ipau">静默升级</span></div></div>
+          </div>
+          <div data-hf-id="hf-gsda" class="visual-column"><div data-hf-id="hf-pvfr" class="visual-card"><img data-hf-id="hf-oikb" src="assets/fragment-lens-docai.png" alt="Document AI 来源可核对"></div></div>
+        </div>
+      </div>
+
+      <div data-hf-id="hf-13xl" id="scene-4" class="scene">
+        <img data-hf-id="hf-l39q" class="topology" src="assets/earth-topology-world.png" alt=""><div data-hf-id="hf-4w27" class="aura"></div>
+        <div data-hf-id="hf-cpbx" class="chapter">04 · ONE MEMORY SCENE</div><div data-hf-id="hf-r56q" class="live-badge">1 CITY · 8 FRAGMENTS</div>
+        <div data-hf-id="hf-n7se" class="scene-content">
+          <div data-hf-id="hf-22oc" class="copy-column">
+            <span data-hf-id="hf-08p3" class="kicker">数据改变空间</span>
+            <h2 data-hf-id="hf-xiqy" class="headline">从世界到 Bangkok，<em data-hf-id="hf-ntau">同一批粒子重新组织。</em></h2>
+            <p data-hf-id="hf-41zq" class="copy">Common Grounds、河岸与待确认地点形成由真实原件驱动的团块。</p>
+            <div data-hf-id="hf-fsig" class="source-order"><span data-hf-id="hf-ydfo">原件</span><i data-hf-id="hf-hqsk"></i><span data-hf-id="hf-ube6">聚类</span><i data-hf-id="hf-hchj"></i><span data-hf-id="hf-5wt3">城市世界</span></div>
+          </div><div data-hf-id="hf-ge29" class="visual-column"><div data-hf-id="hf-ph4q" class="visual-card"><img data-hf-id="hf-z8nj" src="assets/city-world.png" alt="Bangkok 城市记忆聚类"></div></div>
+        </div>
+      </div>
+
+      <div data-hf-id="hf-0c9s" id="scene-5" class="scene">
+        <div data-hf-id="hf-62za" class="aura"></div><div data-hf-id="hf-ikr2" class="chapter">05 · SEARCH &amp; SOURCE</div><div data-hf-id="hf-k05p" class="live-badge">COMMON GROUNDS</div>
+        <div data-hf-id="hf-m0vb" class="scene-content">
+          <div data-hf-id="hf-2gzd" class="copy-column">
+            <span data-hf-id="hf-qcjw" class="kicker">空间数据库，也必须可核对</span>
+            <h2 data-hf-id="hf-a7ex" class="headline">搜索使相关碎片回流。<em data-hf-id="hf-ollp">Lens 把结论带回原件。</em></h2>
+            <p data-hf-id="hf-f4ec" class="copy">图片、时间、地点、处理轨迹和 Document AI 摘录都保留来源。</p>
+            <div data-hf-id="hf-4dp9" class="chips"><span data-hf-id="hf-97o7" class="chip">Fragment Field</span><span data-hf-id="hf-1gqt" class="chip is-approved">Fragment Lens</span><span data-hf-id="hf-bli3" class="chip">Source trace</span></div>
+          </div><div data-hf-id="hf-fzr8" class="visual-column"><div data-hf-id="hf-p2tp" class="visual-card"><img data-hf-id="hf-7abg" src="assets/fragment-lens.png" alt="Fragment Lens 来源面板"></div></div>
+        </div>
+      </div>
+
+      <div data-hf-id="hf-905n" id="scene-6" class="scene">
+        <div data-hf-id="hf-5oo9" class="aura"></div><div data-hf-id="hf-zode" class="chapter">06 · DISCOVERY GROWS</div>
+        <div data-hf-id="hf-mf6c" class="scene-content">
+          <div data-hf-id="hf-2vae" class="copy-column">
+            <span data-hf-id="hf-2own" class="kicker">结论最后出现</span>
+            <h2 data-hf-id="hf-gw8p" class="headline">原件 → 线索 → 关系 → <em data-hf-id="hf-0aue">发现</em></h2>
+            <p data-hf-id="hf-d7cw" class="copy">三个日期先进入视野；共同地点成立后，标题才从证据中显影。</p>
+            <div data-hf-id="hf-5kmc" class="chips"><span data-hf-id="hf-mucq" class="chip">12 OCT</span><span data-hf-id="hf-d7wm" class="chip">16 OCT</span><span data-hf-id="hf-5mg3" class="chip">19 OCT</span><span data-hf-id="hf-jcdm" class="chip is-approved">Common Grounds</span></div>
+          </div><div data-hf-id="hf-flg7" class="visual-column"><div data-hf-id="hf-ruyw" class="visual-card"><img data-hf-id="hf-l3nr" src="assets/discovery-detail.png" alt="发现从证据中显影"></div></div>
+        </div>
+      </div>
+
+      <div data-hf-id="hf-521m" id="scene-7" class="scene">
+        <div data-hf-id="hf-6vlc" class="aura"></div><div data-hf-id="hf-67gy" class="chapter">07 · ELSE, WITH BOUNDARIES</div>
+        <div data-hf-id="hf-l899" class="scene-content">
+          <div data-hf-id="hf-39lf" class="copy-column">
+            <div data-hf-id="hf-msu6" class="orb">E</div>
+            <span data-hf-id="hf-thh7" class="kicker">不是普通聊天框</span>
+            <h2 data-hf-id="hf-hj8a" class="headline">先回答。再给来源。<em data-hf-id="hf-6nxb">最后说明不确定边界。</em></h2>
+            <p data-hf-id="hf-pekq" class="copy">Gemini 只能使用已批准、可验证的当前记忆范围。</p>
+            <div data-hf-id="hf-56bb" class="chips"><span data-hf-id="hf-wc6a" class="chip is-approved">Gemini answer</span><span data-hf-id="hf-tw9q" class="chip">verified source IDs</span><span data-hf-id="hf-amad" class="chip">Fragment Lens return</span></div>
+          </div><div data-hf-id="hf-f756" class="visual-column"><div data-hf-id="hf-rgnv" class="visual-card"><img data-hf-id="hf-qg3p" src="assets/else-answer.png" alt="Else 回答与来源"></div></div>
+        </div>
+      </div>
+
+      <div data-hf-id="hf-dpxh" id="scene-8" class="scene">
+        <img data-hf-id="hf-ngle" class="topology" src="assets/earth-topology-final.png" alt=""><div data-hf-id="hf-6hab" class="aura"></div>
+        <div data-hf-id="hf-pi41" class="chapter">08 · VERIFIED GOOGLE ECOSYSTEM</div>
+        <div data-hf-id="hf-lmka" class="scene-content">
+          <div data-hf-id="hf-3nwg" class="copy-column">
+            <span data-hf-id="hf-kaem" class="kicker">真实云链路已验证</span>
+            <h2 data-hf-id="hf-fz0c" class="headline">让旅行不只被保存，<em data-hf-id="hf-wjvt">而是重新相连。</em></h2>
+            <div data-hf-id="hf-766f" class="proof-grid">
+              <div data-hf-id="hf-0nwy" class="proof"><strong data-hf-id="hf-cjo3">Firebase</strong><span data-hf-id="hf-xbl9">Auth · App Check · Firestore · Storage</span></div><div data-hf-id="hf-vlue" class="proof"><strong data-hf-id="hf-rppe">Eventarc</strong><span data-hf-id="hf-z0w6">storage finalized boundary</span></div><div data-hf-id="hf-w05f" class="proof"><strong data-hf-id="hf-bp4y">Cloud Run</strong><span data-hf-id="hf-g6v9">3 isolated runtime identities</span></div>
+              <div data-hf-id="hf-wegg" class="proof"><strong data-hf-id="hf-debp">Cloud Tasks</strong><span data-hf-id="hf-lenz">budgeted execution</span></div><div data-hf-id="hf-tmb9" class="proof"><strong data-hf-id="hf-dw1b">Document AI</strong><span data-hf-id="hf-7fep">1 persisted receipt artifact</span></div><div data-hf-id="hf-u0ma" class="proof"><strong data-hf-id="hf-t2b5">Gemini</strong><span data-hf-id="hf-x8aj">1 sourced answer</span></div>
+            </div>
+            <div data-hf-id="hf-czom" class="final-mark"><img data-hf-id="hf-9n6s" src="assets/favicon.svg" alt=""><span data-hf-id="hf-i79r">Elsewhere</span></div>
+            <span data-hf-id="hf-fohc" class="url">elsewhere-memory-tyx-2026.web.app</span>
+          </div>
+          <div data-hf-id="hf-esu5" class="visual-column"><div data-hf-id="hf-r2cu" class="visual-card"><img data-hf-id="hf-i2si" src="assets/world-final.png" alt="Firebase Hosting 公开评审版"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      const beats = [
+        { id: '#scene-1', start: 0, end: 33.15 }, { id: '#scene-2', start: 33.15, end: 75.52 },
+        { id: '#scene-3', start: 75.52, end: 113.55 }, { id: '#scene-4', start: 113.55, end: 149.74 },
+        { id: '#scene-5', start: 149.74, end: 186.68 }, { id: '#scene-6', start: 186.68, end: 219.50 },
+        { id: '#scene-7', start: 219.50, end: 252.79 }, { id: '#scene-8', start: 252.79, end: 278.14 }
+      ];
+
+      function enterScene(beat, index) {
+        const scene = beat.id;
+        const t = beat.start + 0.18;
+        const animate = (selector, from, to, at) => {
+          const targets = gsap.utils.toArray(`${scene} ${selector}`);
+          if (targets.length) tl.fromTo(targets, from, to, at);
+        };
+        if (index > 0) {
+          const previous = beats[index - 1].id;
+          tl.set(scene, { visibility: 'visible' }, beat.start - 0.01);
+          tl.fromTo(scene, { opacity: 0, filter: 'blur(24px)', scale: 1.025 }, { opacity: 1, filter: 'blur(0px)', scale: 1, duration: .78, ease: 'sine.inOut' }, beat.start);
+          tl.to(previous, { opacity: 0, filter: 'blur(20px)', scale: 1.03, duration: .78, ease: 'sine.inOut' }, beat.start);
+          tl.set(previous, { opacity: 0, visibility: 'hidden' }, beat.start + .79);
+        }
+        animate('.kicker', { opacity: 0, x: -48 }, { opacity: 1, x: 0, duration: .62, ease: 'expo.out' }, t);
+        animate('.headline', { opacity: 0, y: 52 }, { opacity: 1, y: 0, duration: .9, ease: 'power3.out' }, t + .18);
+        animate('.copy', { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: .7, ease: 'power2.out' }, t + .5);
+        animate('.rule', { scaleX: 0, opacity: 0 }, { scaleX: 1, opacity: 1, duration: .55, ease: 'circ.out' }, t + .62);
+        animate('.visual-card', { opacity: 0, x: 65, rotationY: -7 }, { opacity: 1, x: 0, rotationY: 0, duration: 1.1, ease: 'power4.out' }, t + .32);
+        animate('.chip, .service, .proof', { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: .48, stagger: .07, ease: 'back.out(1.35)' }, t + .68);
+        animate('.chapter, .live-badge, .caption-note', { opacity: 0 }, { opacity: 1, duration: .75, ease: 'power1.out' }, t + .12);
+        animate('.aura', { opacity: .2, rotation: -5 }, { opacity: .9, rotation: 8, duration: Math.max(5, beat.end - beat.start - .5), ease: 'sine.inOut' }, t);
+        animate('.topology', { opacity: .08, scale: .97 }, { opacity: .18, scale: 1.035, duration: Math.max(5, beat.end - beat.start - .4), ease: 'none' }, t);
+        animate('.visual-card img', { scale: 1 }, { scale: 1.035, duration: Math.max(5, beat.end - beat.start - .6), ease: 'none' }, t + .3);
+      }
+
+      beats.forEach(enterScene);
+      tl.to('#scene-8', { opacity: 0, filter: 'blur(16px)', duration: 1.1, ease: 'power2.in' }, 276.8);
+      tl.set('#scene-8', { opacity: 0, visibility: 'hidden' }, 278.0);
+      window.__timelines['elsewhere-demo'] = tl;
+    </script>
+  </body>
+</html>
