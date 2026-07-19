@@ -19,7 +19,7 @@ The Firebase project, Web App, and the mandatory cloud-backed recording resource
 - Public frontend template: `design-lab/prototypes-vanilla/.env.cloud.example`
 - Public backend template: `services/backend/.env.example`
 
-The two local files are ignored by Git. Never commit Firebase Web API keys, App Check debug tokens, ADC files, Gemini keys, Document AI processor IDs, or billing data.
+The local files are ignored by Git. The App Check debug token lives only in the backend cloud file and is injected only into the Vite development server; Vite production builds force it to `null`. Never commit Firebase Web API keys, App Check debug tokens, ADC files, Gemini keys, Document AI processor IDs, or billing data.
 
 ## Billing and cost guardrail
 

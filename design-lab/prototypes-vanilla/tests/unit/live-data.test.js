@@ -10,9 +10,25 @@ import { renderRoute } from '../../src/pages/render-route.js';
 import { createInitialState } from '../../src/store.js';
 import { hydrateLiveCollections } from '../../src/data/live-hydrator.js';
 import {
+  createDemoClient,
+  demoClientConfigFromEnv,
+} from '../../src/data/demo-client.js';
+import {
   bootstrapLiveData,
   runtimeState,
 } from '../../src/data/runtime.js';
+
+const cloudEnvironment = Object.freeze({
+  VITE_ELSEWHERE_INFRA_MODE: 'cloud',
+  VITE_ELSEWHERE_API_BASE_URL: 'http://127.0.0.1:8787',
+  VITE_FIREBASE_API_KEY: 'cloud-api-key',
+  VITE_FIREBASE_AUTH_DOMAIN: 'elsewhere-memory-tyx-2026.firebaseapp.com',
+  VITE_FIREBASE_PROJECT_ID: 'elsewhere-memory-tyx-2026',
+  VITE_FIREBASE_STORAGE_BUCKET: 'elsewhere-memory-tyx-2026.firebasestorage.app',
+  VITE_FIREBASE_APP_ID: 'cloud-web-app-id',
+  VITE_FIREBASE_MESSAGING_SENDER_ID: '352557422052',
+  VITE_FIREBASE_APP_CHECK_SITE_KEY: 'recaptcha-enterprise-site-key',
+});
 
 function snapshotWith(ids) {
   const projectedFragments = ids.map((id, index) => ({
@@ -86,6 +102,86 @@ test('live mode never silently returns fixture data after a failed bootstrap', a
 
   assert.equal(runtimeState.status, 'error');
   assert.equal(runtimeState.snapshot, null);
+});
+
+test('Firebase infrastructure defaults to the existing Emulator configuration', () => {
+  const config = demoClientConfigFromEnv({});
+
+  assert.equal(config.infrastructureMode, 'emulator');
+  assert.equal(config.authEmulatorUrl, 'http://127.0.0.1:9099');
+  assert.equal(config.storageEmulator, '127.0.0.1:9199');
+  assert.equal(config.firebase.projectId, 'demo-elsewhere');
+  assert.equal(config.appCheck, null);
+});
+
+test('cloud Firebase configuration is strict and contains no Emulator addresses', () => {
+  const config = demoClientConfigFromEnv(cloudEnvironment);
+
+  assert.equal(config.infrastructureMode, 'cloud');
+  assert.equal(config.authEmulatorUrl, null);
+  assert.equal(config.storageEmulator, null);
+  assert.equal(config.firebase.messagingSenderId, '352557422052');
+  assert.deepEqual(config.appCheck, {
+    siteKey: 'recaptcha-enterprise-site-key',
+    debugToken: null,
+  });
+
+  const required = [
+    'VITE_FIREBASE_API_KEY',
+    'VITE_FIREBASE_AUTH_DOMAIN',
+    'VITE_FIREBASE_PROJECT_ID',
+    'VITE_FIREBASE_STORAGE_BUCKET',
+    'VITE_FIREBASE_APP_ID',
+    'VITE_FIREBASE_MESSAGING_SENDER_ID',
+    'VITE_FIREBASE_APP_CHECK_SITE_KEY',
+  ];
+  for (const field of required) {
+    const missing = { ...cloudEnvironment };
+    delete missing[field];
+    assert.throws(() => demoClientConfigFromEnv(missing), new RegExp(field));
+  }
+  assert.throws(() => demoClientConfigFromEnv({
+    VITE_ELSEWHERE_INFRA_MODE: 'automatic',
+  }), /VITE_ELSEWHERE_INFRA_MODE/);
+});
+
+test('cloud requests use App Check without connecting either Firebase Emulator', async () => {
+  const calls = [];
+  const client = createDemoClient(demoClientConfigFromEnv({
+    ...cloudEnvironment,
+    ELSEWHERE_APP_CHECK_DEBUG_TOKEN: 'local-debug-token',
+  }), {
+    connectAuthEmulatorFn() { calls.push('auth-emulator'); },
+    connectStorageEmulatorFn() { calls.push('storage-emulator'); },
+    appCheckFactory({ siteKey, debugToken }) {
+      calls.push(['app-check', siteKey, debugToken]);
+      return Object.freeze({ getToken: async () => 'verified-app-check-token' });
+    },
+    signInAnonymouslyFn: async () => ({
+      user: Object.freeze({ getIdToken: async () => 'firebase-id-token' }),
+    }),
+    fetchFn: async (_url, init) => {
+      calls.push(['request', init.headers]);
+      return Object.freeze({
+        ok: true,
+        status: 200,
+        json: async () => ({ revision: 'cloud-revision' }),
+      });
+    },
+  });
+
+  await client.getSnapshot();
+
+  assert.equal(calls.includes('auth-emulator'), false);
+  assert.equal(calls.includes('storage-emulator'), false);
+  assert.deepEqual(calls[0], [
+    'app-check',
+    'recaptcha-enterprise-site-key',
+    'local-debug-token',
+  ]);
+  const request = calls.find(([name]) => name === 'request');
+  assert.equal(request[1]['x-firebase-appcheck'], 'verified-app-check-token');
+  assert.notEqual(request[1]['x-firebase-appcheck'], 'local-demo-app-check');
 });
 
 test('hydration changes world counts and fragment identities from the snapshot', () => {

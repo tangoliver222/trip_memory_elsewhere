@@ -1,5 +1,10 @@
 import { initializeApp } from 'firebase/app';
 import {
+  getToken as getAppCheckToken,
+  initializeAppCheck,
+  ReCaptchaEnterpriseProvider,
+} from 'firebase/app-check';
+import {
   connectAuthEmulator,
   getAuth,
   signInAnonymously,
@@ -16,7 +21,7 @@ const DEMO_HEADER = 'local-competition-v1';
 const APP_CHECK_TOKEN = 'local-demo-app-check';
 
 function required(value, name) {
-  if (typeof value !== 'string' || !value) throw new TypeError(`${name} is required`);
+  if (typeof value !== 'string' || !value.trim()) throw new TypeError(`${name} is required`);
   return value;
 }
 
@@ -27,35 +32,88 @@ function splitHost(value, name) {
 }
 
 export function demoClientConfigFromEnv(environment = {}) {
+  const infrastructureMode = environment.VITE_ELSEWHERE_INFRA_MODE || 'emulator';
+  if (!['cloud', 'emulator'].includes(infrastructureMode)) {
+    throw new TypeError('VITE_ELSEWHERE_INFRA_MODE must be emulator or cloud');
+  }
+  const isCloud = infrastructureMode === 'cloud';
+  const value = (name, fallback) => (
+    isCloud ? required(environment[name], name) : environment[name] || fallback
+  );
   return Object.freeze({
+    infrastructureMode,
     apiBaseUrl: environment.VITE_ELSEWHERE_API_BASE_URL || '',
-    authEmulatorUrl: environment.VITE_FIREBASE_AUTH_EMULATOR_URL || 'http://127.0.0.1:9099',
-    storageEmulator: environment.VITE_FIREBASE_STORAGE_EMULATOR || '127.0.0.1:9199',
+    authEmulatorUrl: isCloud
+      ? null
+      : environment.VITE_FIREBASE_AUTH_EMULATOR_URL || 'http://127.0.0.1:9099',
+    storageEmulator: isCloud
+      ? null
+      : environment.VITE_FIREBASE_STORAGE_EMULATOR || '127.0.0.1:9199',
     firebase: Object.freeze({
-      apiKey: environment.VITE_FIREBASE_API_KEY || 'demo-api-key',
-      authDomain: environment.VITE_FIREBASE_AUTH_DOMAIN || 'demo-elsewhere.firebaseapp.com',
-      projectId: environment.VITE_FIREBASE_PROJECT_ID || 'demo-elsewhere',
-      storageBucket: environment.VITE_FIREBASE_STORAGE_BUCKET || 'demo-elsewhere.appspot.com',
-      appId: environment.VITE_FIREBASE_APP_ID || 'demo-elsewhere-web',
+      apiKey: value('VITE_FIREBASE_API_KEY', 'demo-api-key'),
+      authDomain: value('VITE_FIREBASE_AUTH_DOMAIN', 'demo-elsewhere.firebaseapp.com'),
+      projectId: value('VITE_FIREBASE_PROJECT_ID', 'demo-elsewhere'),
+      storageBucket: value('VITE_FIREBASE_STORAGE_BUCKET', 'demo-elsewhere.appspot.com'),
+      appId: value('VITE_FIREBASE_APP_ID', 'demo-elsewhere-web'),
+      messagingSenderId: value('VITE_FIREBASE_MESSAGING_SENDER_ID', 'demo-messaging-sender'),
     }),
+    appCheck: isCloud ? Object.freeze({
+      siteKey: required(
+        environment.VITE_FIREBASE_APP_CHECK_SITE_KEY,
+        'VITE_FIREBASE_APP_CHECK_SITE_KEY',
+      ),
+      debugToken: environment.ELSEWHERE_APP_CHECK_DEBUG_TOKEN || null,
+    }) : null,
   });
 }
 
-export function createDemoClient(config) {
+function createAppCheckProvider({ app, siteKey, debugToken }) {
+  const compiledDebugToken = typeof __ELSEWHERE_APP_CHECK_DEBUG_TOKEN__ === 'string'
+    ? __ELSEWHERE_APP_CHECK_DEBUG_TOKEN__
+    : null;
+  const localDebugToken = debugToken || compiledDebugToken;
+  if (localDebugToken) globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN = localDebugToken;
+  const appCheck = initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(siteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+  return Object.freeze({
+    async getToken() {
+      const result = await getAppCheckToken(appCheck);
+      return result.token;
+    },
+  });
+}
+
+export function createDemoClient(config, {
+  appCheckFactory = createAppCheckProvider,
+  connectAuthEmulatorFn = connectAuthEmulator,
+  connectStorageEmulatorFn = connectStorageEmulator,
+  fetchFn = globalThis.fetch,
+  signInAnonymouslyFn = signInAnonymously,
+} = {}) {
   if (!config?.firebase) throw new TypeError('Firebase client config is required');
   const app = initializeApp(config.firebase, `elsewhere-demo-${Date.now()}`);
   const auth = getAuth(app);
   const storage = getStorage(app);
-  const storageEmulator = splitHost(config.storageEmulator, 'storageEmulator');
-  connectAuthEmulator(auth, required(config.authEmulatorUrl, 'authEmulatorUrl'), {
-    disableWarnings: true,
-  });
-  connectStorageEmulator(storage, storageEmulator.host, storageEmulator.port);
+  let appCheckProvider = null;
+  if (config.infrastructureMode === 'cloud') {
+    appCheckProvider = appCheckFactory({ app, ...config.appCheck });
+    if (typeof appCheckProvider?.getToken !== 'function') {
+      throw new TypeError('App Check provider is invalid');
+    }
+  } else {
+    const storageEmulator = splitHost(config.storageEmulator, 'storageEmulator');
+    connectAuthEmulatorFn(auth, required(config.authEmulatorUrl, 'authEmulatorUrl'), {
+      disableWarnings: true,
+    });
+    connectStorageEmulatorFn(storage, storageEmulator.host, storageEmulator.port);
+  }
   const apiBaseUrl = config.apiBaseUrl || '';
   let signInPromise = null;
 
   async function signIn() {
-    if (!signInPromise) signInPromise = signInAnonymously(auth);
+    if (!signInPromise) signInPromise = signInAnonymouslyFn(auth);
     const credential = await signInPromise;
     return credential.user;
   }
@@ -63,12 +121,15 @@ export function createDemoClient(config) {
   async function request(path, { method = 'GET', body } = {}) {
     const user = auth.currentUser || await signIn();
     const idToken = await user.getIdToken();
-    const response = await fetch(`${apiBaseUrl}${path}`, {
+    const appCheckToken = appCheckProvider
+      ? required(await appCheckProvider.getToken(), 'App Check token')
+      : APP_CHECK_TOKEN;
+    const response = await fetchFn(`${apiBaseUrl}${path}`, {
       method,
       headers: {
         authorization: `Bearer ${idToken}`,
         'content-type': 'application/json',
-        'x-firebase-appcheck': APP_CHECK_TOKEN,
+        'x-firebase-appcheck': appCheckToken,
         'x-elsewhere-demo': DEMO_HEADER,
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
