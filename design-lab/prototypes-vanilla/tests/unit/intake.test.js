@@ -16,8 +16,9 @@ test('receipt counts come only from the import batch', () => {
 test('mixed-media import and inbox keep one clear next decision', () => {
   const importHtml = renderRoute('#/world/import', state).html;
   const inboxHtml = renderRoute('#/world/inbox', state).html;
+  const inboxText = inboxHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   assert.match(importHtml, /18 张照片/);
   assert.match(importHtml, /5 张截图/);
   assert.equal((inboxHtml.match(/data-review-choice/g) || []).length, 3);
-  assert.match(inboxHtml, /是否也靠近 Chao Phraya Ferry/);
+  assert.match(inboxText, /是否也靠近 Chao Phraya Ferry/);
 });

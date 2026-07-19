@@ -1,7 +1,7 @@
 const PROFILES = Object.freeze({
-  low: Object.freeze({ particleCount: 3200, maxDpr: 1, antialias: false, fps: 30 }),
+  low: Object.freeze({ particleCount: 3000, maxDpr: 1, antialias: false, fps: 30 }),
   balanced: Object.freeze({ particleCount: 9000, maxDpr: 1.25, antialias: true, fps: 45 }),
-  high: Object.freeze({ particleCount: 15000, maxDpr: 1.5, antialias: true, fps: 60 }),
+  high: Object.freeze({ particleCount: 10000, maxDpr: 1.5, antialias: true, fps: 60 }),
 });
 
 export function getPerformanceProfile(name = 'balanced', { reducedMotion = false } = {}) {
