@@ -97,9 +97,10 @@ export function renderWorldHome() {
     </main>`,
     afterRender({ pageRoot, sceneManager }) {
       const stage = pageRoot.querySelector('[data-globe-stage]');
+      let stopWorldTracking = () => {};
       if (stage) {
         sceneManager.bindControls(stage);
-        sceneManager.alignWorldToElement(stage);
+        stopWorldTracking = sceneManager.trackWorldElement(stage);
       }
       sceneManager.trackCityPins(cities.map((city) => ({
         lat: city.coordinates.lat,
@@ -123,7 +124,10 @@ export function renderWorldHome() {
           delay: firstVisit ? 2.4 : 0.35,
         });
       }
-      return () => sceneManager.trackCityPins([]);
+      return () => {
+        stopWorldTracking();
+        sceneManager.trackCityPins([]);
+      };
     },
   };
 }
@@ -264,6 +268,10 @@ export function renderCityHome(routeId = 'bangkok', state = {}) {
         { z: -2, weights: [1, 0.92, 0.8] },
       );
       if (anchors.length) sceneManager.retarget?.('cityCluster', { anchors });
+      const stopAnchorTracking = sceneManager.trackElementAnchors(
+        pageRoot.querySelectorAll('[data-cluster-anchor]'),
+        { mode: 'cityCluster', z: -2, weights: [1, 0.92, 0.8] },
+      );
 
       const reduced = reducedMotionQuery();
       const tiles = pageRoot.querySelectorAll('.city-tile, .city-cluster__name');
@@ -276,7 +284,7 @@ export function renderCityHome(routeId = 'bangkok', state = {}) {
           opacity: 1, y: 0, scale: 1, duration: 1.1, ease: 'power3.out', stagger: 0.08, delay: 0.35,
         });
       }
-      return () => {};
+      return stopAnchorTracking;
     },
   };
 }

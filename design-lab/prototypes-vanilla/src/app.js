@@ -172,6 +172,7 @@ function updateShell() {
     sceneKey = nextSceneKey;
     window.sessionStorage.setItem('elsewhere:previous-page', route.pageId);
   }
+  if (routeChanged) root.querySelector('#page-content-layer')?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   const cleanup = view.afterRender?.({
     pageRoot: root.querySelector('#page-content-layer'),
     store,
@@ -179,7 +180,6 @@ function updateShell() {
     route,
   });
   if (typeof cleanup === 'function') pageCleanup = cleanup;
-  if (routeChanged) root.querySelector('#page-content-layer')?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   if (routeChanged || renderedRoute === null) scheduleVisualReady(route);
   renderedRoute = state.route;
   syncElseOrbPlacement(state);
