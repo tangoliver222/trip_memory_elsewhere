@@ -38,3 +38,23 @@ test('public judge build serves stable recording-critical routes', async ({ page
 
   expect(runtimeErrors).toEqual([]);
 });
+
+test('public competition video exposes valid review metadata', async ({ page }) => {
+  await page.goto('/#/world', { waitUntil: 'domcontentloaded' });
+  const metadata = await page.evaluate(async () => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.src = '/demo/elsewhere-competition-demo.mp4';
+    document.body.append(video);
+    await new Promise((resolve, reject) => {
+      video.addEventListener('loadedmetadata', resolve, { once: true });
+      video.addEventListener('error', () => reject(new Error('competition video metadata failed to load')), { once: true });
+    });
+    return { duration: video.duration, width: video.videoWidth, height: video.videoHeight };
+  });
+
+  expect(metadata.duration).toBeGreaterThan(278);
+  expect(metadata.duration).toBeLessThan(279);
+  expect(metadata.width).toBe(1920);
+  expect(metadata.height).toBe(1080);
+});

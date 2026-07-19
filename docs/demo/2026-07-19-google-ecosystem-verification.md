@@ -8,9 +8,9 @@ ingestion，经确定性处理、Module 4.5 权威路由、Cloud Tasks 和独立
 OCR；本地隔离的录制 composition 从持久化结果投影 World、City、Fragment Field、Lens 和 Discovery，
 并完成一次带有效来源的 Gemini 回答。
 
-这不是前端 fixture 或固定 AI 文案。当前没有部署完整生产前端：Firebase Hosting rewrite 已实现，但在生产
-snapshot/Else 读模型完成独立边界审阅前保持未部署。录制入口因此是本地视觉应用加真实 Google Cloud 数据链，
-而不是声称已经上线的完整产品。
+这不是前端 fixture 或固定 AI 文案。供评审直接浏览的静态产品原型已部署到 Firebase Hosting；它使用经过
+双尺寸视觉回归的公开评审数据，不声称能在公网写入私人原件。真实上传、OCR 与 Gemini 录制入口仍是本地视觉
+应用连接真实 Google Cloud 数据链，直到生产 snapshot/Else 读模型完成独立边界审阅。
 
 ## 最终验收矩阵
 
@@ -20,9 +20,11 @@ snapshot/Else 读模型完成独立边界审阅前保持未部署。录制入口
 | Cloud Run ingestion 主链 | 通过 | Auth/App Check → ImportBatch → Storage → Eventarc → routing → Tasks → Document AI |
 | 后端普通测试 | 通过 | 610 项：602 通过、8 项为未启动 Emulator 时的预期跳过、0 失败；7.9 秒 |
 | Firebase Emulator 套件 | 通过 | 70/70，0 失败；43.5 秒；Auth、Firestore、Storage 和 Rules |
-| 前端单元测试 | 通过 | 83/83，0 失败 |
+| 前端单元测试 | 通过 | 88/88，0 失败 |
 | 本地无付费浏览器回归 | 通过 | Playwright 1/1，16.0 秒；Gemini 和真实云能力关闭 |
+| 录屏视觉回归 | 通过 | 390×844 与 430×932 共 18 张页面截图；无乱码、溢出或粒子锚点漂移 |
 | 前端生产构建 | 通过 | 默认 build 与 cloud-mode build 均成功 |
+| Firebase Hosting 评审版 | 通过 | `https://elsewhere-memory-tyx-2026.web.app`；公网 smoke 1/1 |
 | 云资源状态 | 通过 | 三个 Cloud Run revision Ready；Tasks queue RUNNING；Eventarc 精确绑定 Firebase bucket |
 | 云端测试数据清理 | 通过 | Auth users 0、Firestore root user documents 0、Storage `users/` objects 0 |
 
@@ -83,14 +85,14 @@ PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH \
 覆盖 Auth boundary、Firestore/Storage Rules、原件 finalize、确定性处理、权威路由、capability execution
 以及 Firestore repository contract。普通后端测试的 8 项 skip 只表示该命令没有启动 Emulator，不表示缺测。
 
-## 已实现但未部署
+## 已部署的评审界面与仍隔离的生产能力
 
-- Firebase Hosting 静态 SPA 配置和 `/v1/**` → `elsewhere-api` rewrite。
-- cloud-mode Vite production build。
-- 视觉原型所需的 snapshot/Discovery projection 和 Else endpoint 的隔离 demo composition。
+- Firebase Hosting 已发布经验证的静态 SPA 评审版；它用于免登录浏览产品体验。
+- `/v1/**` → `elsewhere-api` rewrite 和 cloud-mode Vite production build 已实现。
+- 视觉原型所需的 snapshot/Discovery projection 和 Else endpoint 仍位于隔离 demo composition。
 
-未部署的原因是生产 API 目前只包含完成边界审阅的 ImportBatch 写入/回执接口；直接部署 cloud-mode SPA
-会形成“界面上线、核心读模型仍依赖开发 composition”的误导状态。
+生产 API 目前只包含完成边界审阅的 ImportBatch 写入/回执接口。因此公开评审版不连接生产写入能力，避免形成
+“界面上线、核心读模型仍依赖开发 composition”的误导状态；真实云处理能力由受控录制链和验证记录证明。
 
 ## 本轮明确排除
 
@@ -98,7 +100,7 @@ PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH \
 - 外部来源导入与手机备忘录连接器。
 - 前端登录 UI、角色/管理员权限、session 数据库。
 - replay protection、限流和生产 snapshot/Else API。
-- 完整 Hosting 上线。
+- 公网评审版直接写入生产数据，以及生产 snapshot/Else 读 API。
 
 这些项目不影响当前 Bangkok 核心故事的真实数据录制，但不得在参赛材料中描述为已经实现。
 
