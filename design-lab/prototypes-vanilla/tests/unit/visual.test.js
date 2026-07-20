@@ -244,6 +244,7 @@ test('page scroll and field camera transforms compose instead of overwriting eac
   manager.bindPageSpace({ elements: [anchorElement], scrollRoot, mode: 'field', payload: { itemCount: 1 } });
 
   scrollTop = 80;
+  scrollRoot.scrollTop = 80;
   scrollRoot.emit('scroll');
   manager.setSpatialTransform({ pixelX: 30, pixelY: 12, scale: 1.4, source: 'field-camera' });
 

@@ -2,16 +2,16 @@ const MOVEMENT_TOLERANCE = 0.75;
 
 const near = (left, right) => Math.abs(left - right) <= MOVEMENT_TOLERANCE;
 
-const readAnchors = (elements) => [...elements].map((element, index) => {
+const readAnchors = (elements, scrollDelta = { x: 0, y: 0 }) => [...elements].map((element, index) => {
   const rect = element.getBoundingClientRect();
   return {
     id: element.dataset?.particleId || `anchor-${index}`,
     role: element.dataset?.particleRole || 'fragment',
     weight: Number(element.dataset?.particleWeight) || 1,
-    viewportX: rect.left + rect.width / 2,
-    viewportY: rect.top + rect.height / 2,
-    left: rect.left,
-    top: rect.top,
+    viewportX: rect.left + rect.width / 2 + scrollDelta.x,
+    viewportY: rect.top + rect.height / 2 + scrollDelta.y,
+    left: rect.left + scrollDelta.x,
+    top: rect.top + scrollDelta.y,
     width: rect.width,
     height: rect.height,
   };
@@ -48,17 +48,41 @@ export function createSpatialAnchorRegistry({
   let pending = false;
   let pendingSource = 'layout';
   let resizeObserver = null;
+  let scrollOrigin = { left: 0, top: 0 };
+  let layoutTransform = { pixelX: 0, pixelY: 0, scale: 1 };
+
+  const scrollDelta = () => ({
+    x: (scrollRoot?.scrollLeft || 0) - scrollOrigin.left,
+    y: (scrollRoot?.scrollTop || 0) - scrollOrigin.top,
+  });
+
+  const emitPageTransform = (source) => {
+    const delta = scrollDelta();
+    onTransform({
+      pixelX: layoutTransform.pixelX - delta.x,
+      pixelY: layoutTransform.pixelY - delta.y,
+      scale: layoutTransform.scale,
+      source,
+    });
+  };
 
   const flush = (source = 'layout') => {
     if (!elements.length) return;
-    const current = readAnchors(elements);
+    if (source === 'scroll') {
+      emitPageTransform(source);
+      return;
+    }
+    const delta = scrollDelta();
+    const current = readAnchors(elements, delta);
     const transform = sharedTransform(baseline, current);
     if (transform) {
-      onTransform({ ...transform, source });
+      layoutTransform = transform;
+      emitPageTransform(source);
       return;
     }
     baseline = current;
-    onTransform({ pixelX: 0, pixelY: 0, scale: 1, source: 'layout' });
+    layoutTransform = { pixelX: 0, pixelY: 0, scale: 1 };
+    emitPageTransform('layout');
     onLayout({ anchors: current, source });
   };
 
@@ -85,12 +109,15 @@ export function createSpatialAnchorRegistry({
     scrollRoot = null;
     baseline = [];
     pending = false;
+    scrollOrigin = { left: 0, top: 0 };
+    layoutTransform = { pixelX: 0, pixelY: 0, scale: 1 };
   };
 
   const bind = ({ elements: nextElements = [], scrollRoot: nextScrollRoot = null } = {}) => {
     clear();
     elements = [...nextElements];
     scrollRoot = nextScrollRoot;
+    scrollOrigin = { left: scrollRoot?.scrollLeft || 0, top: scrollRoot?.scrollTop || 0 };
     baseline = readAnchors(elements);
     if (baseline.length) onLayout({ anchors: baseline, source: 'initial' });
     scrollRoot?.addEventListener?.('scroll', onScroll, { passive: true });

@@ -68,6 +68,7 @@ export class MemorySceneManager {
     this.spatialBasePosition = null;
     this.spatialBaseScale = null;
     this.spatialLayoutRevision = 0;
+    this.spatialAnchors = [];
     this._boundFrame = (time) => this.renderFrame(time);
     this._boundVisibility = () => (this.environment.document?.hidden ? this.pause() : this.resume());
     this._boundContextLost = (event) => { event.preventDefault?.(); this.pause(); this.setStaticFallback(true); };
@@ -252,6 +253,7 @@ export class MemorySceneManager {
           weight: anchor.weight,
           ...this.worldFromViewport(anchor.viewportX - canvasRect.left, anchor.viewportY - canvasRect.top, z),
         }));
+        this.spatialAnchors = worldAnchors;
         const scene = compileParticleScene(mode, this.particles.count, { ...payload, anchors: worldAnchors });
         this.particles.setScene(scene, { snap: this.spatialLayoutRevision > 0 });
         this.spatialLayoutRevision += 1;
@@ -268,6 +270,7 @@ export class MemorySceneManager {
   clearPageSpace() {
     this.spatialBindingCleanup?.();
     this.spatialBindingCleanup = null;
+    this.spatialAnchors = [];
   }
 
   /** 把点云地球对齐到页面内的 stage 元素（位置 + 缩放），DOM 与粒子共享坐标系。 */
@@ -331,7 +334,8 @@ export class MemorySceneManager {
   }
 
   target(mode, payload) {
-    const scene = compileParticleScene(mode, this.particles.count, payload);
+    const scenePayload = this.spatialAnchors.length ? { ...payload, anchors: this.spatialAnchors } : payload;
+    const scene = compileParticleScene(mode, this.particles.count, scenePayload);
     this.particles.setScene(scene);
   }
 
