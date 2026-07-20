@@ -171,7 +171,7 @@ export function createDemoClient(config, {
   async function waitForCloudSnapshot() {
     for (let attempt = 0; attempt < CLOUD_POLL_ATTEMPTS; attempt += 1) {
       try {
-        return await request('/demo/v1/snapshot');
+        return await request('/v1/memory-snapshot');
       } catch (error) {
         if (error?.status !== 503) throw error;
         if (attempt + 1 < CLOUD_POLL_ATTEMPTS) await waitFn(CLOUD_POLL_INTERVAL_MS);

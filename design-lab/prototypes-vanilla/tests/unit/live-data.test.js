@@ -290,6 +290,7 @@ test('production Else query uses the authenticated evidence-only boundary', asyn
 
 test('cloud snapshot waits through a retryable projection gap', async () => {
   let calls = 0;
+  const requests = [];
   const waits = [];
   const client = createDemoClient(demoClientConfigFromEnv(cloudEnvironment), {
     appCheckFactory: () => Object.freeze({ getToken: async () => 'app-check-token' }),
@@ -297,8 +298,9 @@ test('cloud snapshot waits through a retryable projection gap', async () => {
       user: Object.freeze({ getIdToken: async () => 'firebase-id-token' }),
     }),
     waitFn: async (milliseconds) => { waits.push(milliseconds); },
-    fetchFn: async () => {
+    fetchFn: async (url, init) => {
       calls += 1;
+      requests.push([url, init.method]);
       if (calls === 1) {
         return Object.freeze({
           ok: false,
@@ -316,6 +318,10 @@ test('cloud snapshot waits through a retryable projection gap', async () => {
 
   assert.deepEqual(await client.getSnapshot(), { revision: 'cloud-ready' });
   assert.equal(calls, 2);
+  assert.deepEqual(requests, [
+    ['http://127.0.0.1:8787/v1/memory-snapshot', 'GET'],
+    ['http://127.0.0.1:8787/v1/memory-snapshot', 'GET'],
+  ]);
   assert.deepEqual(waits, [500]);
 });
 

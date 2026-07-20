@@ -254,8 +254,10 @@ async function bootApplication() {
     <span class="world-brand__mark">Elsewhere</span>
     <p>正在连接你的记忆空间</p>
   </main>`;
+  const infrastructureMode = import.meta.env.VITE_ELSEWHERE_INFRA_MODE || 'emulator';
   try {
-    const client = createDemoClient(demoClientConfigFromEnv(import.meta.env));
+    const clientConfig = demoClientConfigFromEnv(import.meta.env);
+    const client = createDemoClient(clientConfig);
     const snapshot = await bootstrapLiveData({
       client,
       fetchSnapshot: async () => {
@@ -270,16 +272,19 @@ async function bootApplication() {
       silentRender: true,
     });
     updateShell();
-  } catch {
+  } catch (error) {
     store.dispatch({
       type: 'SET_RUNTIME',
-      value: { mode: 'live', status: 'error', client: null, error: runtimeState.error },
+      value: { mode: 'live', status: 'error', client: null, error },
       silentRender: true,
     });
+    const cloudFailure = infrastructureMode === 'cloud';
     root.innerHTML = `<main class="runtime-gate runtime-gate--error" role="alert">
       <span class="world-brand__mark">Elsewhere</span>
-      <h1>真实数据服务尚未连接</h1>
-      <p>请先启动 Firebase Emulator 与本地 demo server，再刷新此页面。</p>
+      <h1>${cloudFailure ? '云端记忆服务暂时不可用' : '真实数据服务尚未连接'}</h1>
+      <p>${cloudFailure
+    ? '请稍后刷新；已经保存的原件不会因此被修改。'
+    : '请先启动 Firebase Emulator 与本地 demo server，再刷新此页面。'}</p>
     </main>`;
     window.__ELSEWHERE_VISUAL_READY__ = true;
     document.documentElement.dataset.visualReady = 'true';
