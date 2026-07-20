@@ -215,6 +215,9 @@ export function createDemoClient(config, {
     getMemorySnapshot() {
       return request('/v1/memory-snapshot');
     },
+    askProductionElse(question, scope) {
+      return request('/v1/else/ask', { method: 'POST', body: { question, scope } });
+    },
     getSnapshot() {
       return config.infrastructureMode === 'cloud'
         ? waitForCloudSnapshot()
