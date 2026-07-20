@@ -4,8 +4,40 @@ import { hydrateLiveCollections } from '../data/live-hydrator.js';
 import { runLiveImport } from '../data/live-import.js';
 import { resolveSnapshotMedia } from '../data/runtime.js';
 import { askElseWithRuntime } from '../data/live-else.js';
+import { currentMemoryCatalog } from '../data/view-model.js';
 
 const valueFor = (element) => element.dataset.value ?? element.value;
+
+export const SUPPORTED_ACTIONS = new Set([
+  'navigate', 'run-live-import', 'back', 'toggle-else', 'close-overlay', 'open-original',
+  'open-share', 'confirm-share', 'set-field-type', 'review-choice', 'connection-decision',
+  'set-discovery-filter', 'save-discovery', 'ask-else', 'submit-else', 'open-delete',
+  'confirm-delete', 'clear-cache', 'save-note', 'export-data', 'open-lens',
+]);
+
+const downloadBlob = (content, type, filename) => {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
+const xmlText = (value) => String(value || '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+
+const shareSvg = (title, copy) => `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+  <rect width="1080" height="1350" fill="#050607"/>
+  <circle cx="850" cy="330" r="190" fill="none" stroke="#64706f" stroke-opacity=".35"/>
+  <circle cx="850" cy="330" r="7" fill="#eef2ef"/>
+  <text x="86" y="116" fill="#aeb7b4" font-family="Arial" font-size="25" letter-spacing="8">ELSEWHERE</text>
+  <text x="86" y="760" fill="#f1f3f0" font-family="Georgia" font-size="66">${xmlText(title)}</text>
+  <foreignObject x="86" y="820" width="850" height="300"><div xmlns="http://www.w3.org/1999/xhtml" style="color:#aeb7b4;font:34px/1.55 Georgia">${xmlText(copy)}</div></foreignObject>
+  <text x="86" y="1260" fill="#66706e" font-family="Arial" font-size="18" letter-spacing="4">PRIVATE MEMORY CUT</text>
+</svg>`;
 
 export function createActionController({ root, store }) {
   const timers = new Set();
@@ -103,8 +135,8 @@ export function createActionController({ root, store }) {
     if (action === 'open-original') store.dispatch({ type: 'OPEN_ORIGINAL' });
     if (action === 'open-share') store.dispatch({ type: 'OPEN_SHARE', payload: { title: target.dataset.title, text: target.dataset.text } });
     if (action === 'set-field-type') store.dispatch({ type: 'SET_FIELD_FILTERS', filters: { type: target.dataset.value } });
-    if (action === 'review-choice') store.dispatch({ type: 'SET_REVIEW_DECISION', reviewId: 'review-river-1022-place', value: target.dataset.value });
-    if (action === 'connection-decision') store.dispatch({ type: 'SET_CONNECTION_DECISION', value: target.dataset.value });
+    if (action === 'review-choice') store.dispatch({ type: 'SET_REVIEW_DECISION', reviewId: target.dataset.reviewId, value: target.dataset.value });
+    if (action === 'connection-decision') store.dispatch({ type: 'SET_CONNECTION_DECISION', connectionId: target.dataset.connectionId, value: target.dataset.value });
     if (action === 'set-discovery-filter') store.dispatch({ type: 'SET_DISCOVERY_FILTER', filter: target.dataset.value });
     if (action === 'save-discovery') store.dispatch({ type: 'SAVE_DISCOVERY', discoveryId: target.dataset.discoveryId });
     if (action === 'ask-else') void askElse(target.dataset.question);
@@ -113,14 +145,12 @@ export function createActionController({ root, store }) {
     if (action === 'confirm-delete') store.dispatch({ type: 'CONFIRM_DELETE', targetId: target.dataset.targetId });
     if (action === 'clear-cache') store.dispatch({ type: 'CLEAR_CACHE' });
     if (action === 'save-note') navigate('#/me/writing');
+    if (action === 'confirm-share' && typeof document !== 'undefined') {
+      downloadBlob(shareSvg(target.dataset.title || '一段旅行记忆', target.dataset.text || '来源已隐藏敏感信息。'), 'image/svg+xml', 'elsewhere-memory.svg');
+      store.dispatch({ type: 'CLOSE_OVERLAY' });
+    }
     if (action === 'export-data' && typeof document !== 'undefined') {
-      const blob = new Blob([JSON.stringify({ product: 'Elsewhere', exportedAt: new Date().toISOString(), note: 'Prototype export contains fixture-derived metadata only.' }, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'elsewhere-export.json';
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(JSON.stringify({ product: 'Elsewhere', exportedAt: new Date().toISOString(), data: currentMemoryCatalog() }, null, 2), 'application/json', 'elsewhere-export.json');
     }
     if (action === 'open-lens') {
       const layer = document.querySelector('#page-content-layer');

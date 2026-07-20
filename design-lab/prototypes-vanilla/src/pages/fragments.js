@@ -172,8 +172,9 @@ export function renderReceiptPage(batchId) {
   };
 }
 
-export function renderInboxPage() {
+export function renderInboxPage(state = {}) {
   const review = reviewQueue[0];
+  const decision = state.reviewDecisions?.[review.id];
   return {
     sceneMode: 'quiet-tool',
     scenePayload: {
@@ -185,7 +186,8 @@ export function renderInboxPage() {
     html: `<main class="page inbox-page" data-page-id="world-inbox">
       <header class="inbox-header"><p class="eyebrow">收件箱 · 一次只做一个判断</p><h1>这张交通截图<br>是否也靠近<br>Chao Phraya Ferry？</h1><p>截图文字包含 ferry，但缺少可确认的具体码头。你的选择会改变地点连接，不会修改原件。</p></header>
       <section class="review-comparison"><div class="review-source review-source--pending" data-particle-anchor data-particle-id="review-pending" data-particle-role="evidence" data-particle-weight="1"><span>22 OCT · 18:04</span><strong>交通截图</strong><small>具体码头待确认</small></div><div class="review-link" aria-hidden="true"><i></i><span class="review-link__question">?</span><i></i></div><div class="review-source" data-particle-anchor data-particle-id="review-reference" data-particle-role="evidence" data-particle-weight="1"><img src="/assets/bangkok-photo-02-riverside.jpg" alt="已确认的河岸原件"><span>18 OCT · 17:59</span><strong>Chao Phraya Ferry</strong></div></section>
-      <div class="review-choices">${review.choices.map((choice, index) => `<button type="button" data-review-choice data-action="review-choice" data-value="${index}">${escapeHtml(choice)}</button>`).join('')}</div>
+      <div class="review-choices">${review.choices.map((choice, index) => `<button type="button" data-review-choice data-action="review-choice" data-review-id="${review.id}" data-value="${index}"${String(index) === decision ? ' class="is-selected"' : ''}>${escapeHtml(choice)}</button>`).join('')}</div>
+      ${decision == null ? '' : `<p class="decision-feedback" role="status">已记录“${escapeHtml(review.choices[Number(decision)])}”；原件本身没有改变。</p>`}
       <section class="inbox-queues"><div class="inbox-queue-item"><span>正在整理</span><strong>${escapeHtml(processingItems[0].label)}</strong></div><div class="inbox-queue-item"><span>需要原件</span><strong>${escapeHtml(exceptions[0].label)}</strong></div></section>
       ${primary('回到全部碎片', '#/world/fragments')}
     </main>`,

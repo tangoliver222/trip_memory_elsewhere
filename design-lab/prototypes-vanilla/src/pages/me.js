@@ -23,7 +23,7 @@ export function renderMeHome() {
         <button type="button" data-action="navigate" data-route="#/me/export">${icon('export')}<span><strong>导出与删除</strong><small>先看影响，再执行操作</small></span><b>›</b></button>
       </div>
     </nav>
-    <footer class="me-about"><span>Elsewhere · Prototype 6.6</span><button type="button">关于与反馈</button></footer>
+    <footer class="me-about"><span>Elsewhere · Prototype 6.6</span><a href="mailto:feedback@elsewhere.memory">关于与反馈</a></footer>
     ${primary('查看我的书写', '#/me/writing')}
   </main>`);
 }

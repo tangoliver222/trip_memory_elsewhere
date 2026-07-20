@@ -54,7 +54,13 @@ test('share and delete tools expose privacy and impact before action', async ({ 
   await page.getByRole('button', { name: '预览分享' }).click();
   await expect(page.locator('.share-preview')).toBeVisible();
   await expect(page.locator('.share-privacy input:checked')).toHaveCount(3);
-  await page.getByRole('button', { name: '关闭分享预览', exact: true }).click();
+  const shareDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: '保存分享图' }).click();
+  expect((await shareDownload).suggestedFilename()).toBe('elsewhere-memory.svg');
+  await expect(page.locator('.share-preview')).toHaveCount(0);
+  const dataDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出 JSON' }).click();
+  expect((await dataDownload).suggestedFilename()).toBe('elsewhere-export.json');
   await page.getByRole('button', { name: '确认删除' }).click();
   await expect(page.locator('.delete-confirmation')).toBeVisible();
   await expect(page.locator('.delete-confirmation dl div')).toHaveCount(4);

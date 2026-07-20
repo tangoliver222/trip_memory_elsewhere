@@ -251,13 +251,14 @@ export function renderPlaceDetail(placeId) {
   };
 }
 
-export function renderConnectionDetail(connectionId) {
+export function renderConnectionDetail(connectionId, state = {}) {
   const context = getConnectionContext(connectionId);
   if (!context) return renderUnavailable('world-connection-detail');
   const { connection, from, to, entity } = context;
   const originals = [...from, ...to];
   const humanType = connectionTypeLabel[connection.type] || '来源之间的连接';
   const gap = connection.uncertainty || '当前来源没有明显缺口。';
+  const decision = state.connectionDecisions?.[connection.id];
   const firstCity = originals.map(({ cityId }) => getMemoryView().world.cities.find(({ id }) => id === cityId)).find(Boolean);
   const backRoute = firstCity ? `#/world/city/${firstCity.slug}/explore?view=connection` : '#/world';
   return {
@@ -275,7 +276,8 @@ export function renderConnectionDetail(connectionId) {
       ${renderRelationThread({ label: humanType, evidence: connection.evidence, uncertainty: gap, state: connection.status })}
       <header class="authority-header"><p class="eyebrow">连接详情 · ${connection.status === 'confirmed' ? '已确认' : connection.status === 'suggested' ? '等待判断' : '仍未安放'}</p><h1>${escapeHtml(humanType)}</h1><p>${entity ? `共同指向 ${escapeHtml(entity.name)}，关系强度只由上方来源支撑。` : '这条关系只由上方原件来源支撑。'}</p></header>
       <section class="connection-gap"><span>仍缺少</span><p>${escapeHtml(gap)}</p></section>
-      <div class="connection-actions"><button type="button" data-action="connection-decision" data-value="confirmed">确认这条连接</button><button type="button" data-action="connection-decision" data-value="rejected">保持分开</button></div>
+      <div class="connection-actions"><button type="button" data-action="connection-decision" data-connection-id="${connection.id}" data-value="confirmed"${decision === 'confirmed' ? ' class="is-selected"' : ''}>确认这条连接</button><button type="button" data-action="connection-decision" data-connection-id="${connection.id}" data-value="rejected"${decision === 'rejected' ? ' class="is-selected"' : ''}>保持分开</button></div>
+      ${decision ? `<p class="decision-feedback" role="status">${decision === 'confirmed' ? '已确认这条连接。' : '已保持两组原件分开。'}</p>` : ''}
       ${primary('回到连接视角', backRoute)}
     </main>`,
   };
