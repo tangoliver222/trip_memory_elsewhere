@@ -14,6 +14,7 @@ import { createSharpRoutingFeatureReader } from '../adapters/sharp-routing-featu
 import { createCapabilityScheduler } from '../capabilities/scheduler.js';
 import { createOcrCapabilityWorker } from '../capabilities/worker.js';
 import { createDeterministicProcessor } from '../processing/service.js';
+import { createFirestoreMemorySnapshotReader } from '../memory/reader.js';
 import { createFirestoreRepository } from '../repositories/firestore.js';
 import { createAuthoritativeRouter } from '../routing/service.js';
 import { createApiComposition } from './api.js';
@@ -41,6 +42,7 @@ export function createRuntimeApp(appConfig, {
   capabilityArtifactStoreFactory = createFirebaseCapabilityArtifactStore,
   documentAiOcrFactory = createDocumentAiOcr,
   capabilityWorkerFactory = createOcrCapabilityWorker,
+  memorySnapshotReaderFactory = createFirestoreMemorySnapshotReader,
   clock = () => new Date().toISOString(),
   randomUUID = nodeRandomUUID,
 } = {}) {
@@ -59,6 +61,7 @@ export function createRuntimeApp(appConfig, {
         appCheck: firebase.appCheck,
       }),
       allowedAppIds: appConfig.allowedAppIds,
+      memorySnapshotReader: memorySnapshotReaderFactory({ db: firebase.db }),
     });
   }
 
