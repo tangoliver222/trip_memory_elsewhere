@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { MemorySceneManager } from '../../src/visual/scene-manager.js';
 import { createFlowController } from '../../src/visual/flow-controller.js';
 import { createSemanticTarget } from '../../src/visual/particle-targets.js';
+import { createSpatialAnchorRegistry } from '../../src/visual/spatial-anchor-registry.js';
 
 const createCanvas = () => ({
   clientWidth: 1280,
@@ -112,4 +113,108 @@ test('fixture fragment field retains the frozen multi-city depth layout', () => 
   for (let index = 0; index < mainEnd; index += 1) depths.push(target[index * 3 + 2]);
   assert.ok(Math.min(...depths) < -32, 'fixture field must retain distant Tokyo and Chiang Mai clusters');
   assert.ok(Math.max(...depths) > -12, 'fixture field must retain a near Bangkok cluster');
+});
+
+const createEventTarget = () => {
+  const listeners = new Map();
+  return {
+    scrollTop: 0,
+    scrollLeft: 0,
+    addEventListener(name, handler) { listeners.set(name, handler); },
+    removeEventListener(name) { listeners.delete(name); },
+    emit(name) { listeners.get(name)?.(); },
+  };
+};
+
+test('uniform DOM scroll translates particle space in the same frame without recompiling layout', () => {
+  const transforms = [];
+  const layouts = [];
+  const scrollRoot = createEventTarget();
+  let scrollTop = 0;
+  const anchors = [
+    { dataset: { particleId: 'a' }, getBoundingClientRect: () => ({ left: 20, top: 120 - scrollTop, width: 80, height: 60 }) },
+    { dataset: { particleId: 'b' }, getBoundingClientRect: () => ({ left: 150, top: 360 - scrollTop, width: 90, height: 70 }) },
+  ];
+  const registry = createSpatialAnchorRegistry({
+    environment: { requestAnimationFrame: (callback) => { callback(); return 1; }, cancelAnimationFrame() {} },
+    onTransform: (value) => transforms.push(value),
+    onLayout: (value) => layouts.push(value),
+  });
+  const stop = registry.bind({ elements: anchors, scrollRoot });
+
+  scrollTop = 120;
+  scrollRoot.scrollTop = 120;
+  scrollRoot.emit('scroll');
+
+  assert.equal(layouts.length, 1);
+  assert.deepEqual(transforms.at(-1), { pixelX: 0, pixelY: -120, scale: 1, source: 'scroll' });
+  stop();
+});
+
+test('non-uniform anchor movement recompiles layout exactly once', () => {
+  const layouts = [];
+  let secondLeft = 150;
+  const anchors = [
+    { dataset: { particleId: 'a' }, getBoundingClientRect: () => ({ left: 20, top: 120, width: 80, height: 60 }) },
+    { dataset: { particleId: 'b' }, getBoundingClientRect: () => ({ left: secondLeft, top: 360, width: 90, height: 70 }) },
+  ];
+  const registry = createSpatialAnchorRegistry({
+    environment: { requestAnimationFrame: (callback) => { callback(); return 1; }, cancelAnimationFrame() {} },
+    onTransform() {},
+    onLayout: (value) => layouts.push(value),
+  });
+  registry.bind({ elements: anchors, scrollRoot: createEventTarget() });
+
+  secondLeft = 205;
+  registry.flush('layout');
+
+  assert.equal(layouts.length, 2);
+  assert.equal(layouts.at(-1).anchors[1].viewportX, 250);
+});
+
+test('scene manager scroll binding moves the group without replaying a morph', () => {
+  const morphCalls = [];
+  const canvas = createCanvas();
+  canvas.clientWidth = 390;
+  canvas.clientHeight = 844;
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 390, height: 844 });
+  const scrollRoot = createEventTarget();
+  let scrollTop = 0;
+  const anchorElement = {
+    dataset: { particleId: 'cluster-a', particleWeight: '1' },
+    getBoundingClientRect: () => ({ left: 80, top: 260 - scrollTop, width: 160, height: 120 }),
+  };
+  const manager = new MemorySceneManager({
+    rendererFactory: createRendererFactory(),
+    profile: 'low',
+    flowController: {
+      morph(...args) { morphCalls.push(args); },
+      killAll() {},
+      debug() { return { tracked: 0, active: 0 }; },
+    },
+    environment: {
+      innerWidth: 390,
+      innerHeight: 844,
+      requestAnimationFrame(callback) { callback(); return 1; },
+      cancelAnimationFrame() {},
+    },
+  });
+  manager.mount(canvas);
+  const stop = manager.bindPageSpace({
+    elements: [anchorElement],
+    scrollRoot,
+    mode: 'cityCluster',
+    payload: { itemCount: 1 },
+  });
+  const initialY = manager.group.position.y;
+
+  scrollTop = 100;
+  scrollRoot.scrollTop = 100;
+  scrollRoot.emit('scroll');
+
+  assert.notEqual(manager.group.position.y, initialY);
+  assert.equal(morphCalls.length, 0);
+  assert.equal(manager.debug().spatialTransform.pixelY, -100);
+  stop();
+  manager.dispose();
 });
