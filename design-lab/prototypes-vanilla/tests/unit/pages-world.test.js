@@ -34,6 +34,11 @@ test('city home opens fragments through the unified Fragment Lens only', () => {
   assert.doesNotMatch(html, /data-action="open-original"/);
 });
 
+test('onboarding enters the stable world before the user chooses to import', () => {
+  const html = renderRoute('#/onboarding', state).html;
+  assert.match(html, /data-primary-action data-action="navigate" data-route="#\/world">进入世界首页<\/button>/);
+});
+
 test('world and cities share the world scene and real coordinates', () => {
   assert.equal(renderRoute('#/world', state).sceneMode, 'world');
   assert.equal(renderRoute('#/world/cities', state).sceneMode, 'world');

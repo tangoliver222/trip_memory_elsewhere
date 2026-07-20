@@ -3,7 +3,7 @@
 .onboarding-intro__copy { position: relative; z-index: 2; max-width: 720px; }
 .onboarding-intro__copy h1 { margin: 12px 0 24px; font: 300 clamp(3rem, 8vw, 7.8rem)/.94 Georgia, serif; letter-spacing: -.06em; }
 .onboarding-intro__copy > p:last-child { max-width: 580px; color: var(--paper-1); line-height: 1.75; }
-.onboarding-intro__constellation { position: absolute; inset: 0; }
+.onboarding-intro__constellation { position: absolute; inset: 0; pointer-events: none; }
 .onboarding-intro__constellation span { position: absolute; color: rgba(255,255,255,.27); font: .6rem monospace; letter-spacing: .18em; }
 .onboarding-intro__constellation span:nth-child(1) { top: 18%; left: 17%; }.onboarding-intro__constellation span:nth-child(2) { top: 28%; right: 14%; }.onboarding-intro__constellation span:nth-child(3) { top: 48%; left: 9%; }.onboarding-intro__constellation span:nth-child(4) { top: 10%; left: 58%; }.onboarding-intro__constellation span:nth-child(5) { top: 52%; right: 24%; }
 

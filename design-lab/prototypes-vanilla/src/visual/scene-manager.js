@@ -54,8 +54,6 @@ export class MemorySceneManager {
     this.intersectionObserver = null;
     this.userInteracting = false;
     this.trackedPins = [];
-    this.trackedAnchorLayout = null;
-    this.trackedWorldElement = null;
     this.stableCallbacks = [];
     this._pinVecA = null;
     this._pinVecB = null;
@@ -211,106 +209,6 @@ export class MemorySceneManager {
     this.group.position.set(center.x, center.y, 0);
     this.group.scale.setScalar(scale);
     this.controls?.target?.set?.(center.x, center.y, 0);
-  }
-
-  /**
-   * 固定 Canvas 内的粒子必须跟随滚动 DOM。滚动只产生统一位移，直接移动 Three group；
-   * 不重新播放 morph，因此不会在用户手势之后缓慢追赶。
-   */
-  trackElementAnchors(elements, { mode = null, payload = {}, z = -2, weights = [] } = {}) {
-    const tracked = [...(elements || [])].filter((element) => element?.getBoundingClientRect);
-    this.trackedWorldElement = null;
-    if (!tracked.length || !this.group || !this.canvas?.getBoundingClientRect) {
-      this.trackedAnchorLayout = null;
-      return () => {};
-    }
-    const token = {};
-    const rects = tracked.map((element) => element.getBoundingClientRect());
-    const canvasRect = this.canvas.getBoundingClientRect();
-    const first = rects[0];
-    const basePoint = this.worldFromViewport(
-      first.left + first.width / 2 - canvasRect.left,
-      first.top + first.height / 2 - canvasRect.top,
-      z,
-    );
-    this.trackedAnchorLayout = {
-      token,
-      elements: tracked,
-      mode,
-      payload,
-      z,
-      weights,
-      baseRects: rects,
-      basePoint,
-      basePosition: this.group.position.clone(),
-    };
-    return () => {
-      if (this.trackedAnchorLayout?.token === token) this.trackedAnchorLayout = null;
-    };
-  }
-
-  /** 地球 stage 的位置和受限缩放在每次 DOM box 变化后立即重算。 */
-  trackWorldElement(element, options = {}) {
-    this.trackedAnchorLayout = null;
-    if (!element?.getBoundingClientRect) {
-      this.trackedWorldElement = null;
-      return () => {};
-    }
-    const token = {};
-    this.trackedWorldElement = { token, element, options, signature: '' };
-    this.updateTrackedLayout();
-    return () => {
-      if (this.trackedWorldElement?.token === token) this.trackedWorldElement = null;
-    };
-  }
-
-  updateTrackedLayout() {
-    if (this.trackedWorldElement) {
-      const { element, options } = this.trackedWorldElement;
-      const rect = element.getBoundingClientRect();
-      const signature = [rect.left, rect.top, rect.width, rect.height].map((value) => Math.round(value * 2) / 2).join(':');
-      if (signature !== this.trackedWorldElement.signature) {
-        this.trackedWorldElement.signature = signature;
-        this.alignWorldToElement(element, options);
-      }
-      return;
-    }
-
-    const tracked = this.trackedAnchorLayout;
-    if (!tracked || !this.group || !this.canvas?.getBoundingClientRect) return;
-    const rects = tracked.elements.map((element) => element.getBoundingClientRect());
-    const first = rects[0];
-    const canvasRect = this.canvas.getBoundingClientRect();
-    const point = this.worldFromViewport(
-      first.left + first.width / 2 - canvasRect.left,
-      first.top + first.height / 2 - canvasRect.top,
-      tracked.z,
-    );
-    const baseFirst = tracked.baseRects[0];
-    const uniformShift = rects.every((rect, index) => {
-      const base = tracked.baseRects[index];
-      return Math.abs((rect.left - base.left) - (first.left - baseFirst.left)) < 0.75
-        && Math.abs((rect.top - base.top) - (first.top - baseFirst.top)) < 0.75
-        && Math.abs(rect.width - base.width) < 0.75
-        && Math.abs(rect.height - base.height) < 0.75;
-    });
-
-    if (uniformShift) {
-      this.group.position.set(
-        tracked.basePosition.x + point.x - tracked.basePoint.x,
-        tracked.basePosition.y + point.y - tracked.basePoint.y,
-        tracked.basePosition.z,
-      );
-      return;
-    }
-
-    if (tracked.mode) {
-      const anchors = this.anchorsFromElements(tracked.elements, { z: tracked.z, weights: tracked.weights });
-      this.target(tracked.mode, { ...tracked.payload, anchors });
-    }
-    tracked.baseRects = rects;
-    tracked.basePoint = point;
-    tracked.basePosition = this.group.position.clone();
   }
 
   /** 城市 pin：每帧把 lat/lng 投影到屏幕，驱动 DOM 标签跟随点云地球。 */
@@ -485,7 +383,6 @@ export class MemorySceneManager {
     if (time - this.lastFrame < frameInterval) return;
     this.lastFrame = time;
     this.particles.uniforms.uTime.value = time * 0.001;
-    this.updateTrackedLayout();
     // 世界视图极慢自转（用户交互或 reduced motion 时停止）
     if (WORLD_MODES.has(this.mode) && !this.userInteracting && !this.reducedMotion && this.group) {
       this.group.rotation.y += 0.00052;
@@ -520,11 +417,6 @@ export class MemorySceneManager {
       paused: this.paused,
       trackedTimelines: flowDebug.tracked,
       activeTimelines: flowDebug.active,
-      trackedAnchorCount: this.trackedAnchorLayout?.elements.length || 0,
-      tracksWorldElement: Boolean(this.trackedWorldElement),
-      groupPosition: this.group
-        ? { x: this.group.position.x, y: this.group.position.y, z: this.group.position.z }
-        : null,
     };
   }
 
@@ -548,7 +440,5 @@ export class MemorySceneManager {
     this.controls = null;
     this.canvas = null;
     this.trackedPins = [];
-    this.trackedAnchorLayout = null;
-    this.trackedWorldElement = null;
   }
 }

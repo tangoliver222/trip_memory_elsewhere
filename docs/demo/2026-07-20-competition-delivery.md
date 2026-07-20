@@ -5,29 +5,31 @@ Date: 2026-07-20 (Asia/Bangkok)
 ## Public deliverables
 
 - Product: <https://elsewhere-memory-tyx-2026.web.app>
-- Demo video: <https://elsewhere-memory-tyx-2026.web.app/demo/elsewhere-competition-demo.mp4>
+- Stable product walkthrough: <https://elsewhere-memory-tyx-2026.web.app/demo/elsewhere-competition-demo.mp4>
+- Narrated architecture presentation: <https://elsewhere-memory-tyx-2026.web.app/demo/elsewhere-competition-demo-narrated.mp4>
 - Source repository: <https://github.com/tangoliver222/trip_memory_elsewhere>
 - HyperFrames Studio: <http://localhost:3017/#project/demo-video-hf>
 - Submission package: `/Users/tangyixuan/372`
 
 The Hosting build is an anonymous, read-only judge experience. It does not claim that the public browser writes
-private originals. The recording combines an actual local-file import flow with separately verified Google Cloud
-evidence. The boundary is stated in the video and submission package.
+private originals. The primary recording uses the frozen competition fixture and captures the real route, search,
+Lens, discovery and Else interactions in the browser. The longer narrated presentation remains available separately
+and combines an actual local-file import flow with separately verified Google Cloud evidence.
 
 ## Video acceptance
 
 ```text
-Duration: 278.166667 seconds (4m 38.2s)
-Size: 34,336,499 bytes
-Video: H.264, 1920x1080, 30 fps
-Audio: AAC, 48 kHz, stereo
+Duration: 70.8 seconds
+Size: 4,523,099 bytes
+Video: H.264, 368x800, 25 fps
+Audio: none
 Public content type: video/mp4
-Public content length: 34,336,499 bytes
+Public content length: 4,523,099 bytes
 ```
 
-Eight HyperFrames beat snapshots were manually checked before rendering. The video then received a dedicated
-localization overlay stating that Thai, English and Chinese source artifacts remain intact rather than being
-overwritten by translation.
+The walkthrough was recorded only after the two mobile viewport suites passed. It includes World, City, Fragment
+Field search, Fragment Lens, Discover Home, Discover Detail and Else Answer. The 4m38 narrated architecture video
+is preserved at the secondary URL above.
 
 ## Fresh public verification
 
@@ -36,9 +38,10 @@ npm run build
 73 modules transformed; build completed
 
 npx playwright test --config playwright.public.config.js
-2 passed
+3 passed
+  - public entry reaches world and import
   - stable recording-critical public routes
-  - public video duration and 1920x1080 metadata
+  - public video duration and 368x800 metadata
 
 curl -sSIL https://elsewhere-memory-tyx-2026.web.app/demo/elsewhere-competition-demo.mp4
 HTTP/2 200; content-type video/mp4; accept-ranges bytes

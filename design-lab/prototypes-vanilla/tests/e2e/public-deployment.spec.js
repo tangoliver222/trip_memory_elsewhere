@@ -9,6 +9,17 @@ const routes = [
 
 const badCopy = /\uFFFD|Ã.|Â.|â.|undefined|null|\[object Object\]/i;
 
+test('public entry reaches the world and exposes the import flow', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: '进入世界首页' }).click();
+  await expect(page).toHaveURL(/#\/world$/);
+  await expect(page.locator('[data-page-id="world-home"]')).toBeVisible();
+
+  await page.getByRole('button', { name: '放入新的碎片' }).click();
+  await expect(page).toHaveURL(/#\/world\/import$/);
+  await expect(page.locator('[data-page-id="world-import"]')).toBeVisible();
+});
+
 test('public judge build serves stable recording-critical routes', async ({ page }) => {
   const runtimeErrors = [];
   page.on('pageerror', (error) => runtimeErrors.push(error.message));
@@ -53,8 +64,8 @@ test('public competition video exposes valid review metadata', async ({ page }) 
     return { duration: video.duration, width: video.videoWidth, height: video.videoHeight };
   });
 
-  expect(metadata.duration).toBeGreaterThan(278);
-  expect(metadata.duration).toBeLessThan(279);
-  expect(metadata.width).toBe(1920);
-  expect(metadata.height).toBe(1080);
+  expect(metadata.duration).toBeGreaterThan(70);
+  expect(metadata.duration).toBeLessThan(72);
+  expect(metadata.width).toBe(368);
+  expect(metadata.height).toBe(800);
 });

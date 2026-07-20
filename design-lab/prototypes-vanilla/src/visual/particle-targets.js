@@ -285,7 +285,12 @@ function multiCityField(count, payload = {}) {
   ];
   const source = Array.isArray(payload.clusters) && payload.clusters.length
     ? payload.clusters.filter(({ weight }) => Number(weight) > 0)
-    : [{ slug: 'unplaced', weight: 1 }];
+    : [
+      { slug: 'bangkok', weight: 63 },
+      { slug: 'tokyo', weight: 81 },
+      { slug: 'chiang-mai', weight: 28 },
+      { slug: 'unplaced', weight: 10 },
+    ];
   const clusters = source.map((item, index) => {
     const angle = index * 2.399963229728653;
     const ring = 4.2 + Math.floor(index / slots.length) * 2.4;

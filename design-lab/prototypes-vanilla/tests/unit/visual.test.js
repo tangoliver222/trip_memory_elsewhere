@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemorySceneManager } from '../../src/visual/scene-manager.js';
 import { createFlowController } from '../../src/visual/flow-controller.js';
+import { createSemanticTarget } from '../../src/visual/particle-targets.js';
 
 const createCanvas = () => ({
   clientWidth: 1280,
@@ -104,60 +105,11 @@ test('starting a new spatial flow kills every previously tracked flow', () => {
   assert.deepEqual(controller.debug(), { tracked: 1, active: 1 });
 });
 
-test('semantic particle anchors follow fragment DOM movement in the next frame without morph lag', () => {
-  const morphCalls = [];
-  const canvas = createCanvas();
-  canvas.clientWidth = 390;
-  canvas.clientHeight = 844;
-  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 390, height: 844 });
-  let top = 260;
-  const anchorElement = {
-    getBoundingClientRect: () => ({ left: 80, top, width: 160, height: 120 }),
-  };
-  const manager = new MemorySceneManager({
-    rendererFactory: createRendererFactory(),
-    profile: 'low',
-    flowController: {
-      morph(...args) { morphCalls.push(args); },
-      killAll() {},
-      debug() { return { tracked: 0, active: 0 }; },
-    },
-  });
-  manager.mount(canvas);
-  const stop = manager.trackElementAnchors([anchorElement], { z: -2 });
-  const initialY = manager.group.position.y;
-
-  top = 140;
-  manager.renderFrame(1_000);
-
-  assert.notEqual(manager.group.position.y, initialY);
-  assert.equal(morphCalls.length, 0);
-  const trackedY = manager.group.position.y;
-  stop();
-  top = 40;
-  manager.renderFrame(2_000);
-  assert.equal(manager.group.position.y, trackedY);
-  manager.dispose();
-});
-
-test('world stage realigns the globe and pins when its DOM box moves', () => {
-  const canvas = createCanvas();
-  canvas.clientWidth = 390;
-  canvas.clientHeight = 844;
-  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 390, height: 844 });
-  let top = 120;
-  const stage = {
-    getBoundingClientRect: () => ({ left: 0, top, width: 390, height: 452 }),
-  };
-  const manager = new MemorySceneManager({ rendererFactory: createRendererFactory(), profile: 'low' });
-  manager.mount(canvas);
-  const stop = manager.trackWorldElement(stage);
-  const initialY = manager.group.position.y;
-
-  top = 32;
-  manager.renderFrame(1_000);
-
-  assert.notEqual(manager.group.position.y, initialY);
-  stop();
-  manager.dispose();
+test('fixture fragment field retains the frozen multi-city depth layout', () => {
+  const target = createSemanticTarget('fragment-field', 1_200);
+  const mainEnd = Math.floor(1_200 * 0.82);
+  const depths = [];
+  for (let index = 0; index < mainEnd; index += 1) depths.push(target[index * 3 + 2]);
+  assert.ok(Math.min(...depths) < -32, 'fixture field must retain distant Tokyo and Chiang Mai clusters');
+  assert.ok(Math.max(...depths) > -12, 'fixture field must retain a near Bangkok cluster');
 });

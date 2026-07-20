@@ -75,7 +75,7 @@ export function renderOnboarding(pageId) {
     html: `<main class="page onboarding-intro" data-page-id="onboarding-intro">
       <div class="onboarding-intro__constellation" aria-hidden="true"><span>PHOTO</span><span>RECEIPT</span><span>MAP</span><span>TIME</span><span>PLACE</span></div>
       <header class="onboarding-intro__copy"><p class="eyebrow">Elsewhere</p><h1>让散落的旅行<br>重新长成一个世界</h1><p>照片、小票、截图、时间与地点会在同一空间里靠近。你保留原件，也保留最后解释权。</p></header>
-      ${primary('放入第一批碎片', '#/onboarding/permissions')}
+      ${primary('进入世界首页', '#/world')}
     </main>`,
   };
 }

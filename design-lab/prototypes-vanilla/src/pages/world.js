@@ -56,7 +56,7 @@ export function renderWorldHome() {
 
         <p class="world-happening will-flow" data-flow="3">世界正在发生：${pending} 个连接待你判断 · ${newDiscoveries} 条发现新显影 · ${processing} 组照片正在整理</p>
 
-        <button class="world-entry will-flow" data-flow="4" type="button" data-action="navigate" data-route="#/world/import">
+        <button class="world-entry will-flow" data-flow="4" type="button" data-action="navigate" data-route="#/world/import" aria-label="放入新的碎片">
           <div class="world-entry__visual world-entry__visual--import" aria-hidden="true">
             <i class="mini-photo"></i><i class="mini-receipt"></i><i class="mini-map"></i>
           </div>
@@ -97,10 +97,9 @@ export function renderWorldHome() {
     </main>`,
     afterRender({ pageRoot, sceneManager }) {
       const stage = pageRoot.querySelector('[data-globe-stage]');
-      let stopWorldTracking = () => {};
       if (stage) {
         sceneManager.bindControls(stage);
-        stopWorldTracking = sceneManager.trackWorldElement(stage);
+        sceneManager.alignWorldToElement(stage);
       }
       sceneManager.trackCityPins(cities.map((city) => ({
         lat: city.coordinates.lat,
@@ -124,10 +123,7 @@ export function renderWorldHome() {
           delay: firstVisit ? 2.4 : 0.35,
         });
       }
-      return () => {
-        stopWorldTracking();
-        sceneManager.trackCityPins([]);
-      };
+      return () => sceneManager.trackCityPins([]);
     },
   };
 }
@@ -268,11 +264,6 @@ export function renderCityHome(routeId = 'bangkok', state = {}) {
         { z: -2, weights: [1, 0.92, 0.8] },
       );
       if (anchors.length) sceneManager.retarget?.('cityCluster', { anchors });
-      const stopAnchorTracking = sceneManager.trackElementAnchors(
-        pageRoot.querySelectorAll('[data-cluster-anchor]'),
-        { mode: 'cityCluster', z: -2, weights: [1, 0.92, 0.8] },
-      );
-
       const reduced = reducedMotionQuery();
       const tiles = pageRoot.querySelectorAll('.city-tile, .city-cluster__name');
       const willFlow = pageRoot.querySelectorAll('.will-flow');
@@ -284,7 +275,7 @@ export function renderCityHome(routeId = 'bangkok', state = {}) {
           opacity: 1, y: 0, scale: 1, duration: 1.1, ease: 'power3.out', stagger: 0.08, delay: 0.35,
         });
       }
-      return stopAnchorTracking;
+      return () => {};
     },
   };
 }
