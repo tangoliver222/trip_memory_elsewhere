@@ -47,6 +47,7 @@ export function createSpatialAnchorRegistry({
   let baseline = [];
   let pending = false;
   let pendingSource = 'layout';
+  let resizeObserver = null;
 
   const flush = (source = 'layout') => {
     if (!elements.length) return;
@@ -73,9 +74,13 @@ export function createSpatialAnchorRegistry({
   };
 
   const onScroll = () => schedule('scroll');
+  const onResize = () => schedule('layout');
 
   const clear = () => {
     scrollRoot?.removeEventListener?.('scroll', onScroll);
+    environment.removeEventListener?.('resize', onResize);
+    resizeObserver?.disconnect?.();
+    resizeObserver = null;
     elements = [];
     scrollRoot = null;
     baseline = [];
@@ -89,6 +94,12 @@ export function createSpatialAnchorRegistry({
     baseline = readAnchors(elements);
     if (baseline.length) onLayout({ anchors: baseline, source: 'initial' });
     scrollRoot?.addEventListener?.('scroll', onScroll, { passive: true });
+    environment.addEventListener?.('resize', onResize, { passive: true });
+    if (environment.ResizeObserver) {
+      resizeObserver = new environment.ResizeObserver(onResize);
+      resizeObserver.observe?.(scrollRoot);
+      elements.forEach((element) => resizeObserver.observe?.(element));
+    }
     return clear;
   };
 

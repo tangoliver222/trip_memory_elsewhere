@@ -135,6 +135,7 @@ function updateShell() {
   const viewport = root.querySelector('.app-viewport');
   pageCleanup?.();
   pageCleanup = null;
+  sceneManager.clearPageSpace();
 
   if (!viewport) {
     root.innerHTML = renderAppShell({ pageHtml, route, state, overlayHtml, elseHtml });
@@ -181,13 +182,41 @@ function updateShell() {
     window.sessionStorage.setItem('elsewhere:previous-page', route.pageId);
   }
   if (routeChanged) root.querySelector('#page-content-layer')?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-  const cleanup = view.afterRender?.({
+  const routeCleanup = view.afterRender?.({
     pageRoot: root.querySelector('#page-content-layer'),
     store,
     sceneManager,
     route,
   });
-  if (typeof cleanup === 'function') pageCleanup = cleanup;
+  const pageLayer = root.querySelector('#page-content-layer');
+  const overlayLayer = topOverlay
+    ? root.querySelector('#overlay-root')
+    : (state.else.open ? root.querySelector('#else-drawer-host') : null);
+  const spatialRoot = overlayLayer || pageLayer;
+  const spatialElements = spatialRoot?.querySelectorAll?.('[data-particle-anchor]') || [];
+  let spatialCleanup = null;
+  if (spatialElements.length && sceneManager.debug().particlePoolId) {
+    const overlayItems = [...spatialElements].map((element) => ({
+      id: element.dataset.particleId,
+      role: element.dataset.particleRole,
+      status: element.dataset.particleStatus,
+    }));
+    const firstWorld = route.pageId === 'world-home' && !window.sessionStorage.getItem('elsewhere:world-formed');
+    spatialCleanup = sceneManager.bindPageSpace({
+      elements: spatialElements,
+      scrollRoot: spatialRoot?.querySelector?.('[data-particle-scroll-root]') || (overlayLayer || pageLayer),
+      mode: firstWorld ? 'deep-scatter' : (overlayLayer ? desiredMode : (view.scenePayload.target || desiredMode)),
+      payload: overlayLayer
+        ? { itemCount: overlayItems.length, items: overlayItems, state: state.else.state }
+        : view.scenePayload,
+    });
+  }
+  if (typeof routeCleanup === 'function' || typeof spatialCleanup === 'function') {
+    pageCleanup = () => {
+      if (typeof routeCleanup === 'function') routeCleanup();
+      if (typeof spatialCleanup === 'function') spatialCleanup();
+    };
+  }
   if (routeChanged || renderedRoute === null || sceneChanged) scheduleVisualReady(route, desiredMode);
   renderedRoute = state.route;
   syncElseOrbPlacement(state);

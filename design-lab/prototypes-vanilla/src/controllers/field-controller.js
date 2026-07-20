@@ -60,6 +60,15 @@ export function createFieldController({ viewport, store, sceneManager, scenePayl
   let inertiaFrame = null;
   let destroyed = false;
 
+  const syncParticleCamera = () => {
+    sceneManager?.setSpatialTransform?.({
+      pixelX: state.camera.x - resetCamera.x,
+      pixelY: state.camera.y - resetCamera.y,
+      scale: state.camera.scale / Math.max(resetCamera.scale, 0.001),
+      source: 'field-camera',
+    });
+  };
+
   const render = () => {
     const nodes = viewport.querySelectorAll?.('[data-field-node]') || [];
     const byId = Object.fromEntries(state.layout.map((node) => [node.id, node]));
@@ -73,6 +82,7 @@ export function createFieldController({ viewport, store, sceneManager, scenePayl
       element.style.opacity = String(node.relevance);
       element.dataset.relevance = node.relevance === 1 ? 'focused' : 'background';
     });
+    syncParticleCamera();
   };
 
   const publishCamera = () => store.dispatch({ type: 'SET_FIELD_CAMERA', camera: clone(state.camera) });

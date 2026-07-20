@@ -10,16 +10,16 @@ export function renderElseSheet(state, route = state.route) {
   const currentState = state.else.state || 'reading';
   const expanded = Boolean(answer);
 
-  return `<aside class="else-drawer else-drawer--${currentState} ${expanded ? 'is-expanded' : ''}" role="dialog" aria-modal="false" aria-label="Else 记忆助手">
+  return `<aside class="else-drawer else-drawer--${currentState} ${expanded ? 'is-expanded' : ''}" data-particle-scroll-root role="dialog" aria-modal="false" aria-label="Else 记忆助手">
     <header class="else-drawer__header">
-      <div class="else-drawer__orb-slot" data-else-orb-slot></div>
+      <div class="else-drawer__orb-slot" data-else-orb-slot data-particle-anchor data-particle-id="else-orb" data-particle-role="assistant" data-particle-weight="2"></div>
       <div><p class="eyebrow">ELSE · ${stateLabel[currentState]}</p><h2>${escapeHtml(scope.label)}</h2></div>
       <button class="icon-button" type="button" data-action="toggle-else" aria-label="收起 Else">×</button>
     </header>
     ${answer ? `<div class="else-answer">
       <p class="else-answer__question">“${escapeHtml(state.else.query)}”</p>
       <p class="else-answer__text">${escapeHtml(answer.answer)}</p>
-      <section class="else-sources"><span>支持这个回答的来源</span>${answer.sources.map((source) => `<button type="button" data-action="open-lens" data-fragment-id="${source.fragmentId}"><i></i><strong>${escapeHtml(source.label)}</strong><small>${escapeHtml(source.kind)}</small></button>`).join('')}</section>
+      <section class="else-sources"><span>支持这个回答的来源</span>${answer.sources.map((source) => `<button type="button" data-particle-anchor data-particle-id="${source.fragmentId}" data-particle-role="source" data-particle-weight="1" data-action="open-lens" data-fragment-id="${source.fragmentId}"><i></i><strong>${escapeHtml(source.label)}</strong><small>${escapeHtml(source.kind)}</small></button>`).join('')}</section>
       <p class="else-source-boundary">回答基于当前 Firebase 原件；每个来源都可以回到原件核对。</p>
       <section class="else-uncertainty"><span>${currentState === 'conflict' ? '两组来源为何没有合并' : '仍需要保留的边界'}</span><p>${escapeHtml(answer.uncertainty)}</p></section>
       ${answer.nextAction ? `<button class="else-next-action" type="button" data-else-next-action data-action="navigate" data-route="${escapeHtml(answer.nextAction.href)}">${escapeHtml(answer.nextAction.label)} →</button>` : ''}

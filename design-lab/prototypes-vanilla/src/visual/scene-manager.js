@@ -61,6 +61,10 @@ export class MemorySceneManager {
     this._pinVecB = null;
     this.spatialBindingCleanup = null;
     this.spatialTransform = { pixelX: 0, pixelY: 0, scale: 1, source: 'none' };
+    this.spatialChannels = {
+      page: { pixelX: 0, pixelY: 0, scale: 1, source: 'initial' },
+      interaction: { pixelX: 0, pixelY: 0, scale: 1, source: 'initial' },
+    };
     this.spatialBasePosition = null;
     this.spatialBaseScale = null;
     this.spatialLayoutRevision = 0;
@@ -198,20 +202,32 @@ export class MemorySceneManager {
   }
 
   setSpatialTransform({ pixelX = 0, pixelY = 0, scale = 1, source = 'layout' } = {}) {
+    const channel = source === 'field-camera' || source === 'horizontal-pan' ? 'interaction' : 'page';
+    this.spatialChannels[channel] = { pixelX, pixelY, scale, source };
+    const page = this.spatialChannels.page;
+    const interaction = this.spatialChannels.interaction;
+    const combined = {
+      pixelX: page.pixelX + interaction.pixelX,
+      pixelY: page.pixelY + interaction.pixelY,
+      scale: page.scale * interaction.scale,
+      source: (page.pixelX || page.pixelY || page.scale !== 1) && (interaction.pixelX || interaction.pixelY || interaction.scale !== 1)
+        ? 'composed'
+        : source,
+    };
+    this.spatialTransform = combined;
     if (!this.group || !this.spatialBasePosition || !this.spatialBaseScale) return;
     const origin = this.worldFromViewport(0, 0, 0);
-    const translated = this.worldFromViewport(pixelX, pixelY, 0);
+    const translated = this.worldFromViewport(combined.pixelX, combined.pixelY, 0);
     this.group.position.set(
       this.spatialBasePosition.x + translated.x - origin.x,
       this.spatialBasePosition.y + translated.y - origin.y,
       this.spatialBasePosition.z,
     );
     this.group.scale.set(
-      this.spatialBaseScale.x * scale,
-      this.spatialBaseScale.y * scale,
-      this.spatialBaseScale.z * scale,
+      this.spatialBaseScale.x * combined.scale,
+      this.spatialBaseScale.y * combined.scale,
+      this.spatialBaseScale.z * combined.scale,
     );
-    this.spatialTransform = { pixelX, pixelY, scale, source };
   }
 
   /** Bind this route's particle scene to current DOM fragment anchors. */
@@ -221,6 +237,10 @@ export class MemorySceneManager {
     this.spatialBasePosition = this.group?.position.clone?.() || null;
     this.spatialBaseScale = this.group?.scale.clone?.() || null;
     this.spatialTransform = { pixelX: 0, pixelY: 0, scale: 1, source: 'initial' };
+    this.spatialChannels = {
+      page: { pixelX: 0, pixelY: 0, scale: 1, source: 'initial' },
+      interaction: { pixelX: 0, pixelY: 0, scale: 1, source: 'initial' },
+    };
     const registry = createSpatialAnchorRegistry({
       environment: this.environment,
       onTransform: (transform) => this.setSpatialTransform(transform),

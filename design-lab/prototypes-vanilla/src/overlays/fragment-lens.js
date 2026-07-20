@@ -10,7 +10,7 @@ export function renderFragmentLens(context) {
 
   return `<section class="fragment-lens spatial-overlay" role="dialog" aria-modal="true" aria-labelledby="fragment-lens-title">
     <button class="overlay-scrim" type="button" data-action="close-overlay" aria-label="关闭碎片镜头"></button>
-    <article class="fragment-lens__panel">
+    <article class="fragment-lens__panel" data-particle-scroll-root>
       <header class="overlay-header">
         <div>
           <p class="eyebrow">从记忆场中提取</p>
@@ -19,7 +19,7 @@ export function renderFragmentLens(context) {
         <button class="icon-button" type="button" data-action="close-overlay" aria-label="关闭">×</button>
       </header>
       <div class="fragment-lens__body">
-        <button class="fragment-lens__original" type="button" data-action="open-original" aria-label="查看原件">
+        <button class="fragment-lens__original" type="button" data-particle-anchor data-particle-id="lens-original" data-particle-role="fragment" data-particle-weight="2" data-action="open-original" aria-label="查看原件">
           ${renderMedia(fragment, { className: 'fragment-lens__image' })}
           <span>查看原件</span>
         </button>
