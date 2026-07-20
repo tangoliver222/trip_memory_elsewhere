@@ -233,6 +233,32 @@ test('cloud upload completion polls the authoritative receipt and never calls de
   assert.deepEqual(waits, [500]);
 });
 
+test('production memory snapshot uses the reviewed read boundary', async () => {
+  const requests = [];
+  const client = createDemoClient(demoClientConfigFromEnv(cloudEnvironment), {
+    appCheckFactory: () => Object.freeze({ getToken: async () => 'app-check-token' }),
+    signInAnonymouslyFn: async () => ({
+      user: Object.freeze({ getIdToken: async () => 'firebase-id-token' }),
+    }),
+    fetchFn: async (url, init) => {
+      requests.push([url, init.method]);
+      return Object.freeze({
+        ok: true,
+        status: 200,
+        json: async () => ({ revision: 'production-memory-revision' }),
+      });
+    },
+  });
+
+  assert.deepEqual(await client.getMemorySnapshot(), {
+    revision: 'production-memory-revision',
+  });
+  assert.deepEqual(requests, [[
+    'http://127.0.0.1:8787/v1/memory-snapshot',
+    'GET',
+  ]]);
+});
+
 test('cloud snapshot waits through a retryable projection gap', async () => {
   let calls = 0;
   const waits = [];
