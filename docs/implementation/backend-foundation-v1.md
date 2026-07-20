@@ -113,5 +113,7 @@ PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" npm run test:emulator
 本文件保留 Module 1 当时的冻结记录；“尚无 Auth/导入”等描述是历史边界，不是当前仓库状态。
 后续已按独立提交完成 Auth Boundary、Original Save、Deterministic Facts、Authoritative Routing &
 Budget Gate，以及 Module 5A OCR。当前运行与配置入口以 `services/backend/README.md` 为准，OCR
-执行、隐私、IAM 和恢复语义见 `docs/implementation/capability-execution-ocr-v1.md`。Places、
-Embedding、Gemini 仍未实现。
+执行、隐私、IAM 和恢复语义见 `docs/implementation/capability-execution-ocr-v1.md`。2026-07-20
+又完成了 production owner snapshot 与独立 Vertex sourced-query 边界，见
+`docs/implementation/else-ai-service-v1.md`。Places、Embedding 与 ingestion Gemini capability
+仍未实现。

@@ -1,7 +1,7 @@
 # Elsewhere Authoritative Routing & Budget Gate v1
 
 更新日期：2026-07-17
-状态：Module 4.5 已实现并通过本地与 Firebase Emulator 验证；Module 5A OCR 已接在其后，均未部署生产环境。
+状态：Module 4.5 与 Module 5A OCR 已部署生产并通过真实 Google Cloud 垂直链路验证。
 
 ## 1. 模块位置与完成边界
 
@@ -196,10 +196,12 @@ arm 并在真实调用前同步后，聚焦并发契约 2/2 和统一回归 68/6
 
 - 当前 Router 的内容分类只使用 Fragment type 与 Module 4 技术事实，不增加默认 AI classifier；
 - OCR provider、结果 schema、Cloud Tasks 与生产配额结算已在 Module 5A 实现；Places、Embedding、
-  Gemini 仍未实现；
+  ingestion Gemini capability 仍未实现。生产 Else 已另行实现受独立查询预算保护的 Vertex sourced
+  query，但它不执行或修改 RoutePlan；
 - malware scanning、完整语义解析、地图 grounding、转码和 Agent 不在本模块；
 - `billing_uncertain` 不自动恢复调用；
-- 本地 Emulator 不证明 Cloud Run IAM、Eventarc invoker 或生产 service account 已正确部署。
+- Cloud Run IAM、Eventarc、Cloud Tasks、Document AI 与生产 service identity 已通过 2026-07-20
+  real-cloud smoke；Emulator 仍只证明本地事务与 Rules 契约。
 
 Module 4.5 的职责边界保持冻结；Module 5A 详情见
 `docs/implementation/capability-execution-ocr-v1.md`。

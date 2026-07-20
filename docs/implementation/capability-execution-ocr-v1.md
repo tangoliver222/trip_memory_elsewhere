@@ -2,7 +2,7 @@
 
 **日期：** 2026-07-18
 
-**状态：** Module 5A 已实现并通过本地、Firebase Emulator 与容器验证；尚未部署生产环境
+**状态：** Module 5A 已部署生产，并通过本地、Firebase Emulator 与真实 Cloud Run 垂直链路验证
 
 **上游：** Module 4.5 `fragment-routing/v1 + policy/v2 + cost-model/v2`
 
@@ -32,13 +32,14 @@ PDF OCR 和自动 `billing_uncertain` 对账均未实现。OCR 结果只发布�
 
 | Mode | 公开面 | 可构造计费 adapter | 建议 runtime service account |
 | --- | --- | --- | --- |
-| `api` | health/readiness + Auth/App Check 保护的 Import API | 无 | `elsewhere-api-runtime` |
+| `api` | health/readiness + Auth/App Check 保护的业务 API | Vertex sourced query（独立于 OCR RoutePlan） | `elsewhere-api-runtime` |
 | `ingestion` | health/readiness + Eventarc finalized receiver | Cloud Tasks dispatcher | `elsewhere-ingestion-runtime` |
 | `capability-worker` | health/readiness + internal OCR task route | Document AI OCR | `elsewhere-capability-worker-runtime` |
 
 fake/default mode 下，三个 root 对 Cloud Tasks 与 Document AI 均为 **0 构造、0 调用**。API root
 即使错误配置 provider 开关也 fail closed；ingestion 不能构造 Document AI；worker 不能构造 Cloud
 Tasks。运行时不读取 service-account key 文件，生产只使用 Cloud Run service identity / ADC。
+生产 Else 的 Vertex 开关和预算是单独 fail-closed 边界，不授权 OCR 或其他 RoutePlan capability。
 
 ## 3. 权威执行与幂等
 
@@ -170,7 +171,7 @@ provider 还必须显式设置 `RUN_REAL_GOOGLE_PROVIDER_TESTS=true`。
 
 ## 9. 生产 IAM 边界
 
-本文只冻结权限边界，不执行 IAM 变更：
+权限边界已由部署脚本应用并在真实项目中核对：
 
 - ingestion runtime identity：只对指定 queue 创建 task，并保留其既有 Firestore/Storage 最小权限；
   不授予 Document AI；
@@ -179,7 +180,8 @@ provider 还必须显式设置 `RUN_REAL_GOOGLE_PROVIDER_TESTS=true`。
 - capability-worker runtime identity：只拥有读取指定 original generation、create/read 指定
   capability-results、Firestore 能力事务及固定 Document AI processor version 在线处理所需权限；
   不授予 Cloud Tasks enqueue；
-- API runtime identity：不授予 Cloud Tasks、Document AI 或 capability artifact 权限；
+- API runtime identity：仅额外拥有 Vertex `roles/aiplatform.user`，不授予 Cloud Tasks、Document AI
+  或 capability artifact 权限；
 - Cloud Tasks service agent 保持 Google 管理的 service-agent 边界。不要使用默认 Compute service
   account，也不要把基本 Owner/Editor 角色作为捷径。
 
@@ -231,5 +233,6 @@ Module 5A 的验证覆盖：
 不同 major 范围的 `firebase-tools`，因此本阶段不执行破坏性的 `npm audit fix --force`；该风险不进入
 生产镜像，后续应在 Firebase CLI 发布兼容修复后单独升级并回归 Emulator suite。
 
-Emulator 测试不证明真实 Cloud Run IAM、OIDC、Document AI 配额或计费正确；这些必须在 staging
-单独验证。Module 5A 完成后停止，不进入 Places、Embedding 或 Gemini。
+Emulator 测试本身不证明真实 Cloud Run IAM、OIDC、Document AI 配额或计费；这些已由 2026-07-20
+production smoke 额外验证。该 smoke 经真实 Storage → Eventarc → routing → Cloud Tasks → Document AI
+执行，并验证 owner 清理。Module 5A 仍不进入 Places、Embedding 或 ingestion Gemini capability。
