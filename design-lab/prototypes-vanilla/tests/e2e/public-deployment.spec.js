@@ -9,13 +9,22 @@ const routes = [
 
 const badCopy = /\uFFFD|Ã.|Â.|â.|undefined|null|\[object Object\]/i;
 
+test.beforeEach(async ({ page }) => {
+  const debugToken = process.env.ELSEWHERE_APP_CHECK_DEBUG_TOKEN;
+  if (debugToken) {
+    await page.addInitScript((token) => {
+      globalThis.FIREBASE_APPCHECK_DEBUG_TOKEN = token;
+    }, debugToken);
+  }
+});
+
 test('public entry reaches the world and exposes the import flow', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: '进入世界首页' }).click();
   await expect(page).toHaveURL(/#\/world$/);
   await expect(page.locator('[data-page-id="world-home"]')).toBeVisible();
 
-  await page.getByRole('button', { name: '放入新的碎片' }).click();
+  await page.getByRole('button', { name: /放入(?:新的|第一批)碎片/ }).click();
   await expect(page).toHaveURL(/#\/world\/import$/);
   await expect(page.locator('[data-page-id="world-import"]')).toBeVisible();
 });

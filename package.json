@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "build:firebase-hosting": "npm --prefix design-lab/prototypes-vanilla run build:hosting && npm run prepare:firebase-hosting",
     "prepare:firebase-hosting": "node scripts/prepare-firebase-hosting.mjs"
   },
   "dependencies": {
