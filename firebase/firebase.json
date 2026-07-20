@@ -12,6 +12,7 @@
     "rules": "storage.rules"
   },
   "hosting": {
+    "site": "elsewhere-memory-tyx-2026",
     "public": "hosting",
     "ignore": [
       "firebase.json",
