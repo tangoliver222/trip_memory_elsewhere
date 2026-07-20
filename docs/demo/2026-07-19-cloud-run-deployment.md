@@ -6,7 +6,7 @@ The deployment reuses one immutable backend image for three mutually exclusive p
 
 | Service | Cloud Run access | Runtime authority | Explicitly absent |
 | --- | --- | --- | --- |
-| `elsewhere-api` | public transport; Firebase ID Token + App Check in application | Firestore owner-scoped ImportBatch API | Storage, Tasks, Document AI |
+| `elsewhere-api` | public transport; Firebase ID Token + App Check in application | Firestore owner data and query budgets; Vertex AI sourced answers | Storage, Tasks, Document AI |
 | `elsewhere-ingestion` | Eventarc invoker only | Firestore, original/derivative Storage, enqueue `elsewhere-ocr` | Document AI |
 | `elsewhere-capability-worker` | Cloud Tasks OIDC invoker only | Firestore, original/artifact Storage, fixed Document AI OCR | enqueue Tasks |
 
@@ -15,14 +15,15 @@ only. Neither identity is used as a runtime service account. Minimum instances r
 dispatches per second and two concurrent deliveries.
 
 The production API contains no `/demo/v1/**` route. Firebase Hosting rewrites only `/v1/**` to `elsewhere-api`; all
-other paths remain the static SPA. Production exposes the reviewed ImportBatch routes and the bounded owner-scoped
-`GET /v1/memory-snapshot` read boundary. Else and all demo reset/manual-finalize controls remain isolated.
+other paths remain the static SPA. Production exposes the reviewed ImportBatch routes, bounded owner-scoped
+`GET /v1/memory-snapshot`, and budgeted `POST /v1/else/ask`. Demo reset/manual-finalize controls remain isolated.
 
 ## Deploy
 
 The ignored file `services/backend/.env.cloud.local` must contain the verified Firebase bucket, Web App ID, and fixed
 Document AI tuple. The deployment script validates the project, region, and processor version before mutating cloud
-resources. It does not read or upload the Gemini API key.
+resources. Production Else uses the API runtime service identity with Vertex AI; it does not read or upload a Gemini
+API key.
 
 ```bash
 scripts/deploy-google-cloud-services.sh --plan
@@ -52,7 +53,7 @@ Required checks:
 - ingestion and worker reject unauthenticated requests at the Cloud Run boundary. The current platform response is a
   non-application 404; the service IAM policy remains the authority for the denial.
 - the task identity can invoke only the worker and the Eventarc identity can invoke only ingestion.
-- API runtime has no Cloud Tasks or Document AI role.
+- API runtime has `roles/aiplatform.user` and no Cloud Tasks or Document AI role.
 - ingestion runtime has no Document AI role.
 - worker runtime has no Cloud Tasks enqueuer role.
 - the Eventarc trigger filters only the verified Firebase bucket.
@@ -61,8 +62,9 @@ Required checks:
 The production ingestion smoke uses no `/demo/v1/**` route and never manually invokes the finalized handler. It uses a
 real anonymous Firebase identity and App Check token to create one batch, uploads the project-owned Common Grounds
 receipt through Storage Rules, waits for Eventarc, deterministic processing, Authoritative Routing, Cloud Tasks, and
-Document AI, verifies the persisted result through `GET /v1/memory-snapshot`, and verifies owner-specific cleanup in
-Auth, Firestore, and Storage:
+Document AI, verifies the persisted result through `GET /v1/memory-snapshot`, asks Vertex Else, validates returned
+sources against that snapshot, checks both query-budget ledgers, and verifies owner-specific cleanup in Auth,
+Firestore, and Storage:
 
 ```bash
 RUN_REAL_GOOGLE_PROVIDER_TESTS=true npm --prefix services/backend run smoke:cloud-run
@@ -80,7 +82,7 @@ cd ../../firebase
 firebase deploy --project elsewhere-memory-tyx-2026 --only hosting
 ```
 
-Hosting is deployed as the fixture-backed judge build. The production API exposes the reviewed ImportBatch
-write/receipt boundary and a generic persisted memory snapshot, but not the Bangkok-specific competition projection or
-Else. Switching the public SPA wholesale to cloud mode would therefore still be misleading. No Gemini key is deployed
-to Cloud Run because none of the three reviewed production composition roots consumes Gemini.
+Hosting is deployed as the fixture-backed judge build. The production API exposes the reviewed ImportBatch,
+generic persisted memory snapshot, and sourced Else query boundaries, but not the Bangkok-specific competition
+projection. Switching the public SPA wholesale to cloud mode would therefore still be misleading. No Gemini key is
+deployed to Cloud Run; the API uses its dedicated runtime identity for Vertex AI.

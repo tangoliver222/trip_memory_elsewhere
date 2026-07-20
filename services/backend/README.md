@@ -1,6 +1,6 @@
 # Elsewhere Backend
 
-Module 1–5A 后端：Fastify 生命周期、owner-scoped Repository、Firebase Auth / App Check、
+Module 1–5B 后端：Fastify 生命周期、owner-scoped Repository、Firebase Auth / App Check、
 Import Batch 原件保存、确定性媒体处理、权威路由与预算门禁，以及受计划约束的 OCR 执行。
 `elsewhere-api`、`elsewhere-ingestion`、`elsewhere-capability-worker` 共用代码包和镜像，但使用
 完全分离的 composition root、runtime service account 和 Cloud Run IAM 边界。
@@ -11,6 +11,8 @@ Module 4.5 的 RoutePlan、cohort、预算与执行授权边界见
 [authoritative-routing-v1.md](../../docs/implementation/authoritative-routing-v1.md)。
 Module 5A 的 Cloud Tasks、固定版本 Document AI、结果、恢复与 IAM 边界见
 [capability-execution-ocr-v1.md](../../docs/implementation/capability-execution-ocr-v1.md)。
+生产 Else 查询使用真实 owner snapshot、Vertex AI 和独立 Firestore 日预算，边界见
+[else-ai-service-v1.md](../../docs/implementation/else-ai-service-v1.md)。
 
 ## 支持的运行流程
 
@@ -45,8 +47,10 @@ ELSEWHERE_STORAGE_BUCKETS=<comma-separated bucket names>  # ingestion / worker
 ```
 
 三个模式都公开 `/healthz` 和 `/readyz`。`elsewhere-api` 是浏览器可访问服务，只注册
-受 Firebase Auth / App Check 保护的 `POST /v1/import-batches` 与
-`GET /v1/import-batches/:batchId`，并使用 API runtime service account。
+受 Firebase Auth / App Check 保护的 ImportBatch 路由、`GET /v1/memory-snapshot` 和
+`POST /v1/else/ask`，并使用 API runtime service account。Else 只读取服务端投影的当前 owner
+原件；有证据时先在同一 Firestore 事务预留 owner/day 与 project/day 配额，再调用 Vertex AI。
+空证据不扣配额、不调用模型，模型返回的来源 ID 必须再次通过证据白名单。
 `elsewhere-ingestion` 只注册 `/events/storage-finalized`。该事件按
 original finalize → deterministic processing → authoritative routing 的顺序执行，只有 RoutePlan
 草稿或审批状态成功持久化后才返回 204。生产环境必须关闭 unauthenticated
@@ -63,13 +67,16 @@ Authorization: Bearer <Firebase ID Token>
 X-Firebase-AppCheck: <Firebase App Check Token>
 ```
 
-已有 Else 查询模块仍是 legacy 原型，未挂载到 production app，也未连接真实 Repository
-或 Auth Boundary，不得部署到公开环境。
+生产 Else 默认关闭；只允许在 API mode 下以 `ELSE_QUERY_ENABLED=true` 开启，并强制
+`GOOGLE_GENAI_USE_VERTEXAI=true`、Google project 与 Firebase project 一致、API key 为空。
+当前硬上限是每个 owner 每 UTC 日 10 次、整个项目每 UTC 日 100 次。ingestion 与 worker
+不会构造 Gemini client，也没有 Vertex IAM 权限。
 
 `test:emulator` 会在 `demo-elsewhere` 下启动 Auth、Firestore 和 Storage Emulator，命令
 完成后统一清理，不会连接真实 Firebase 项目。本地 Emulator 验证不证明 Cloud Run IAM
 或 Cloud Storage App Check enforcement 已正确部署；两项必须作为 staging/production
 部署门禁单独验证。Module 4.5 不调用 Document AI、Places、Embedding、Gemini 或任何外部
 分类器；它只用 Module 4 确定性事实编译权威计划并预留预算。Module 5A 只实现批准后的 OCR
-调度与执行，默认 fake mode 对 Cloud Tasks / Document AI 为零调用。Places、Embedding、Gemini、
-恶意内容扫描和完整语义解析仍未实现。
+调度与执行，默认 fake mode 对 Cloud Tasks / Document AI 为零调用。生产 Else 是独立查询预算，
+不改变 RoutePlan，也不把处理能力静默升级为 Gemini。Places、Embedding、恶意内容扫描和完整
+语义解析仍未实现。

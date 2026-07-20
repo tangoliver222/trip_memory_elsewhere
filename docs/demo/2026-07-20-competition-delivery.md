@@ -83,21 +83,24 @@ ELSEWHERE_PUBLIC_URL=https://elsewhere-memory-tyx-2026.web.app \
 
 ## Production data-path release
 
-The backend shared image `d69e154` is deployed to three isolated Cloud Run composition roots. The
-API now includes the reviewed authenticated `GET /v1/memory-snapshot` endpoint; it does not expose
-demo reset, manual finalize, or Else routes. A fresh real-cloud smoke completed an actual receipt
-upload and verified:
+The backend shared image `3a2af7e` is deployed to three isolated Cloud Run composition roots. The
+API includes reviewed authenticated `GET /v1/memory-snapshot` and budgeted `POST /v1/else/ask`
+boundaries; it does not expose demo reset or manual finalize routes. A fresh real-cloud smoke completed
+an actual receipt upload and verified:
 
 ```text
 authenticated_api=passed
 owner_memory_snapshot=passed
 storage_eventarc_routing_tasks=passed
 document_ai_result=completed
+vertex_else_answer=sourced
+else_query_budget=passed
 test_owner_cleanup=passed
 ```
 
-Backend verification after release: 614 ordinary tests with 606 pass, 8 expected Emulator-only
-skips and 0 failures; Firebase Emulator suite 70/70.
+Backend verification after release: 627 ordinary tests with 618 pass, 9 expected Emulator-only
+skips and 0 failures; Firebase Emulator suite 71/71. Frontend unit tests are 90/90 and the production
+build remains successful.
 
 ## Submission collector status
 

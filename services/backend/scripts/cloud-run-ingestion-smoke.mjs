@@ -21,7 +21,7 @@ for (const file of [path.join(backend, '.env.cloud.local'), frontendEnvironment]
 }
 
 if (process.env.RUN_REAL_GOOGLE_PROVIDER_TESTS !== 'true') {
-  throw new Error('Set RUN_REAL_GOOGLE_PROVIDER_TESTS=true to permit the production OCR smoke test.');
+  throw new Error('Set RUN_REAL_GOOGLE_PROVIDER_TESTS=true to permit production Google provider tests.');
 }
 
 const required = (name) => {
@@ -189,12 +189,40 @@ try {
     || JSON.stringify(memory).includes('hashes')) {
     throw new Error('Production memory snapshot is invalid.');
   }
+  const utcDay = new Date().toISOString().slice(0, 10);
+  const projectBudgetRef = admin.db.doc(`elseQueryBudgets/${utcDay}`);
+  const projectBudgetBefore = await projectBudgetRef.get();
+  const projectUsedBefore = projectBudgetBefore.exists ? projectBudgetBefore.data().used : 0;
+  const elseAnswer = await page.evaluate(() => (
+    globalThis.__elsewhereCloudRunSmokeClient.askProductionElse(
+      '我刚上传的原件叫什么？',
+      { type: 'world' },
+    )
+  ));
+  const memorySourceIds = new Set(memory.fragments.map(({ id }) => id));
+  if (elseAnswer.status !== 'completed'
+    || elseAnswer.sources.length < 1
+    || elseAnswer.sources.some(({ fragmentId }) => !memorySourceIds.has(fragmentId))) {
+    throw new Error('Production Vertex Else answer is not bound to owner evidence.');
+  }
+  const [ownerBudget, projectBudgetAfter] = await Promise.all([
+    admin.db.doc(`users/${uid}/elseQueryBudgets/${utcDay}`).get(),
+    projectBudgetRef.get(),
+  ]);
+  if (ownerBudget.data()?.used !== 1
+    || projectBudgetAfter.data()?.used !== projectUsedBefore + 1
+    || JSON.stringify(ownerBudget.data()).includes('question')
+    || JSON.stringify(projectBudgetAfter.data()).includes('source')) {
+    throw new Error('Production Else budget ledger is invalid.');
+  }
 
   console.log('cloud-run-ingestion-smoke: PASS');
   console.log('authenticated_api=passed');
   console.log('owner_memory_snapshot=passed');
   console.log('storage_eventarc_routing_tasks=passed');
   console.log('document_ai_result=completed');
+  console.log('vertex_else_answer=sourced');
+  console.log('else_query_budget=passed');
 } finally {
   let cleanupError = null;
   if (admin && uid) {

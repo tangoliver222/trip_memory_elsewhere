@@ -20,11 +20,10 @@ Firebase Auth + App Check
   -> Firestore and private Storage artifacts
 ```
 
-The audit identified one bounded gap and this release closed it: the production API now exposes a
-reviewed owner-scoped memory snapshot endpoint. The public Hosting build remains a read-only judge
+The audit first closed the owner-scoped memory snapshot gap, then added a production sourced Else query
+with a hard Firestore budget and Vertex service identity. The public Hosting build remains a read-only judge
 fixture because the production snapshot is intentionally a generic persisted-data boundary rather
-than the Bangkok-specific competition projection. The isolated demo composition still owns Else,
-reset, and manual-finalize controls; it was not promoted wholesale.
+than the Bangkok-specific competition projection. Demo reset and manual-finalize controls were not promoted.
 
 ## Live Google Cloud evidence
 
@@ -32,9 +31,9 @@ The following resources were queried directly from project `elsewhere-memory-tyx
 
 | Resource | Current state | Boundary |
 | --- | --- | --- |
-| `elsewhere-api` | Ready, revision `elsewhere-api-00003-gcp` | Public Cloud Run transport; Firebase ID Token and App Check enforced in Fastify |
-| `elsewhere-ingestion` | Ready, revision `elsewhere-ingestion-00003-zdd` | Eventarc invoker only |
-| `elsewhere-capability-worker` | Ready, revision `elsewhere-capability-worker-00003-p2h` | Cloud Tasks OIDC invoker only |
+| `elsewhere-api` | Ready, revision `elsewhere-api-00004-q5s` | Public transport; Firebase ID Token + App Check; Firestore + Vertex only |
+| `elsewhere-ingestion` | Ready, revision `elsewhere-ingestion-00004-x9d` | Eventarc invoker only |
+| `elsewhere-capability-worker` | Ready, revision `elsewhere-capability-worker-00004-r5x` | Cloud Tasks OIDC invoker only |
 | Firestore `(default)` | `FIRESTORE_NATIVE`, `asia-southeast1` | Server-derived collections are client-write denied |
 | Cloud Tasks `elsewhere-ocr` | `RUNNING` | 2 dispatches/second, 2 concurrent deliveries |
 | Eventarc `elsewhere-original-finalized` | Active configuration | Exact bucket and `google.cloud.storage.object.v1.finalized` filter |
@@ -48,7 +47,7 @@ Runtime identities remain separated:
 - Eventarc delivery: `elsewhere-eventarc-invoker@elsewhere-memory-tyx-2026.iam.gserviceaccount.com`
 
 Required APIs are enabled, including Cloud Run, Firestore, Firebase Storage, Eventarc, Cloud Tasks,
-Document AI, Firebase App Check, and Identity Toolkit.
+Document AI, Vertex AI, Firebase App Check, and Identity Toolkit.
 
 ## Verification matrix
 
@@ -63,7 +62,8 @@ Document AI, Firebase App Check, and Identity Toolkit.
 | OCR execution | real-cloud deployed and previously exercised | Cloud Tasks plus Document AI worker; private normalized artifacts |
 | Owner memory snapshot | real-cloud deployed and verified | Authenticated, bounded Firestore projection with redacted internals |
 | Bangkok competition projection | implemented only in isolated demo composition | Kept separate from the generic production snapshot |
-| Else sourced answer | implemented and real-provider verified in isolated demo composition | Missing reviewed production API and secret/runtime boundary |
+| Else sourced answer | real-cloud deployed and verified | Owner snapshot, 40-source allowlist, strict JSON, Vertex service identity |
+| Else query budget | real-cloud deployed and verified | Atomic owner/day 10 and project/day 100 Firestore ledgers |
 | Places and Embedding | intentionally not implemented | RoutePlan can skip/defer them; no provider is claimed |
 
 ## Fresh test results
@@ -71,21 +71,21 @@ Document AI, Firebase App Check, and Identity Toolkit.
 Backend ordinary suite:
 
 ```text
-tests 614
-pass 606
+tests 627
+pass 618
 fail 0
-skipped 8
+skipped 9
 ```
 
-The eight skips are the expected Emulator-only cases when `npm test` does not start Firebase
+The nine skips are the expected Emulator-only cases when `npm test` does not start Firebase
 Emulators.
 
 Firebase Auth, Firestore, Storage, Rules, repository, deterministic processing, routing, and
 capability suite:
 
 ```text
-tests 70
-pass 70
+tests 71
+pass 71
 fail 0
 skipped 0
 ```
@@ -93,7 +93,7 @@ skipped 0
 Frontend release gates immediately before this audit:
 
 ```text
-unit tests: 89/89
+unit tests: 90/90
 mobile routes and performance: 60/60
 recording visual flow: 1/1 at 390x844 and 430x932
 public Hosting smoke: 3/3
@@ -107,11 +107,11 @@ No secret value was printed or committed. `services/backend/.env` remains safe f
 `services/backend/.env.cloud.local` carries real-cloud deployment configuration; the frontend cloud
 configuration remains in `design-lab/prototypes-vanilla/.env.cloud.local`.
 
-## Confirmed next slice
+## Remaining bounded work
 
-The next backend slice is a separately reviewed production Else boundary. It adds an interactive
-provider-cost policy and a provider credential or Vertex runtime authority, so it was not smuggled
-into this read-model change. Demo reset and manual-finalize routes remain absent from production.
+The deployed production Else boundary is intentionally one-shot and evidence-only. Conversation persistence,
+streaming, Agent Engine tools, Places, Embedding, and user-confirmed write actions remain later modules. Demo reset
+and manual-finalize routes remain absent from production.
 
 ## Production snapshot release evidence
 
@@ -119,7 +119,7 @@ The released image is:
 
 ```text
 asia-southeast1-docker.pkg.dev/elsewhere-memory-tyx-2026/
-  elsewhere-backend/elsewhere-backend:d69e154
+  elsewhere-backend/elsewhere-backend:3a2af7e
 ```
 
 The endpoint is `GET /v1/memory-snapshot`. It requires the same verified Firebase ID Token and App
@@ -135,6 +135,8 @@ authenticated_api=passed
 owner_memory_snapshot=passed
 storage_eventarc_routing_tasks=passed
 document_ai_result=completed
+vertex_else_answer=sourced
+else_query_budget=passed
 test_owner_cleanup=passed
 ```
 
@@ -165,4 +167,9 @@ gcloud eventarc triggers describe elsewhere-original-finalized \
 gcloud firestore databases describe \
   --database='(default)' \
   --project elsewhere-memory-tyx-2026
+
+bash scripts/deploy-google-cloud-services.sh
+
+RUN_REAL_GOOGLE_PROVIDER_TESTS=true \
+  npm --prefix services/backend run smoke:cloud-run
 ```

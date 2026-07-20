@@ -1,9 +1,41 @@
 # Else AI Service v1 — 实施文档
 
-**状态：** legacy 查询原型冻结；未挂载到当前 foundation app
+**状态：** 生产查询边界已部署；legacy SSE 原型保留为历史记录
 **日期：** 2026-07-15
 **上位依据：** `Elsewhere_Google_First_Technical_Architecture_v1.0.md` §10（Else Agent 架构）、§6（模型路由）、§20（不推荐路径）
-**范围声明：** 只包含 Else AI 服务端。不修改任何前端代码；前端对接由前端同学按本文 §4 契约自行实现。
+**范围声明：** 当前生产实现为经过 Auth / App Check、owner snapshot、来源白名单与日预算保护的
+`POST /v1/else/ask`。本文 §1–§8 的 SSE/fixtures 描述保留为 2026-07-15 历史原型记录。
+
+## 0. 当前生产边界（2026-07-20）
+
+```text
+Firebase ID Token + App Check
+  -> POST /v1/else/ask
+  -> owner-scoped Firestore MemorySnapshot (最多 200 个 Fragment)
+  -> 最多 40 条安全证据 + source allowlist
+  -> Firestore 原子 owner/day + project/day 预算预留
+  -> Vertex AI gemini-2.5-flash (Cloud Run service identity)
+  -> strict JSON
+  -> 服务端再次剔除不在 allowlist 的 sourceIds
+```
+
+- 请求严格为 `{question, scope}`；question 为 1–500 字，scope 仅支持 `world`、`fragments`、
+  `fragment`。额外字段拒绝。
+- 空证据直接返回诚实的不确定回答，不预留预算、不调用 Vertex。
+- 有证据时，owner 每 UTC 日最多 10 次，项目每 UTC 日最多 100 次；两本账在一个 Firestore
+  transaction 内一起递增。provider 失败不退款，避免无界重试消耗。
+- Vertex client 只在 `elsewhere-api` composition root 构造。API runtime 只有
+  `roles/aiplatform.user` 与 `roles/datastore.user`；ingestion/worker 没有 Vertex 权限。
+- 生产只允许 Workload Identity / Cloud Run service account，不上传 `GEMINI_API_KEY`。
+- 当前是一次性 sourced query，不含 SSE、会话持久化、工具写操作、Places、Embedding 或 Agent Engine。
+
+2026-07-20 真实 smoke 已完成上传、Document AI、production snapshot、Vertex answer、来源归属、
+双层预算和测试 owner 清理。输出包括 `vertex_else_answer=sourced`、
+`else_query_budget=passed`、`test_owner_cleanup=passed`。
+
+---
+
+以下内容是 legacy 原型的历史设计，不代表当前公开生产契约。
 
 > 2026-07-16 审计结论：本实现保留为 legacy 查询原型，目录已迁移到
 > `services/backend`。在 Auth、真实 Repository 和结构化来源验证完成前不得公开部署。
