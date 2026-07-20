@@ -259,6 +259,34 @@ test('production memory snapshot uses the reviewed read boundary', async () => {
   ]]);
 });
 
+test('production Else query uses the authenticated evidence-only boundary', async () => {
+  const requests = [];
+  const client = createDemoClient(demoClientConfigFromEnv(cloudEnvironment), {
+    appCheckFactory: () => Object.freeze({ getToken: async () => 'app-check-token' }),
+    signInAnonymouslyFn: async () => ({
+      user: Object.freeze({ getIdToken: async () => 'firebase-id-token' }),
+    }),
+    fetchFn: async (url, init) => {
+      requests.push([url, init.method, JSON.parse(init.body)]);
+      return Object.freeze({
+        ok: true,
+        status: 200,
+        json: async () => ({ answer: '找到一张原件。', sources: [] }),
+      });
+    },
+  });
+
+  assert.deepEqual(await client.askProductionElse('我保存过什么？', { type: 'world' }), {
+    answer: '找到一张原件。',
+    sources: [],
+  });
+  assert.deepEqual(requests, [[
+    'http://127.0.0.1:8787/v1/else/ask',
+    'POST',
+    { question: '我保存过什么？', scope: { type: 'world' } },
+  ]]);
+});
+
 test('cloud snapshot waits through a retryable projection gap', async () => {
   let calls = 0;
   const waits = [];
