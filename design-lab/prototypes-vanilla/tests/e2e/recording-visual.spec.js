@@ -79,10 +79,14 @@ async function assertRecordingComposition(page, pageId) {
   }
 
   if (pageId === 'world-fragments') {
-    const duplicateCaptions = await page.locator('.field-node:not(.field-node--photo) .field-node__label').evaluateAll((labels) => (
-      labels.filter((label) => getComputedStyle(label).display !== 'none').length
-    ));
+    const { duplicateCaptions, misplacedClusterLabels } = await page.evaluate(() => ({
+      duplicateCaptions: [...document.querySelectorAll('.field-node:not(.field-node--photo) .field-node__label')]
+        .filter((label) => getComputedStyle(label).display !== 'none').length,
+      misplacedClusterLabels: [...document.querySelectorAll('.field-cluster-label')]
+        .filter((label) => label.getBoundingClientRect().top < 12).length,
+    }));
     expect(duplicateCaptions).toBe(0);
+    expect(misplacedClusterLabels).toBe(0);
     return;
   }
 
