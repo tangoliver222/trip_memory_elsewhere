@@ -26,7 +26,7 @@ function renderTimeView(slug) {
   return `<section class="time-explore">
     <div class="date-rail" aria-label="可拖动日期轨"><span>12 OCT</span><i></i><span>16 OCT</span><i></i><span>17 OCT</span><i></i><span>18 OCT</span><i></i><span>19 OCT</span></div>
     <div class="time-moments">
-      ${scenes.map((moment, index) => `<button type="button" class="time-moment" data-action="navigate" data-route="${getAuthorityLink('scene', moment.id)}" style="--moment-order:${index}">
+      ${scenes.map((moment, index) => `<button type="button" class="time-moment" data-particle-anchor data-particle-id="${moment.id}" data-particle-role="scene" data-particle-weight="${Math.max(1, moment.fragmentIds?.length || 1)}" data-action="navigate" data-route="${getAuthorityLink('scene', moment.id)}" style="--moment-order:${index}">
         <span>${escapeHtml(moment.timeRange)}</span><strong>${escapeHtml(moment.label)}</strong><small>${escapeHtml(moment.observation)}</small>
         ${moment.primaryAsset ? `<img src="${moment.primaryAsset}" alt="">` : '<i class="missing-dot"></i>'}
       </button>`).join('')}
@@ -38,7 +38,7 @@ function renderPlaceView() {
   return `<section class="place-explore">
     <div class="memory-map" aria-label="Bangkok 记忆地点图">
       <div class="river-line" aria-hidden="true"></div>
-      ${places.map((place, index) => `<button class="map-place map-place--${index + 1}" type="button" data-action="navigate" data-route="${getAuthorityLink('place', place.id)}"><i></i><span>${escapeHtml(place.name)}</span><small>${escapeHtml(place.area)}</small></button>`).join('')}
+      ${places.map((place, index) => `<button class="map-place map-place--${index + 1}" type="button" data-particle-anchor data-particle-id="${place.id}" data-particle-role="place" data-particle-weight="${Math.max(1, place.visitCount || 1)}" data-action="navigate" data-route="${getAuthorityLink('place', place.id)}"><i></i><span>${escapeHtml(place.name)}</span><small>${escapeHtml(place.area)}</small></button>`).join('')}
     </div>
     <div class="map-caption"><p>地图只显示有来源支撑的地点与候选，不补全缺失轨迹。</p><span>3 已确认 · 1 候选</span></div>
   </section>`;
@@ -47,7 +47,7 @@ function renderPlaceView() {
 function renderConnectionView() {
   return `<section class="connection-explore">
     <div class="relation-space">
-      ${connections.map((connection, index) => `<button class="relation-node relation-node--${index + 1} relation-node--${connection.status}" type="button" data-action="navigate" data-route="${getAuthorityLink('connection', connection.id)}"><span>${{ same_visit: '同一次到访', repeated_place: '重复地点', temporal_and_textual_near: '时间与文字靠近', place_candidate: '地点候选' }[connection.type]}</span><small>${connection.evidence.length} 条来源说明</small></button>`).join('')}
+      ${connections.map((connection, index) => `<button class="relation-node relation-node--${index + 1} relation-node--${connection.status}" type="button" data-particle-anchor data-particle-id="${connection.id}" data-particle-role="relation" data-particle-weight="${Math.max(1, connection.evidence.length)}" data-action="navigate" data-route="${getAuthorityLink('connection', connection.id)}"><span>${{ same_visit: '同一次到访', repeated_place: '重复地点', temporal_and_textual_near: '时间与文字靠近', place_candidate: '地点候选' }[connection.type]}</span><small>${connection.evidence.length} 条来源说明</small></button>`).join('')}
       <svg class="relation-paths" aria-hidden="true" viewBox="0 0 1000 540" preserveAspectRatio="none"><path d="M130 170 C 300 40, 420 330, 530 220 S 780 80, 890 190"/><path d="M220 410 C 350 270, 570 480, 820 370"/><path class="is-open" d="M530 220 C 620 300, 690 350, 820 370"/></svg>
     </div>
     <div class="relation-legend"><span><i></i>已确认</span><span><i></i>来源支持</span><span><i></i>仍待判断</span></div>
@@ -59,8 +59,24 @@ export function renderExplore(routeId = 'bangkok', requestedView = 'time') {
   const view = validViews.has(requestedView) ? requestedView : 'time';
   const content = view === 'time' ? renderTimeView(city.slug) : (view === 'place' ? renderPlaceView() : renderConnectionView());
   const target = { time: 'timeline', place: 'map', connection: 'relations' }[view];
+  const items = view === 'time'
+    ? scenes.map((moment) => ({ id: moment.id, role: 'scene', status: moment.status }))
+    : view === 'place'
+      ? places.map((place) => ({ id: place.id, role: 'place', status: place.status }))
+      : connections.map((connection) => ({ id: connection.id, role: 'relation', status: connection.status }));
   return {
-    sceneMode: 'city', scenePayload: { target, view, cityId: city.id }, afterRender: null,
+    sceneMode: 'city',
+    scenePayload: {
+      target,
+      view,
+      cityId: city.id,
+      itemCount: items.length,
+      items,
+      days: view === 'time' ? scenes : undefined,
+      places: view === 'place' ? places : undefined,
+      relations: view === 'connection' ? connections : undefined,
+    },
+    afterRender: null,
     html: `<main class="page explore-page explore-page--${view}" data-page-id="world-explore">
       <header class="explore-header"><div><p class="eyebrow">${escapeHtml(city.name)} · 三个视角</p><h1>${{ time: '这些日子如何发生', place: '哪些地点反复出现', connection: '原件为什么靠近' }[view]}</h1></div>${exploreTabs(city.slug, view)}</header>
       ${content}

@@ -22,12 +22,21 @@ export function renderDiscoverHome(state) {
   const context = getDiscoveryContext(discovery.id);
   const composition = getDiscoveryComposition(discovery.type);
   return {
-    sceneMode: 'discovery', scenePayload: { target: 'discovery', composition, discoveryId: discovery.id }, afterRender: null,
+    sceneMode: 'discovery',
+    scenePayload: {
+      target: 'discovery',
+      composition,
+      discoveryId: discovery.id,
+      itemCount: context.fragments.length,
+      items: context.fragments.map((fragment) => ({ id: fragment.id, role: 'evidence', clusterId: discovery.id, status: fragment.status })),
+      relations: context.connections,
+    },
+    afterRender: null,
     html: `<main class="page discover-home" data-page-id="discover-home">
       <header class="discover-header"><div><p class="eyebrow">少量值得重新看的联系</p><h1>发现不是结论，<br>而是来源之间新长出的关系</h1></div><div class="discover-filters">${[['all','此刻'],['saved','已保存'],['unresolved','待确认']].map(([value,label]) => `<button class="${requested === value ? 'is-active' : ''}" type="button" data-action="set-discovery-filter" data-value="${value}">${label}</button>`).join('')}</div></header>
       <article class="discovery-feature discovery-feature--${composition}">
         <div class="featured-space">
-          ${context.fragments.slice(0, 4).map((fragment, index) => `<div class="feature-source feature-source--${index + 1}">${renderMedia(fragment, { className: 'feature-source__media' })}<span>${escapeHtml(fragment.evidencePreview)}</span></div>`).join('')}
+          ${context.fragments.slice(0, 4).map((fragment, index) => `<div class="feature-source feature-source--${index + 1}" data-particle-anchor data-particle-id="${fragment.id}" data-particle-role="evidence" data-particle-weight="1">${renderMedia(fragment, { className: 'feature-source__media' })}<span>${escapeHtml(fragment.evidencePreview)}</span></div>`).join('')}
           <svg aria-hidden="true" viewBox="0 0 900 520"><path d="M150 110 C 270 250, 300 90, 440 250 S 650 440, 770 180"/><circle cx="450" cy="255" r="60"/></svg>
           <div class="feature-entity"><i></i><span>${escapeHtml(context.entity?.name || '地点仍待确认')}</span></div>
         </div>
@@ -61,12 +70,20 @@ export function renderDiscoveryDetail(discoveryId, state) {
   const saved = discovery.saved || state.savedDiscoveryIds?.includes(discovery.id);
   return {
     sceneMode: 'discovery',
-    scenePayload: { target: 'discovery', composition, discoveryId: discovery.id, sourceCount: fragments.length },
+    scenePayload: {
+      target: 'discovery',
+      composition,
+      discoveryId: discovery.id,
+      sourceCount: fragments.length,
+      itemCount: fragments.length,
+      items: fragments.map((fragment) => ({ id: fragment.id, role: 'evidence', clusterId: discovery.id, status: fragment.status })),
+      relations: connections,
+    },
     afterRender: null,
     html: `<main class="page discovery-detail discovery-detail--${composition}" data-page-id="discover-detail">
       <section class="discovery-growth" data-discovery-evidence aria-label="发现证据先于标题出现">
         <div class="discovery-time-nodes">
-          ${groups.map(([date, originals], groupIndex) => `<article class="discovery-time-node discovery-time-node--${groupIndex + 1}" style="--date-index:${groupIndex}"><time>${dateLabel(date)}</time><div>${originals.map((fragment, index) => `<button type="button" data-action="open-lens" data-fragment-id="${fragment.id}" id="discovery-source-${groupIndex}-${index}">${renderMedia(fragment, { className: 'discovery-time-node__media' })}<span>${escapeHtml(fragment.evidencePreview)}</span></button>`).join('')}</div></article>`).join('')}
+          ${groups.map(([date, originals], groupIndex) => `<article class="discovery-time-node discovery-time-node--${groupIndex + 1}" style="--date-index:${groupIndex}"><time>${dateLabel(date)}</time><div>${originals.map((fragment, index) => `<button type="button" data-particle-anchor data-particle-id="${fragment.id}" data-particle-role="evidence" data-particle-weight="1" data-action="open-lens" data-fragment-id="${fragment.id}" id="discovery-source-${groupIndex}-${index}">${renderMedia(fragment, { className: 'discovery-time-node__media' })}<span>${escapeHtml(fragment.evidencePreview)}</span></button>`).join('')}</div></article>`).join('')}
         </div>
         <div class="discovery-relation-forming"><span>关系正在成立</span><svg viewBox="0 0 1000 220" preserveAspectRatio="none" aria-hidden="true"><path d="M80 105 C 250 10, 320 210, 500 105 S 760 10, 920 105"/></svg><div class="relation-particles"><i></i><i></i><i></i><i></i></div></div>
         <div class="discovery-entity-forming"><i aria-hidden="true"></i><span>共同地点</span><strong>${escapeHtml(entity?.name || '地点仍待确认')}</strong></div>

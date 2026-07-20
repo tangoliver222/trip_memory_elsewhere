@@ -23,14 +23,22 @@ export function renderWorldHome() {
   const processing = processingItems.length;
   return {
     sceneMode: 'world',
-    scenePayload: { target: 'globe', pointSize: 1.7, opacity: 0.95, focus: 1 },
+    scenePayload: {
+      target: 'globe',
+      itemCount: world.totalFragments,
+      items: cities.map((city) => ({ id: city.id, role: 'city', clusterId: city.id, status: city.status?.[0] })),
+      cities: cities.map((city) => ({ ...city, lat: city.coordinates.lat, lng: city.coordinates.lng })),
+      pointSize: 1.7,
+      opacity: 0.95,
+      focus: 1,
+    },
     html: `<main class="page world-home" data-page-id="world-home">
       <header class="world-brand">
         <span class="world-brand__mark">Elsewhere</span>
         <span class="world-brand__sub">私人旅行记忆世界</span>
       </header>
 
-      <section class="globe-stage" data-globe-stage aria-label="点云地球：拖拽旋转，点击城市进入">
+      <section class="globe-stage" data-globe-stage data-particle-anchor data-particle-id="world-globe" data-particle-role="world" data-particle-weight="${Math.max(1, world.totalFragments)}" aria-label="点云地球：拖拽旋转，点击城市进入">
         <div class="globe-lede will-flow" data-flow="1">
           <p class="eyebrow">世界</p>
           <h1>去过的每个地方，仍然相连。</h1>
@@ -161,7 +169,7 @@ export function renderWorldCities() {
 function renderEmptyCityHome() {
   return {
     sceneMode: 'quiet-tool',
-    scenePayload: { target: 'quiet', opacity: 0.2 },
+    scenePayload: { target: 'quiet', itemCount: 0, items: [], opacity: 0.2 },
     html: `<main class="page city-world city-world--empty" data-page-id="world-city-home">
       <header class="city-head">
         <p class="eyebrow">城市记忆群</p>
@@ -221,18 +229,27 @@ export function renderCityHome(routeId = 'bangkok', state = {}) {
     ? liveClusters
     : (isBangkok && hasFixtureComposition ? fixtureClusters : []);
 
+  const anchoredFragments = clusters.flatMap((cluster) => cluster.fragments.filter(Boolean));
   const clusterHtml = clusters.map((cluster, index) => `
     <div class="city-cluster city-cluster--${cluster.key}" data-cluster-anchor style="--cluster-order:${index}">
       <span class="city-cluster__name">${escapeHtml(cluster.name)}<small>${escapeHtml(cluster.meta)}</small></span>
       ${cluster.fragments.filter(Boolean).map((fragment, tileIndex) => `
-        <button class="city-tile city-tile--${tileIndex} city-tile--t-${fragment.type}" type="button" data-action="open-lens" data-fragment-id="${fragment.id}" aria-label="${escapeHtml(fragment.evidencePreview)}">
+        <button class="city-tile city-tile--${tileIndex} city-tile--t-${fragment.type}" type="button" data-particle-anchor data-particle-id="${fragment.id}" data-particle-role="fragment" data-particle-weight="1" data-action="open-lens" data-fragment-id="${fragment.id}" aria-label="${escapeHtml(fragment.evidencePreview)}">
           ${renderMedia(fragment, { className: 'city-tile__media', decorative: true })}
         </button>`).join('')}
     </div>`).join('');
 
   return {
     sceneMode: 'city',
-    scenePayload: { target: 'cityCluster', cityId: city.id, pointSize: 1.5, opacity: 0.92, focus: 0.5 },
+    scenePayload: {
+      target: 'cityCluster',
+      cityId: city.id,
+      itemCount: cityFragments.length,
+      items: anchoredFragments.map((fragment) => ({ id: fragment.id, role: 'fragment', clusterId: fragment.placeId || 'unplaced', status: fragment.status })),
+      pointSize: 1.5,
+      opacity: 0.92,
+      focus: 0.5,
+    },
     html: `<main class="page city-world" data-page-id="world-city-home">
       <header class="city-head will-flow">
         <p class="eyebrow">${escapeHtml(city.period)} · ${escapeHtml(city.localizedName)}</p>
@@ -258,12 +275,6 @@ export function renderCityHome(routeId = 'bangkok', state = {}) {
       </div>
     </main>`,
     afterRender({ pageRoot, sceneManager }) {
-      // 聚类 DOM 锚点 → 粒子骨架（碎片与粒子在同一空间坐标系）
-      const anchors = sceneManager.anchorsFromElements(
-        pageRoot.querySelectorAll('[data-cluster-anchor]'),
-        { z: -2, weights: [1, 0.92, 0.8] },
-      );
-      if (anchors.length) sceneManager.retarget?.('cityCluster', { anchors });
       const reduced = reducedMotionQuery();
       const tiles = pageRoot.querySelectorAll('.city-tile, .city-cluster__name');
       const willFlow = pageRoot.querySelectorAll('.will-flow');

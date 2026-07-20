@@ -33,11 +33,27 @@ export function renderFragmentField(state) {
   if (unplacedCount > 0) clusters.push({ slug: 'unplaced', weight: unplacedCount });
   return {
     sceneMode: 'fragment-field',
-    scenePayload: { target: 'field', query, filters: state.field?.filters, clusters },
+    scenePayload: {
+      target: 'field',
+      query,
+      filters: state.field?.filters,
+      clusters,
+      itemCount: fragments.length,
+      items: fragments.map((fragment) => ({ id: fragment.id, role: 'fragment', clusterId: fragment.cityId || 'unplaced', status: fragment.status })),
+    },
     afterRender({ pageRoot, store, sceneManager }) {
       const viewport = pageRoot?.querySelector?.('[data-field-viewport]');
       if (!viewport) return null;
-      const controller = createFieldController({ viewport, store, sceneManager, scenePayload: { clusters } });
+      const controller = createFieldController({
+        viewport,
+        store,
+        sceneManager,
+        scenePayload: {
+          clusters,
+          itemCount: fragments.length,
+          items: fragments.map((fragment) => ({ id: fragment.id, role: 'fragment', clusterId: fragment.cityId || 'unplaced', status: fragment.status })),
+        },
+      });
       const search = pageRoot.querySelector('[data-field-search]');
       const onSearch = (event) => controller.search(event.target.value);
       search?.addEventListener('input', onSearch);
@@ -58,7 +74,7 @@ export function renderFragmentField(state) {
         ${fragments.map((fragment, index) => {
           const node = positions[fragment.id];
           const relevant = !query || node.relevance === 1;
-          return `<button id="fragment-focus-${index}" class="field-node field-node--${fragment.type}" style="--field-x:${node.x + (state.field?.camera?.x || 0)}px;--field-y:${node.y + (state.field?.camera?.y || 0)}px;--field-z:${node.z}px;--field-scale:${state.field?.camera?.scale || 1};--node-index:${index};opacity:${node.relevance}" type="button" data-field-node data-relevance="${relevant ? 'focused' : 'background'}" data-action="open-lens" data-fragment-id="${fragment.id}">
+          return `<button id="fragment-focus-${index}" class="field-node field-node--${fragment.type}" style="--field-x:${node.x + (state.field?.camera?.x || 0)}px;--field-y:${node.y + (state.field?.camera?.y || 0)}px;--field-z:${node.z}px;--field-scale:${state.field?.camera?.scale || 1};--node-index:${index};opacity:${node.relevance}" type="button" data-field-node data-particle-anchor data-particle-id="${fragment.id}" data-particle-role="fragment" data-particle-weight="1" data-relevance="${relevant ? 'focused' : 'background'}" data-action="open-lens" data-fragment-id="${fragment.id}">
             ${renderMedia(fragment, { className: 'field-node__media' })}
             <span class="field-node__type">${typeLabel[fragment.type] || fragment.type}</span>
             <span class="field-node__label">${escapeHtml(fragment.evidencePreview)}</span>
