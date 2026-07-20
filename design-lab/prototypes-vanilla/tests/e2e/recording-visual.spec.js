@@ -64,6 +64,38 @@ async function capture(page, viewport, name) {
   await page.screenshot({ path: path.join(directory, `${name}.png`), animations: 'allow' });
 }
 
+async function assertRecordingComposition(page, pageId) {
+  if (pageId === 'world-city-home') {
+    const gap = await page.evaluate(async () => {
+      const layer = document.querySelector('#page-content-layer');
+      layer.scrollTop = layer.scrollHeight;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const navigation = document.querySelector('.app-navigation').getBoundingClientRect();
+      const supportingActions = document.querySelector('.city-foot__aux').getBoundingClientRect();
+      return navigation.top - supportingActions.bottom;
+    });
+    expect(gap).toBeGreaterThanOrEqual(24);
+    return;
+  }
+
+  if (pageId === 'world-fragments') {
+    const duplicateCaptions = await page.locator('.field-node:not(.field-node--photo) .field-node__label').evaluateAll((labels) => (
+      labels.filter((label) => getComputedStyle(label).display !== 'none').length
+    ));
+    expect(duplicateCaptions).toBe(0);
+    return;
+  }
+
+  if (pageId === 'discover-home') {
+    const gap = await page.evaluate(() => {
+      const sources = [...document.querySelectorAll('.feature-source')].map((source) => source.getBoundingClientRect());
+      const copy = document.querySelector('.featured-copy').getBoundingClientRect();
+      return copy.top - Math.max(...sources.map((source) => source.bottom));
+    });
+    expect(gap).toBeGreaterThanOrEqual(16);
+  }
+}
+
 test('recording fixture remains readable, bounded and visually stable', async ({ page }) => {
   const runtimeErrors = [];
   page.on('pageerror', (error) => runtimeErrors.push(error.message));
@@ -87,11 +119,14 @@ test('recording fixture remains readable, bounded and visually stable', async ({
     await page.goto('/#/world/city/bangkok');
     await assertHealthy(page, 'world-city-home');
     expect(await page.locator('.city-tile').count()).toBeGreaterThanOrEqual(3);
+    await assertRecordingComposition(page, 'world-city-home');
+    await page.locator('#page-content-layer').evaluate((layer) => layer.scrollTo({ top: 0, behavior: 'instant' }));
     await capture(page, viewport, '02-city-top');
 
     await page.goto('/#/world/fragments');
     await assertHealthy(page, 'world-fragments');
     expect(await page.locator('[data-field-node]').count()).toBeGreaterThanOrEqual(6);
+    await assertRecordingComposition(page, 'world-fragments');
     await capture(page, viewport, '03-fragment-field');
     await page.locator('[data-field-search]').fill('Common Grounds');
     const focused = page.locator('[data-field-node][data-relevance="focused"]');
@@ -107,6 +142,7 @@ test('recording fixture remains readable, bounded and visually stable', async ({
     await assertHealthy(page, 'discover-home');
     await expect(page.locator('[data-page-id="discover-home"] [data-primary-action]')).toHaveCount(1);
     await expect(page.locator('.featured-copy button')).toBeInViewport();
+    await assertRecordingComposition(page, 'discover-home');
     await capture(page, viewport, '05-discover-home');
     await page.locator('.featured-copy button').click();
     await assertHealthy(page, 'discover-detail');
