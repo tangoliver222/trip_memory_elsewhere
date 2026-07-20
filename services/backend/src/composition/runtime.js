@@ -1,4 +1,5 @@
 import { randomUUID as nodeRandomUUID } from 'node:crypto';
+import { GoogleGenAI } from '@google/genai';
 import { createCloudTasksDispatcher } from '../adapters/cloud-tasks-dispatcher.js';
 import { createDocumentAiOcr } from '../adapters/document-ai-ocr.js';
 import { createFirebaseCapabilityArtifactStore } from '../adapters/firebase-capability-artifact-store.js';
@@ -15,6 +16,10 @@ import { createCapabilityScheduler } from '../capabilities/scheduler.js';
 import { createOcrCapabilityWorker } from '../capabilities/worker.js';
 import { createDeterministicProcessor } from '../processing/service.js';
 import { createFirestoreMemorySnapshotReader } from '../memory/reader.js';
+import { createMemorySnapshotLoader } from '../memory/loader.js';
+import { createFirestoreElseQueryBudget } from '../else/firestore-budget.js';
+import { createGeminiElseProvider } from '../else/gemini-provider.js';
+import { createElseQueryService } from '../else/service.js';
 import { createFirestoreRepository } from '../repositories/firestore.js';
 import { createAuthoritativeRouter } from '../routing/service.js';
 import { createApiComposition } from './api.js';
@@ -43,6 +48,11 @@ export function createRuntimeApp(appConfig, {
   documentAiOcrFactory = createDocumentAiOcr,
   capabilityWorkerFactory = createOcrCapabilityWorker,
   memorySnapshotReaderFactory = createFirestoreMemorySnapshotReader,
+  memorySnapshotLoaderFactory = createMemorySnapshotLoader,
+  elseBudgetFactory = createFirestoreElseQueryBudget,
+  geminiClientFactory = (options) => new GoogleGenAI(options),
+  elseProviderFactory = createGeminiElseProvider,
+  elseQueryServiceFactory = createElseQueryService,
   clock = () => new Date().toISOString(),
   randomUUID = nodeRandomUUID,
 } = {}) {
@@ -53,6 +63,26 @@ export function createRuntimeApp(appConfig, {
   const repository = repositoryFactory({ db: firebase.db });
 
   if (appConfig.serviceMode === 'api') {
+    const memorySnapshotReader = memorySnapshotReaderFactory({ db: firebase.db });
+    let elseQueryService = null;
+    if (appConfig.elseQuery) {
+      const memorySnapshotLoader = memorySnapshotLoaderFactory({ memorySnapshotReader });
+      const budgetGate = elseBudgetFactory({
+        db: firebase.db,
+        ownerDailyLimit: appConfig.elseQuery.budget.ownerDailyLimit,
+        projectDailyLimit: appConfig.elseQuery.budget.projectDailyLimit,
+      });
+      const client = geminiClientFactory({
+        vertexai: true,
+        project: appConfig.elseQuery.vertex.projectId,
+        location: appConfig.elseQuery.vertex.location,
+      });
+      const provider = elseProviderFactory({
+        client,
+        model: appConfig.elseQuery.vertex.model,
+      });
+      elseQueryService = elseQueryServiceFactory({ memorySnapshotLoader, budgetGate, provider });
+    }
     return createApiComposition({
       appConfig,
       repository,
@@ -61,7 +91,8 @@ export function createRuntimeApp(appConfig, {
         appCheck: firebase.appCheck,
       }),
       allowedAppIds: appConfig.allowedAppIds,
-      memorySnapshotReader: memorySnapshotReaderFactory({ db: firebase.db }),
+      memorySnapshotReader,
+      elseQueryService,
     });
   }
 

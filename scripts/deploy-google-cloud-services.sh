@@ -107,6 +107,7 @@ gcloud services enable \
   eventarc.googleapis.com \
   pubsub.googleapis.com \
   documentai.googleapis.com \
+  aiplatform.googleapis.com \
   --project="${PROJECT_ID}" \
   --quiet
 
@@ -123,6 +124,7 @@ ensure_service_account "${EVENTARC_ACCOUNT}" "Elsewhere Eventarc invoker"
 ensure_service_account "${TASK_ACCOUNT}" "Elsewhere Cloud Tasks invoker"
 
 grant_project_role "serviceAccount:${API_ACCOUNT}" roles/datastore.user
+grant_project_role "serviceAccount:${API_ACCOUNT}" roles/aiplatform.user
 grant_project_role "serviceAccount:${INGESTION_ACCOUNT}" roles/datastore.user
 grant_project_role "serviceAccount:${WORKER_ACCOUNT}" roles/datastore.user
 grant_project_role "serviceAccount:${WORKER_ACCOUNT}" roles/documentai.apiUser
@@ -187,7 +189,7 @@ gcloud run deploy "${API_SERVICE}" \
   --project="${PROJECT_ID}" --region="${REGION}" --image="${IMAGE}" \
   --service-account="${API_ACCOUNT}" --allow-unauthenticated \
   --min=0 --max=3 --concurrency=20 --cpu=1 --memory=512Mi --timeout=60 \
-  --set-env-vars="NODE_ENV=production,HOST=0.0.0.0,FIREBASE_PROJECT_ID=${PROJECT_ID},ELSEWHERE_ALLOWED_APP_IDS=${ELSEWHERE_ALLOWED_APP_IDS},CAPABILITY_EXECUTION_MODE=fake,CLOUD_TASKS_ENABLED=false,DOCUMENT_AI_ENABLED=false" \
+  --set-env-vars="NODE_ENV=production,HOST=0.0.0.0,FIREBASE_PROJECT_ID=${PROJECT_ID},ELSEWHERE_ALLOWED_APP_IDS=${ELSEWHERE_ALLOWED_APP_IDS},CAPABILITY_EXECUTION_MODE=fake,CLOUD_TASKS_ENABLED=false,DOCUMENT_AI_ENABLED=false,ELSE_QUERY_ENABLED=true,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=global,ELSE_MODEL_FAST=gemini-2.5-flash,ELSE_QUERY_OWNER_DAILY_LIMIT=10,ELSE_QUERY_PROJECT_DAILY_LIMIT=100" \
   --quiet
 
 gcloud run services add-iam-policy-binding "${INGESTION_SERVICE}" \

@@ -12,6 +12,9 @@ const EnvSchema = z.object({
   GOOGLE_CLOUD_LOCATION: z.string().default('global'),
   ELSE_MODEL_FAST: z.string().default('gemini-flash-latest'),
   ELSE_MODEL_DEEP: z.string().optional(),
+  ELSE_QUERY_ENABLED: z.enum(['true', 'false']).default('false'),
+  ELSE_QUERY_OWNER_DAILY_LIMIT: z.coerce.number().int().min(1).max(1000).default(10),
+  ELSE_QUERY_PROJECT_DAILY_LIMIT: z.coerce.number().int().min(1).max(100000).default(100),
   ELSE_CORS_ORIGIN: z.string().default('*'),
   ELSEWHERE_SERVICE_MODE: z.enum(['api', 'ingestion', 'capability-worker']).default('api'),
   FIREBASE_PROJECT_ID: z.string().trim().default(''),
@@ -91,6 +94,19 @@ export function loadConfig(env = process.env) {
   if (['ingestion', 'capability-worker'].includes(value.ELSEWHERE_SERVICE_MODE)
     && storageBuckets.length === 0) {
     missing.push('ELSEWHERE_STORAGE_BUCKETS');
+  }
+
+  const elseQueryEnabled = value.ELSE_QUERY_ENABLED === 'true';
+  if (elseQueryEnabled) {
+    if (value.ELSEWHERE_SERVICE_MODE !== 'api') missing.push('ELSEWHERE_SERVICE_MODE');
+    if (value.GOOGLE_GENAI_USE_VERTEXAI !== 'true') missing.push('GOOGLE_GENAI_USE_VERTEXAI');
+    if (!value.GOOGLE_CLOUD_PROJECT) missing.push('GOOGLE_CLOUD_PROJECT');
+    if (value.GOOGLE_CLOUD_PROJECT !== firebaseProjectId) {
+      missing.push('GOOGLE_CLOUD_PROJECT', 'FIREBASE_PROJECT_ID');
+    }
+    if (!value.GOOGLE_CLOUD_LOCATION) missing.push('GOOGLE_CLOUD_LOCATION');
+    if (!value.ELSE_MODEL_FAST) missing.push('ELSE_MODEL_FAST');
+    if (value.GEMINI_API_KEY) missing.push('GEMINI_API_KEY');
   }
 
   const cloudTasksEnabled = value.CLOUD_TASKS_ENABLED === 'true';
@@ -201,6 +217,18 @@ export function loadConfig(env = process.env) {
     }) : null,
   });
 
+  const elseQuery = elseQueryEnabled ? Object.freeze({
+    vertex: Object.freeze({
+      projectId: value.GOOGLE_CLOUD_PROJECT,
+      location: value.GOOGLE_CLOUD_LOCATION,
+      model: value.ELSE_MODEL_FAST,
+    }),
+    budget: Object.freeze({
+      ownerDailyLimit: value.ELSE_QUERY_OWNER_DAILY_LIMIT,
+      projectDailyLimit: value.ELSE_QUERY_PROJECT_DAILY_LIMIT,
+    }),
+  }) : null;
+
   return Object.freeze({
     nodeEnv: value.NODE_ENV,
     host: value.HOST,
@@ -222,6 +250,7 @@ export function loadConfig(env = process.env) {
     storageBuckets,
     processing,
     capabilities,
+    elseQuery,
     evidenceLimit: 40,
     maxQuestionLength: 500,
   });
