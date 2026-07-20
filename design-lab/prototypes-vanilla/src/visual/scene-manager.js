@@ -8,7 +8,8 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createFlowController } from './flow-controller.js';
 import { createParticleSystem } from './particle-system.js';
-import { GLOBE_RADIUS, createSemanticTarget, dirFromLatLng, loadLandMask, onLandMaskReady } from './particle-targets.js';
+import { compileParticleScene } from './particle-scene-compiler.js';
+import { GLOBE_RADIUS, dirFromLatLng, loadLandMask, onLandMaskReady } from './particle-targets.js';
 import { detectPerformanceProfile, getPerformanceProfile } from './performance-profile.js';
 
 const DEFAULT_CAMERA_Z = 44;
@@ -251,8 +252,8 @@ export class MemorySceneManager {
   }
 
   target(mode, payload) {
-    const array = createSemanticTarget(mode, this.particles.count, payload);
-    this.particles.setTarget(array);
+    const scene = compileParticleScene(mode, this.particles.count, payload);
+    this.particles.setScene(scene);
   }
 
   /** 页面渲染后用 DOM 锚点重新对齐粒子目标（保持当前 flow 语义，仅补一段短重组）。 */
@@ -407,6 +408,7 @@ export class MemorySceneManager {
 
   debug() {
     const flowDebug = this.flows.debug?.() || { tracked: 0, active: 0 };
+    const sceneMeta = this.particles?.getSceneMeta?.() || {};
     return {
       rendererCount: this.rendererCount,
       particlePoolId: this.particles?.poolId || null,
@@ -417,6 +419,10 @@ export class MemorySceneManager {
       paused: this.paused,
       trackedTimelines: flowDebug.tracked,
       activeTimelines: flowDebug.active,
+      dataSignature: sceneMeta.dataSignature || null,
+      activeParticleCount: sceneMeta.activeCount || 0,
+      anchorCount: sceneMeta.anchorCount || 0,
+      particleState: sceneMeta.state || 'initializing',
     };
   }
 

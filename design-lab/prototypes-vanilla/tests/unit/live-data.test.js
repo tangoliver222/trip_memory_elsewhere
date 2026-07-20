@@ -7,6 +7,7 @@ import {
   world,
 } from '../../src/fixtures/data.js';
 import { createSemanticTarget } from '../../src/visual/particle-targets.js';
+import { compileParticleScene } from '../../src/visual/particle-scene-compiler.js';
 import { renderRoute } from '../../src/pages/render-route.js';
 import { createInitialState } from '../../src/store.js';
 import { hydrateLiveCollections } from '../../src/data/live-hydrator.js';
@@ -336,13 +337,27 @@ test('storage identities remain paths until the Firebase client resolves them', 
   assert.equal(fragments[0].asset, null);
 });
 
-test('particle targets consume the changed live collections', () => {
+test('particle scenes consume explicit facts from the changed live collections', () => {
   hydrateLiveCollections(snapshotWith(['frag_particle_a']));
-  const oneCityTarget = createSemanticTarget('globe', 120);
+  const oneCityScene = compileParticleScene('globe', 120, {
+    itemCount: world.totalFragments,
+    cities: cities.map((city) => ({
+      id: city.id,
+      slug: city.slug,
+      fragmentCount: city.fragmentCount,
+      lat: city.coordinates.lat,
+      lng: city.coordinates.lng,
+    })),
+  });
   hydrateLiveCollections(snapshotWith([]));
-  const emptyTarget = createSemanticTarget('globe', 120);
+  const emptyScene = compileParticleScene('globe', 120, {
+    itemCount: world.totalFragments,
+    cities: [],
+  });
 
-  assert.notDeepEqual([...oneCityTarget], [...emptyTarget]);
+  assert.notEqual(oneCityScene.dataSignature, emptyScene.dataSignature);
+  assert.ok(oneCityScene.activeCount > emptyScene.activeCount);
+  assert.notDeepEqual([...oneCityScene.positions], [...emptyScene.positions]);
 });
 
 test('empty live data renders a stable city state instead of dereferencing fixture data', () => {

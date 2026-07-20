@@ -5,6 +5,8 @@ export const vertexShader = /* glsl */`
   attribute float aAmplitude;
   attribute float aColorMix;
   attribute float aLayer;
+  attribute float aVisibility;
+  attribute float aTargetVisibility;
   attribute vec3 aTarget;
 
   uniform float uTime;
@@ -23,6 +25,7 @@ export const vertexShader = /* glsl */`
   varying float vColorMix;
   varying float vDepth;
   varying float vLayer;
+  varying float vVisibility;
 
   vec4 permute(vec4 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
   vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
@@ -95,6 +98,7 @@ export const vertexShader = /* glsl */`
     vColorMix = aColorMix;
     vDepth = perspective;
     vLayer = aLayer;
+    vVisibility = mix(aVisibility, aTargetVisibility, eased);
   }
 `;
 
@@ -107,6 +111,7 @@ export const fragmentShader = /* glsl */`
   varying float vColorMix;
   varying float vDepth;
   varying float vLayer;
+  varying float vVisibility;
 
   void main() {
     vec2 centered = gl_PointCoord - vec2(0.5);
@@ -116,6 +121,6 @@ export const fragmentShader = /* glsl */`
     vec3 color = mix(uCoolColor, uWarmColor, clamp(vColorMix, 0.0, 1.0));
     color += core * 0.18; // 微弱高光核
     float emphasis = vLayer == 2.0 ? (1.0 + uFocus * 0.6) : 1.0;
-    gl_FragColor = vec4(color, softAlpha * vAlpha * uOpacity * emphasis * clamp(vDepth, 0.4, 1.3));
+    gl_FragColor = vec4(color, softAlpha * vAlpha * uOpacity * emphasis * clamp(vDepth, 0.4, 1.3) * vVisibility);
   }
 `;

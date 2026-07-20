@@ -28,6 +28,8 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
   const aAmplitude = new Float32Array(count);
   const aColorMix = new Float32Array(count);
   const aLayer = new Float32Array(count);
+  const aVisibility = new Float32Array(count).fill(1);
+  const aTargetVisibility = new Float32Array(count).fill(1);
 
   const mainEnd = Math.floor(count * POOL_MAIN);
   const haloEnd = Math.floor(count * POOL_HALO);
@@ -64,6 +66,8 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
   geometry.setAttribute('aAmplitude', new BufferAttribute(aAmplitude, 1));
   geometry.setAttribute('aColorMix', new BufferAttribute(aColorMix, 1));
   geometry.setAttribute('aLayer', new BufferAttribute(aLayer, 1));
+  geometry.setAttribute('aVisibility', new BufferAttribute(aVisibility, 1));
+  geometry.setAttribute('aTargetVisibility', new BufferAttribute(aTargetVisibility, 1));
 
   const uniforms = {
     uTime: { value: 0 },
@@ -93,23 +97,57 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
   const points = new Points(geometry, material);
   points.frustumCulled = false;
   const poolId = `memory-pool-${particlePoolSequence += 1}`;
+  let sceneMeta = Object.freeze({ activeCount: count, dataSignature: 'deep-scatter', anchorCount: 0, state: 'populated' });
 
-  const setTarget = (target, { resetProgress = true } = {}) => {
-    const targetArray = typeof target === 'string' ? createSemanticTarget(target, count) : target;
+  const setScene = (scene, { resetProgress = true, snap = false } = {}) => {
+    const targetArray = scene?.positions;
+    const targetVisibility = scene?.visibility;
     if (!(targetArray instanceof Float32Array) || targetArray.length !== targets.length) {
       throw new TypeError(`Particle target must contain ${targets.length} float values.`);
+    }
+    if (!(targetVisibility instanceof Float32Array) || targetVisibility.length !== count) {
+      throw new TypeError(`Particle visibility must contain ${count} float values.`);
     }
 
     const positionAttribute = geometry.getAttribute('position');
     const targetAttribute = geometry.getAttribute('aTarget');
+    const visibilityAttribute = geometry.getAttribute('aVisibility');
+    const targetVisibilityAttribute = geometry.getAttribute('aTargetVisibility');
     const progress = uniforms.uProgress.value;
     for (let index = 0; index < targets.length; index += 1) {
-      positions[index] += (targets[index] - positions[index]) * progress;
+      positions[index] = snap ? targetArray[index] : positions[index] + (targets[index] - positions[index]) * progress;
       targets[index] = targetArray[index];
+    }
+    for (let index = 0; index < count; index += 1) {
+      aVisibility[index] = snap
+        ? targetVisibility[index]
+        : aVisibility[index] + (aTargetVisibility[index] - aVisibility[index]) * progress;
+      aTargetVisibility[index] = targetVisibility[index];
     }
     positionAttribute.needsUpdate = true;
     targetAttribute.needsUpdate = true;
-    if (resetProgress) uniforms.uProgress.value = 0;
+    visibilityAttribute.needsUpdate = true;
+    targetVisibilityAttribute.needsUpdate = true;
+    if (snap) uniforms.uProgress.value = 1;
+    else if (resetProgress) uniforms.uProgress.value = 0;
+    sceneMeta = Object.freeze({
+      activeCount: scene.activeCount,
+      dataSignature: scene.dataSignature,
+      anchorCount: scene.anchorCount,
+      state: scene.state,
+    });
+  };
+
+  const setTarget = (target, options) => {
+    const positionsArray = typeof target === 'string' ? createSemanticTarget(target, count) : target;
+    setScene({
+      positions: positionsArray,
+      visibility: new Float32Array(count).fill(1),
+      activeCount: count,
+      dataSignature: typeof target === 'string' ? target : 'legacy-target',
+      anchorCount: 0,
+      state: 'populated',
+    }, options);
   };
 
   return {
@@ -117,7 +155,9 @@ export function createParticleSystem(profile, { reducedMotion = false } = {}) {
     poolId,
     points,
     uniforms,
+    setScene,
     setTarget,
+    getSceneMeta: () => sceneMeta,
     dispose() {
       geometry.dispose();
       material.dispose();

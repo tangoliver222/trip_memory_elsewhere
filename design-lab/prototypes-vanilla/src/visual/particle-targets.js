@@ -19,8 +19,6 @@
  *   [0.82, 0.96) 环境 / 次级
  *   [0.96, 1.0)  强调锚点（更亮更大）
  */
-import { cities, places, scenes, connections } from '../fixtures/data.js';
-
 const TAU = Math.PI * 2;
 export const POOL_MAIN = 0.82;
 export const POOL_HALO = 0.96;
@@ -117,11 +115,13 @@ export function loadLandMask(url = '/assets/earth-topology.png') {
 
 /* ------------------------------------------------------------------ 工具 */
 
-const cityDirections = () => cities.map((city) => ({
-  slug: city.slug,
-  dir: dirFromLatLng(city.coordinates.lat, city.coordinates.lng),
-  weight: city.fragmentCount,
-}));
+const cityDirections = (source = []) => source
+  .filter((city) => Number.isFinite(city.lat ?? city.coordinates?.lat) && Number.isFinite(city.lng ?? city.coordinates?.lng))
+  .map((city) => ({
+    slug: city.slug || city.id,
+    dir: dirFromLatLng(city.lat ?? city.coordinates.lat, city.lng ?? city.coordinates.lng),
+    weight: Math.max(1, Number(city.weight ?? city.fragmentCount) || 1),
+  }));
 
 function gaussian(i, salt) {
   return (seeded(i, salt) + seeded(i, salt + 13) - 1);
@@ -149,12 +149,12 @@ function deepScatter(count) {
   return result;
 }
 
-function globe(count) {
+function globe(count, payload = {}) {
   const result = new Float32Array(count * 3);
   const mainEnd = Math.floor(count * POOL_MAIN);
   const haloEnd = Math.floor(count * POOL_HALO);
   const R = GLOBE_RADIUS;
-  const cityDirs = cityDirections();
+  const cityDirs = cityDirections(payload.cities);
 
   for (let i = 0; i < mainEnd; i += 1) {
     if (landDirs) {
@@ -203,6 +203,11 @@ function globe(count) {
     }
     cursor += share;
   });
+  for (let i = cursor; i < count; i += 1) {
+    const theta = seeded(i, 14) * TAU;
+    const radius = R * (1.08 + seeded(i, 15) * 0.04);
+    write(result, i, Math.cos(theta) * radius, Math.sin(theta) * radius, -R * 0.7);
+  }
   return result;
 }
 
@@ -223,7 +228,8 @@ const DEFAULT_CITY_ANCHORS = [
 ];
 
 function cityCluster(count, payload = {}) {
-  const anchors = (payload.anchors?.length ? payload.anchors : DEFAULT_CITY_ANCHORS)
+  const sourceAnchors = payload.anchors?.length ? payload.anchors : DEFAULT_CITY_ANCHORS;
+  const anchors = (sourceAnchors.length === 1 ? [sourceAnchors[0], sourceAnchors[0]] : sourceAnchors)
     .map((anchor) => ({ z: -2, weight: 1, ...anchor }));
   const result = new Float32Array(count * 3);
   const mainEnd = Math.floor(count * POOL_MAIN);
@@ -354,15 +360,16 @@ function multiCityField(count, payload = {}) {
 }
 
 /** 时间视角：垂直时间脊柱 + 日期节点 + 重复时间弧线。 */
-function timeline(count) {
-  const days = [...new Set(scenes.map((scene) => scene.date))].sort();
+function timeline(count, payload = {}) {
+  const days = [...new Set(payload.days || [])].sort();
+  if (days.length === 0) days.push('start', 'middle', 'end');
   const spineX = -4.6;
   const yTop = 7.5;
   const yBottom = -7.5;
   const yFor = (dayIndex) => yTop - (dayIndex / Math.max(1, days.length - 1)) * (yTop - yBottom);
-  const repeated = scenes
-    .filter((scene) => scene.placeId === 'place-common-grounds')
-    .map((scene) => days.indexOf(scene.date));
+  const repeated = payload.repeatedDayIndexes?.length
+    ? payload.repeatedDayIndexes
+    : [0, Math.max(0, days.length - 1)];
 
   const result = new Float32Array(count * 3);
   const mainEnd = Math.floor(count * POOL_MAIN);
@@ -401,17 +408,25 @@ function timeline(count) {
 }
 
 /** 地点视角：真实相对坐标的地点密度图。 */
-function placeMap(count) {
+function placeMap(count, payload = {}) {
   const kx = 90;
   const ky = 110;
-  const anchors = places
-    .filter((place) => place.coordinates)
+  const source = payload.places || [];
+  const originLng = source.find((place) => Number.isFinite(place.lng ?? place.coordinates?.lng))?.lng
+    ?? source.find((place) => Number.isFinite(place.coordinates?.lng))?.coordinates.lng
+    ?? 100.52;
+  const originLat = source.find((place) => Number.isFinite(place.lat ?? place.coordinates?.lat))?.lat
+    ?? source.find((place) => Number.isFinite(place.coordinates?.lat))?.coordinates.lat
+    ?? 13.752;
+  const anchors = source
+    .filter((place) => Number.isFinite(place.lng ?? place.coordinates?.lng) && Number.isFinite(place.lat ?? place.coordinates?.lat))
     .map((place) => ({
-      x: (place.coordinates.lng - 100.52) * kx,
-      y: (place.coordinates.lat - 13.752) * ky,
-      weight: place.visitCount || 1,
+      x: ((place.lng ?? place.coordinates.lng) - originLng) * kx,
+      y: ((place.lat ?? place.coordinates.lat) - originLat) * ky,
+      weight: place.weight || place.visitCount || 1,
       status: place.status,
     }));
+  if (anchors.length === 0) anchors.push({ x: 0, y: 0, weight: 1, status: 'unresolved' });
   const result = new Float32Array(count * 3);
   const mainEnd = Math.floor(count * POOL_MAIN);
   const haloEnd = Math.floor(count * POOL_HALO);
@@ -457,7 +472,10 @@ function connectionField(count, payload = {}) {
       { x: -4.6, y: 4.6, z: -4 }, { x: 3.8, y: 5.8, z: -8 }, { x: -1.2, y: 0, z: -2 },
       { x: -5.2, y: -4.6, z: -7 }, { x: 4.4, y: -4.2, z: -4 },
     ];
-  const edges = connections.map((connection, index) => ({
+  const sourceRelations = payload.relations?.length
+    ? payload.relations
+    : nodes.map((_, index) => ({ status: index % 2 ? 'suggested' : 'unresolved' }));
+  const edges = sourceRelations.map((connection, index) => ({
     from: nodes[index % nodes.length],
     to: nodes[(index + 2) % nodes.length],
     status: connection.status,
@@ -655,14 +673,14 @@ function quiet(count) {
 
 export function createSemanticTarget(mode, count, payload = {}) {
   if (mode === 'deep-scatter') return deepScatter(count);
-  if (mode === 'globe' || mode === 'world' || mode === 'world-intro') return globe(count);
+  if (mode === 'globe' || mode === 'world' || mode === 'world-intro') return globe(count, payload);
   if (mode === 'city-burst') return cityBurst(count);
   if (mode === 'city' || mode === 'city-field' || mode === 'cityCluster') return cityCluster(count, payload);
   if (mode === 'capsule' || mode === 'capsuleDust') return capsuleDust(count);
   if (mode === 'fragment-field' || mode === 'field' || mode === 'multiCityField') return multiCityField(count, payload);
   if (mode === 'discovery') return discovery(count, payload);
-  if (mode === 'timeline') return timeline(count);
-  if (mode === 'map' || mode === 'placeMap') return placeMap(count);
+  if (mode === 'timeline') return timeline(count, payload);
+  if (mode === 'map' || mode === 'placeMap') return placeMap(count, payload);
   if (mode === 'relations' || mode === 'connection') return connectionField(count, payload);
   if (mode === 'inbox' || mode === 'inboxDecision') return inboxDecision(count, payload);
   if (mode === 'import' || mode === 'importBatch') return importBatch(count, payload);
