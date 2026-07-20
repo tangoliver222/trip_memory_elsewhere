@@ -77,7 +77,7 @@ const averageX = (positions) => {
   return sum / (positions.length / 3);
 };
 
-for (const mode of ['multiCityField', 'timeline', 'placeMap']) {
+for (const mode of ['multiCityField', 'timeline', 'placeMap', 'else']) {
   test(`${mode} geometry follows rendered DOM anchors`, () => {
     const left = compileParticleScene(mode, 300, {
       itemCount: 2,
