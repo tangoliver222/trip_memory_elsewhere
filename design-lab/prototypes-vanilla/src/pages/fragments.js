@@ -5,6 +5,7 @@ import { escapeHtml, renderMedia } from '../components/primitives.js';
 const primary = (label, route) => `<button class="primary-action" type="button" data-primary-action data-action="navigate" data-route="${route}">${label}</button>`;
 
 const typeLabel = { photo: '照片', receipt: '小票', ticket: '票根', menu: '菜单', screenshot: '截图' };
+const typeCountLabel = { photo: '张照片', receipt: '张小票', ticket: '张票根', menu: '张菜单', screenshot: '张截图', text: '段文字' };
 const processingStatusLabel = {
   pending: '等待', completed: '完成', skipped: '跳过', unresolved: '待确认', failed: '失败',
 };
@@ -126,19 +127,33 @@ export function renderImportPage(state = {}) {
     };
   }
   const batch = importBatches[0];
+  if (!batch) {
+    return {
+      sceneMode: 'import', scenePayload: { target: 'quiet', itemCount: 0 }, afterRender: null,
+      html: `<main class="page import-page" data-page-id="world-import">
+        <header><p class="eyebrow">导入一批混合媒介</p><h1>还没有选择原件</h1><p>照片、截图和票据可以从同一个入口加入；选择后才会显示真实数量与类型。</p></header>
+        <section class="drop-field"><div class="drop-field__orbit" aria-hidden="true"><i></i><i></i><i></i></div><strong>选择照片、文件或文件夹</strong><span>当前批次为空</span><small>原件会先保存，再进行确定性整理</small></section>
+        ${primary('开始选择', '#/world/import')}
+      </main>`,
+    };
+  }
+  const typeSummary = Object.entries(batch.types || {})
+    .filter(([, count]) => count > 0)
+    .map(([type, count]) => `${count} ${typeCountLabel[type] || type}`)
+    .join(' · ');
   return {
     sceneMode: 'import', scenePayload: { target: 'quiet', itemCount: batch.itemCount }, afterRender: null,
     html: `<main class="page import-page" data-page-id="world-import">
       <header><p class="eyebrow">导入一批混合媒介</p><h1>把原件放进同一个入口</h1><p>不需要先把照片、小票和截图分开。整理结束后，原件、待判断项和异常会分别回到它们该在的位置。</p></header>
-      <section class="drop-field"><div class="drop-field__orbit" aria-hidden="true"><i></i><i></i><i></i></div><strong>选择照片、文件或文件夹</strong><span>当前批次：18 张照片 · 5 张截图 · 3 张小票 · 2 张票根</span><small>共 28 个原件</small></section>
+      <section class="drop-field"><div class="drop-field__orbit" aria-hidden="true"><i></i><i></i><i></i></div><strong>选择照片、文件或文件夹</strong><span>当前批次：${escapeHtml(typeSummary || `${batch.itemCount} 个原件`)}</span><small>共 ${batch.itemCount} 个原件</small></section>
       <section class="import-boundary"><h2>整理时会发生什么</h2><ol><li><span>01</span>先保存原件和来源</li><li><span>02</span>再读取时间、地点与票据文字</li><li><span>03</span>不确定项留给你判断</li></ol></section>
-      ${primary('开始整理这 28 个原件', '#/world/inbox/receipt/batch-bangkok-backfill')}
+      ${primary(`开始整理这 ${batch.itemCount} 个原件`, `#/world/inbox/receipt/${batch.id}`)}
     </main>`,
   };
 }
 
 export function renderReceiptPage(batchId) {
-  const batch = importBatches.find((item) => item.id === batchId) || importBatches[0];
+  const batch = importBatches.find((item) => item.id === batchId);
   if (!batch) {
     return {
       sceneMode: 'import',
@@ -147,6 +162,7 @@ export function renderReceiptPage(batchId) {
       html: `<main class="page receipt-page" data-page-id="world-receipt"><header><p class="eyebrow">整理回执</p><h1>这批原件仍在处理中</h1><p>回执会在服务器保存首个真实原件后出现。</p></header>${primary('返回导入', '#/world/import')}</main>`,
     };
   }
+  const city = cities.find((item) => item.journeyId === batch.journeyCandidate) || null;
   return {
     sceneMode: 'import',
     scenePayload: {
@@ -167,28 +183,51 @@ export function renderReceiptPage(batchId) {
       </section>
       <p class="receipt-truth">${batch.result.failed === 0 ? '没有终态失败项。' : `${batch.result.failed} 个原件处理失败。`} 待判断内容不会被当作已确认事实。</p>
       ${renderProcessingTrace(batch.processingTrace)}
-      ${primary('进入 Bangkok 看变化', '#/world/city/bangkok')}
+      ${primary(city ? `进入 ${city.localizedName || city.name} 看变化` : '回到世界首页', city ? `#/world/city/${city.slug}` : '#/world')}
     </main>`,
   };
 }
 
 export function renderInboxPage(state = {}) {
   const review = reviewQueue[0];
+  if (!review) {
+    return {
+      sceneMode: 'quiet-tool',
+      scenePayload: { target: 'inboxDecision', itemCount: 0, items: [] },
+      afterRender: null,
+      html: `<main class="page inbox-page inbox-page--empty" data-page-id="world-inbox"><header class="inbox-header"><p class="eyebrow">收件箱</p><h1>现在没有待判断项</h1><p>无法确认的地点或关系会保留在这里；Elsewhere 不会用猜测补齐事实。</p></header>${primary('回到全部碎片', '#/world/fragments')}</main>`,
+    };
+  }
   const decision = state.reviewDecisions?.[review.id];
+  const reviewFragments = review.fragmentIds
+    .map((id) => fragments.find((fragment) => fragment.id === id))
+    .filter(Boolean)
+    .slice(0, 2);
+  const items = reviewFragments.map((fragment, index) => ({
+    id: fragment.id,
+    role: 'evidence',
+    status: index === 0 ? 'unresolved' : fragment.status,
+  }));
+  const renderSource = (fragment, index) => `<div class="review-source ${index === 0 ? 'review-source--pending' : ''}" data-particle-anchor data-particle-id="${escapeHtml(fragment.id)}" data-particle-role="evidence" data-particle-weight="1">
+    ${renderMedia(fragment, { className: 'review-source__media' })}
+    <span>${escapeHtml(fragment.capturedAt?.slice(0, 16).replace('T', ' · ') || '时间待确认')}</span>
+    <strong>${escapeHtml(typeLabel[fragment.type] || '原件')}</strong>
+    <small>${escapeHtml(fragment.placeCandidate || (index === 0 ? '地点待确认' : '来源已保存'))}</small>
+  </div>`;
   return {
     sceneMode: 'quiet-tool',
     scenePayload: {
       target: 'inboxDecision',
-      itemCount: 2,
-      items: [{ id: 'review-pending', role: 'evidence', status: 'unresolved' }, { id: 'review-reference', role: 'evidence', status: 'confirmed' }],
+      itemCount: items.length,
+      items,
     },
     afterRender: null,
     html: `<main class="page inbox-page" data-page-id="world-inbox">
-      <header class="inbox-header"><p class="eyebrow">收件箱 · 一次只做一个判断</p><h1>这张交通截图<br>是否也靠近<br>Chao Phraya Ferry？</h1><p>截图文字包含 ferry，但缺少可确认的具体码头。你的选择会改变地点连接，不会修改原件。</p></header>
-      <section class="review-comparison"><div class="review-source review-source--pending" data-particle-anchor data-particle-id="review-pending" data-particle-role="evidence" data-particle-weight="1"><span>22 OCT · 18:04</span><strong>交通截图</strong><small>具体码头待确认</small></div><div class="review-link" aria-hidden="true"><i></i><span class="review-link__question">?</span><i></i></div><div class="review-source" data-particle-anchor data-particle-id="review-reference" data-particle-role="evidence" data-particle-weight="1"><img src="/assets/bangkok-photo-02-riverside.jpg" alt="已确认的河岸原件"><span>18 OCT · 17:59</span><strong>Chao Phraya Ferry</strong></div></section>
+      <header class="inbox-header"><p class="eyebrow">收件箱 · 一次只做一个判断</p><h1>${escapeHtml(review.prompt)}</h1><p>你的选择会改变派生关系，不会修改或删除原件。</p></header>
+      ${reviewFragments.length ? `<section class="review-comparison">${renderSource(reviewFragments[0], 0)}${reviewFragments.length > 1 ? `<div class="review-link" aria-hidden="true"><i></i><span class="review-link__question">?</span><i></i></div>${renderSource(reviewFragments[1], 1)}` : ''}</section>` : '<p class="tool-caveat">关联原件暂时不可用，这个判断不会被自动确认。</p>'}
       <div class="review-choices">${review.choices.map((choice, index) => `<button type="button" data-review-choice data-action="review-choice" data-review-id="${review.id}" data-value="${index}"${String(index) === decision ? ' class="is-selected"' : ''}>${escapeHtml(choice)}</button>`).join('')}</div>
       ${decision == null ? '' : `<p class="decision-feedback" role="status">已记录“${escapeHtml(review.choices[Number(decision)])}”；原件本身没有改变。</p>`}
-      <section class="inbox-queues"><div class="inbox-queue-item"><span>正在整理</span><strong>${escapeHtml(processingItems[0].label)}</strong></div><div class="inbox-queue-item"><span>需要原件</span><strong>${escapeHtml(exceptions[0].label)}</strong></div></section>
+      ${(processingItems.length || exceptions.length) ? `<section class="inbox-queues">${processingItems[0] ? `<div class="inbox-queue-item"><span>正在整理</span><strong>${escapeHtml(processingItems[0].label)}</strong></div>` : ''}${exceptions[0] ? `<div class="inbox-queue-item"><span>需要原件</span><strong>${escapeHtml(exceptions[0].label)}</strong></div>` : ''}</section>` : ''}
       ${primary('回到全部碎片', '#/world/fragments')}
     </main>`,
   };

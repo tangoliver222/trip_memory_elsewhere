@@ -15,10 +15,22 @@ const primary = (label, route, extra = '') => `<button class="primary-action" ty
 
 const statusLabel = { new: '新显影', supported: '来源支持', unresolved: '仍有缺口' };
 
+const emptyDiscovery = (title = '还没有形成发现', detail = '当多份原件形成可回溯的时间、地点或重复关系后，发现会在这里显影。') => ({
+  sceneMode: 'discovery',
+  scenePayload: { target: 'discovery', itemCount: 0, items: [], relations: [] },
+  afterRender: null,
+  html: `<main class="page discover-home discover-home--empty" data-page-id="discover-home"><header class="discover-header"><div><p class="eyebrow">发现</p><h1>${escapeHtml(title)}</h1><p>${escapeHtml(detail)}</p></div></header>${primary('回到世界', '#/world')}</main>`,
+});
+
 export function renderDiscoverHome(state) {
   const requested = state.discoveryFilter;
-  const activeIndex = requested === 'saved' ? 1 : requested === 'unresolved' ? 2 : 0;
-  const discovery = discoveries[activeIndex] || discoveries[0];
+  const visible = requested === 'saved'
+    ? discoveries.filter((item) => item.saved || state.savedDiscoveryIds?.includes(item.id))
+    : requested === 'unresolved'
+      ? discoveries.filter(({ status }) => status === 'unresolved')
+      : discoveries;
+  const discovery = visible[0];
+  if (!discovery) return emptyDiscovery(requested === 'all' ? undefined : '这个筛选下还没有发现');
   const context = getDiscoveryContext(discovery.id);
   const composition = getDiscoveryComposition(discovery.type);
   return {
@@ -42,7 +54,7 @@ export function renderDiscoverHome(state) {
         </div>
         <div class="featured-copy"><span>${statusLabel[discovery.status]} · ${escapeHtml(discovery.timeRange)}</span><h2>${escapeHtml(discovery.title)}</h2><p>${escapeHtml(discovery.observation)}</p><button type="button" data-primary-action data-action="navigate" data-route="#/discover/${discovery.id}">打开这次显影 →</button></div>
       </article>
-      <div class="discovery-pager" aria-label="发现位置">${discoveries.map((item, index) => `<button type="button" data-action="navigate" data-route="#/discover/${item.id}" class="${index === activeIndex ? 'is-active' : ''}" aria-label="${escapeHtml(item.title)}"></button>`).join('')}</div>
+      <div class="discovery-pager" aria-label="发现位置">${visible.map((item, index) => `<button type="button" data-action="navigate" data-route="#/discover/${item.id}" class="${index === 0 ? 'is-active' : ''}" aria-label="${escapeHtml(item.title)}"></button>`).join('')}</div>
     </main>`,
   };
 }
@@ -63,7 +75,8 @@ const dateLabel = (date) => {
 };
 
 export function renderDiscoveryDetail(discoveryId, state) {
-  const context = getDiscoveryContext(discoveryId) || getDiscoveryContext(discoveries[0].id);
+  const context = getDiscoveryContext(discoveryId);
+  if (!context) return emptyDiscovery('这条发现不存在', '当前数据中没有可核对的发现来源。');
   const { discovery, fragments, connections, entity, userNotes } = context;
   const composition = getDiscoveryComposition(discovery.type);
   const groups = groupByDate(fragments);

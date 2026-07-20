@@ -10,6 +10,7 @@ import {
   processingItems,
   reviewQueue,
   scenes,
+  userNotes,
   world,
 } from '../fixtures/data.js';
 import { rebuildFixtureIndexes } from '../fixtures/indexes.js';
@@ -209,6 +210,9 @@ export function hydrateLiveCollections(snapshot) {
   replace(scenes, liveScenes);
   replace(connections, liveConnections);
   replace(discoveries, liveDiscoveries);
+  replace(userNotes, Array.isArray(snapshot.userNotes)
+    ? snapshot.userNotes.map((note) => ({ ...note, related: [...(note.related || [])] }))
+    : []);
   replace(importBatches, liveBatches);
   replace(reviewQueue, liveReviews);
   replace(processingItems, liveFragments.flatMap((fragment) => {
