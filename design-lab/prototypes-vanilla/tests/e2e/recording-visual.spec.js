@@ -80,7 +80,7 @@ async function assertRecordingComposition(page, pageId) {
 
   if (pageId === 'world-fragments') {
     const { duplicateCaptions, misplacedClusterLabels } = await page.evaluate(() => ({
-      duplicateCaptions: [...document.querySelectorAll('.field-node:not(.field-node--photo) .field-node__label')]
+      duplicateCaptions: [...document.querySelectorAll('.field-node:not(.field-node--photo) .field-node__label, .field-node:not(.field-node--photo) .field-node__type, .field-node:not(.field-node--photo) .field-node__provenance')]
         .filter((label) => getComputedStyle(label).display !== 'none').length,
       misplacedClusterLabels: [...document.querySelectorAll('.field-cluster-label')]
         .filter((label) => label.getBoundingClientRect().top < 12).length,
@@ -91,12 +91,25 @@ async function assertRecordingComposition(page, pageId) {
   }
 
   if (pageId === 'discover-home') {
-    const gap = await page.evaluate(() => {
+    const { gap, duplicateArtifactCaptions } = await page.evaluate(() => {
       const sources = [...document.querySelectorAll('.feature-source')].map((source) => source.getBoundingClientRect());
       const copy = document.querySelector('.featured-copy').getBoundingClientRect();
-      return copy.top - Math.max(...sources.map((source) => source.bottom));
+      return {
+        gap: copy.top - Math.max(...sources.map((source) => source.bottom)),
+        duplicateArtifactCaptions: [...document.querySelectorAll('.feature-source:has(.artifact) > span')]
+          .filter((caption) => getComputedStyle(caption).display !== 'none').length,
+      };
     });
     expect(gap).toBeGreaterThanOrEqual(16);
+    expect(duplicateArtifactCaptions).toBe(0);
+    return;
+  }
+
+  if (pageId === 'discover-detail') {
+    const duplicateArtifactCaptions = await page.locator('.discovery-time-node button:has(.artifact) > span').evaluateAll((captions) => (
+      captions.filter((caption) => getComputedStyle(caption).display !== 'none').length
+    ));
+    expect(duplicateArtifactCaptions).toBe(0);
   }
 }
 
@@ -153,6 +166,7 @@ test('recording fixture remains readable, bounded and visually stable', async ({
     expect(await page.locator('[data-discovery-evidence] [data-fragment-id]').count()).toBeGreaterThanOrEqual(3);
     await expect(page.locator('.discovery-title-reveal')).toBeVisible();
     await expect(page.locator('.discovery-title-reveal')).toBeInViewport();
+    await assertRecordingComposition(page, 'discover-detail');
     const titleEvidenceGap = await page.evaluate(() => {
       const title = document.querySelector('.discovery-title-reveal').getBoundingClientRect();
       const firstEvidence = document.querySelector('.discovery-time-node').getBoundingClientRect();

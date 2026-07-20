@@ -13,8 +13,8 @@ test('capture every routed surface at the shared reference bar', async ({ page }
     await page.goto(route.path);
     await expect(page.locator(`[data-page-id="${route.pageId}"]`)).toBeVisible();
     await expect(page.locator('#overlay-root > *')).toHaveCount(0);
-    const intensity = await page.locator('.app-viewport').getAttribute('data-intensity');
-    await page.waitForTimeout(intensity === 'S' ? 3200 : intensity === 'A' ? 1500 : 700);
+    await page.waitForFunction(() => window.__ELSEWHERE_VISUAL_READY__ === true, null, { timeout: 20_000 });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const prefix = `${String(index + 1).padStart(2, '0')}-${route.name}`;
     await page.screenshot({ path: resolve(output, `${prefix}--top.png`) });
 
