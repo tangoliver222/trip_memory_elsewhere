@@ -32,10 +32,11 @@ for (const route of particleRoutes) {
   });
 }
 
-test('city route exposes every current fragment to the scene compiler', () => {
+test('city route anchors every visible representative while total count drives particle density', () => {
   const route = '#/world/city/bangkok';
   const view = renderRoute(route, createInitialState({ route }));
-  assert.ok(view.scenePayload.items.length <= view.scenePayload.itemCount);
+  assert.equal(view.scenePayload.items.length, 9);
+  assert.equal(view.scenePayload.itemCount, 63);
   assert.ok(view.scenePayload.items.every(({ id }) => view.html.includes(`data-particle-id="${id}"`)));
 });
 

@@ -46,7 +46,7 @@ function inferredItemCount(payload) {
 }
 
 function activeCountFor(poolSize, itemCount, state) {
-  if (state === 'initializing') return Math.max(1, Math.floor(poolSize * 0.08));
+  if (state === 'initializing') return Math.max(1, Math.min(96, Math.floor(poolSize * 0.08)));
   if (itemCount == null) return poolSize;
   const base = poolSize * 0.2;
   const saturation = Math.sqrt(Math.min(DATA_DENSITY_LIMIT, itemCount) / DATA_DENSITY_LIMIT);

@@ -17,6 +17,9 @@ test('empty data compiles a sparse initializing seed without semantic anchors', 
   assert.equal(scene.positions.length, 900);
   assert.equal(scene.visibility.length, 300);
   assert.equal(scene.visibility.reduce((sum, value) => sum + Number(value > 0), 0), scene.activeCount);
+
+  const productionPool = compileParticleScene('cityCluster', 10_000, { itemCount: 0, anchors: [] });
+  assert.ok(productionPool.activeCount <= 96);
 });
 
 test('visible particle density increases monotonically with current item count', () => {

@@ -50,7 +50,7 @@ test('city world exposes Capsule and Explore before supporting details', () => {
   const html = renderRoute('#/world/city/bangkok', state).html;
   assert.ok(html.indexOf('City Capsule') < html.indexOf('63 个碎片'));
   assert.ok(html.indexOf('三个视角探索') < html.indexOf('63 个碎片'));
-  assert.match(html, /照片、小票、菜单与地图/);
+  assert.match(html, /照片、小票、票根、菜单、截图正在按 3 个实际地点或事件靠近/);
 });
 
 test('World Home uses one WebGL globe and no independent topology globe layer', async () => {

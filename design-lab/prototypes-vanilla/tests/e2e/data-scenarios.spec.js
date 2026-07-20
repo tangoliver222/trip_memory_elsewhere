@@ -68,3 +68,69 @@ test('World Home stays inside both mobile viewports', async ({ page }) => {
   expect(layout.layerOverflow).toBe(0);
   expect(layout.elseCount).toBe(1);
 });
+
+test('City Home and Capsule derive visible anchors and density from each dataset', async ({ page }, testInfo) => {
+  await page.goto('/?__scenario=empty#/world/city/bangkok');
+  await waitForStable(page);
+  const empty = await page.evaluate(() => ({
+    title: document.querySelector('[data-page-id="world-city-home"]')?.textContent,
+    anchors: document.querySelectorAll('[data-particle-anchor]').length,
+    scene: window.__ELSEWHERE_DEBUG__.snapshot(),
+  }));
+  expect(empty.title).toContain('还没有形成城市记忆群');
+  expect(empty.anchors).toBe(0);
+  expect(empty.scene.activeParticleCount).toBeLessThan(200);
+
+  await page.goto('/?__scenario=small#/world/city/bangkok');
+  await waitForStable(page);
+  await page.screenshot({ path: testInfo.outputPath('city-small.png'), fullPage: true });
+  const small = await page.evaluate(() => ({
+    text: document.querySelector('[data-page-id="world-city-home"]')?.textContent,
+    anchors: document.querySelectorAll('.city-tile[data-particle-anchor]').length,
+    scene: window.__ELSEWHERE_DEBUG__.snapshot(),
+  }));
+  expect(small.text).toContain('3 个碎片');
+  expect(small.anchors).toBe(3);
+
+  await page.goto('/?__scenario=dense#/world/city/bangkok');
+  await waitForStable(page);
+  await page.screenshot({ path: testInfo.outputPath('city-dense.png'), fullPage: true });
+  const dense = await page.evaluate(() => ({
+    text: document.querySelector('[data-page-id="world-city-home"]')?.textContent,
+    anchors: document.querySelectorAll('.city-tile[data-particle-anchor]').length,
+    scene: window.__ELSEWHERE_DEBUG__.snapshot(),
+  }));
+  expect(dense.text).toContain('18 个碎片');
+  expect(dense.anchors).toBe(12);
+  expect(dense.scene.dataSignature).not.toBe(small.scene.dataSignature);
+  expect(dense.scene.activeParticleCount).toBeGreaterThan(small.scene.activeParticleCount);
+
+  await page.goto('/?__scenario=small#/world/city/bangkok/capsule');
+  await waitForStable(page);
+  const capsuleSmall = await page.evaluate(() => ({
+    originals: document.querySelectorAll('.capsule-spread [data-particle-anchor]').length,
+    scene: window.__ELSEWHERE_DEBUG__.snapshot(),
+  }));
+  expect(capsuleSmall.originals).toBe(3);
+
+  await page.goto('/?__scenario=dense#/world/city/bangkok/capsule');
+  await waitForStable(page);
+  const capsuleDense = await page.evaluate(() => ({
+    originals: document.querySelectorAll('.capsule-spread [data-particle-anchor]').length,
+    scene: window.__ELSEWHERE_DEBUG__.snapshot(),
+  }));
+  expect(capsuleDense.originals).toBe(12);
+  expect(capsuleDense.scene.dataSignature).not.toBe(capsuleSmall.scene.dataSignature);
+});
+
+test('a city without evidence never renders another city data', async ({ page }) => {
+  await page.goto('/#/world/city/tokyo/explore?view=time');
+  await waitForStable(page);
+  const result = await page.evaluate(() => ({
+    text: document.querySelector('[data-page-id="world-explore"]')?.textContent,
+    anchors: document.querySelectorAll('[data-particle-anchor]').length,
+  }));
+  expect(result.text).toContain('Tokyo 还没有可探索的时间结构');
+  expect(result.text).not.toContain('河岸候船');
+  expect(result.anchors).toBe(0);
+});

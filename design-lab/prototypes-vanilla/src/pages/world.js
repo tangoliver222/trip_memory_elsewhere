@@ -1,11 +1,10 @@
-import { cities, reviewQueue, world } from '../fixtures/data.js';
-import { getCityByRouteId, getCityFragments } from '../selectors.js';
 import { getMemoryView } from '../data/view-model.js';
 import { escapeHtml } from '../components/primitives.js';
 import { renderMedia } from '../components/primitives.js';
 import { gsap } from 'gsap';
 
 const reducedMotionQuery = () => (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+const mediaTypeLabel = Object.freeze({ photo: '照片', receipt: '小票', ticket: '票根', menu: '菜单', screenshot: '截图', text: '文字' });
 
 function renderCityPins(cityItems) {
   return cityItems.filter(({ coordinates }) => coordinates).map((city) => `<button class="world-city-pin" type="button" data-city-pin="${city.slug}" data-action="navigate" data-route="#/world/city/${city.slug}">
@@ -80,6 +79,7 @@ export function renderWorldHome() {
   if (!recommended) return renderUnplacedWorld(memory);
   const recommendedContext = recommended ? memory.city(recommended.slug) : null;
   const counts = memory.world.counts;
+  const pendingCount = memory.world.statusItems.find(({ key }) => key === 'review')?.count || 0;
   const locatedCities = memory.world.cities.filter(({ coordinates }) => coordinates);
   const happening = memory.world.statusItems.map(({ count, label }) => `${count} ${label}`).join(' · ');
   return {
@@ -99,7 +99,7 @@ export function renderWorldHome() {
         <div class="world-brand__actions">
           <button type="button" data-action="navigate" data-route="#/world/inbox" aria-label="打开碎片收件箱">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v13H4zM4 14h4l1.7 2h4.6l1.7-2h4"/></svg>
-            ${reviewQueue.length ? `<span>${reviewQueue.length}</span>` : ''}
+            ${pendingCount ? `<span>${pendingCount}</span>` : ''}
           </button>
           <button type="button" data-action="navigate" data-route="#/world/fragments" aria-label="搜索全部碎片">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5"/></svg>
@@ -192,24 +192,37 @@ export function renderWorldHome() {
   };
 }
 
-export function renderWorldCities() {
+export function renderWorldCities(_state = {}, selectedYear = 'all') {
+  const memory = getMemoryView();
+  const years = [...new Set(memory.world.cities.map(({ period }) => String(period || '').match(/\d{4}/)?.[0]).filter(Boolean))].sort().reverse();
+  const visibleCities = selectedYear === 'all'
+    ? memory.world.cities
+    : memory.world.cities.filter(({ period }) => String(period || '').includes(selectedYear));
+  if (!memory.world.cities.length) {
+    return {
+      sceneMode: 'world',
+      scenePayload: { target: 'initializing', itemCount: 0, items: [], cities: [] },
+      afterRender: null,
+      html: `<main class="page cities-page cities-page--empty" data-page-id="world-cities"><header class="compact-header"><div><p class="eyebrow">城市索引</p><h1>还没有形成城市</h1></div></header><p>带有地点来源的碎片进入后，城市会出现在这里。</p><button class="primary-action primary-action--filled" type="button" data-primary-action data-action="navigate" data-route="#/world/import">放入第一批碎片</button></main>`,
+    };
+  }
   return {
     sceneMode: 'world',
     scenePayload: {
       target: 'globe',
       indexMode: true,
-      itemCount: world.totalFragments,
-      items: cities.map((city) => ({ id: city.id, role: 'city', clusterId: city.id, status: city.status?.[0] })),
-      cities: cities.map((city) => ({ ...city, lat: city.coordinates.lat, lng: city.coordinates.lng })),
+      itemCount: memory.world.counts.fragments,
+      items: visibleCities.map((city) => ({ id: city.id, role: 'city', clusterId: city.id, status: city.status?.[0] })),
+      cities: visibleCities.filter(({ coordinates }) => coordinates).map((city) => ({ ...city, lat: city.coordinates.lat, lng: city.coordinates.lng })),
     },
     html: `<main class="page cities-page" data-page-id="world-cities">
       <header class="compact-header">
         <div><p class="eyebrow">仍在同一个世界</p><h1>旅行城市</h1></div>
         <button class="text-action" type="button" data-action="navigate" data-route="#/world">返回地球</button>
       </header>
-      <div class="year-rail" role="tablist" aria-label="年份"><button class="is-active" type="button">全部</button><button type="button">2024</button><button type="button">2023</button></div>
+      <div class="year-rail" role="tablist" aria-label="年份"><button class="${selectedYear === 'all' ? 'is-active' : ''}" type="button" data-action="navigate" data-route="#/world/cities">全部</button>${years.map((year) => `<button class="${selectedYear === year ? 'is-active' : ''}" type="button" data-action="navigate" data-route="#/world/cities?year=${year}">${year}</button>`).join('')}</div>
       <section class="city-index">
-        ${cities.map((city, index) => `<article class="city-index__item" style="--city-order:${index}" data-particle-anchor data-particle-id="${city.id}" data-particle-role="city" data-particle-weight="${Math.max(1, city.fragmentCount)}">
+        ${visibleCities.map((city, index) => `<article class="city-index__item" style="--city-order:${index}" data-particle-anchor data-particle-id="${city.id}" data-particle-role="city" data-particle-weight="${Math.max(1, city.fragmentCount)}">
           <div class="city-index__media">
             ${city.representativeAsset
     ? `<img src="${city.representativeAsset}" alt="${escapeHtml(city.localizedName)} 代表原件">`
@@ -222,7 +235,7 @@ export function renderWorldCities() {
           </div>
         </article>`).join('')}
       </section>
-      <button class="primary-action" type="button" data-primary-action data-action="navigate" data-route="#/world/city/bangkok">进入当前旅程 · Bangkok</button>
+      ${visibleCities.length ? `<button class="primary-action" type="button" data-primary-action data-action="navigate" data-route="#/world/city/${visibleCities[0].slug}">进入当前旅程 · ${escapeHtml(visibleCities[0].name)}</button>` : `<button class="primary-action" type="button" data-primary-action data-action="navigate" data-route="#/world/cities">查看全部年份</button>`}
     </main>`,
     afterRender: null,
   };
@@ -247,51 +260,22 @@ function renderEmptyCityHome() {
 
 /** 城市世界：三个记忆聚类（混合媒介）+ 两个主方向。 */
 export function renderCityHome(routeId = 'bangkok', state = {}) {
-  const city = getCityByRouteId(routeId) || cities[0];
-  if (!city) return renderEmptyCityHome();
-  const isLive = state.runtime?.mode === 'live';
-  const isBangkok = city.slug === 'bangkok';
-  const cityFragments = getCityFragments(routeId);
-  const byId = (id) => cityFragments.find((fragment) => fragment.id === id);
-  const fixtureClusters = [
-    {
-      key: 'ari',
-      name: 'Ari 早晨',
-      meta: '3 次到访 · 12–19 OCT',
-      fragments: [byId('frag-ari-1016-photo'), byId('frag-ari-1016-receipt'), byId('frag-ari-1012-photo')],
-    },
-    {
-      key: 'river',
-      name: '河岸傍晚',
-      meta: '船票与照片相差 17 分钟',
-      fragments: [byId('frag-river-1018-photo'), byId('frag-river-1018-ticket'), byId('frag-river-1022-map')],
-    },
-    {
-      key: 'oldtown',
-      name: 'Old Town',
-      meta: '待确认的步行',
-      fragments: [byId('frag-old-town-1017-photo'), byId('frag-old-town-1017-menu')],
-    },
-  ];
-  const hasFixtureComposition = fixtureClusters.some(({ fragments: members }) => members.some(Boolean));
-  const liveGroups = new Map();
-  for (const fragment of cityFragments) {
-    const key = fragment.placeId || 'unplaced';
-    const group = liveGroups.get(key) || [];
-    group.push(fragment);
-    liveGroups.set(key, group);
-  }
-  const liveClusters = [...liveGroups.entries()].slice(0, 3).map(([key, members], index) => ({
-    key: ['ari', 'river', 'oldtown'][index],
-    name: key === 'unplaced' ? '地点待确认' : members[0].placeCandidate,
-    meta: `${members.length} 个真实碎片`,
-    fragments: members.slice(0, 3),
+  const context = getMemoryView().city(routeId);
+  if (!context) return renderEmptyCityHome();
+  const { city } = context;
+  const slots = ['ari', 'river', 'oldtown'];
+  const clusters = context.clusters.slice(0, 3).map((cluster, index) => ({
+    ...cluster,
+    key: slots[index],
+    name: cluster.label,
+    meta: cluster.detail,
+    fragments: cluster.fragments.slice(0, 4),
   }));
-  const clusters = isLive
-    ? liveClusters
-    : (isBangkok && hasFixtureComposition ? fixtureClusters : []);
-
-  const anchoredFragments = clusters.flatMap((cluster) => cluster.fragments.filter(Boolean));
+  const anchoredFragments = clusters.flatMap((cluster) => cluster.fragments);
+  const mediaKinds = [...new Set(context.fragments.map(({ type }) => mediaTypeLabel[type] || '原件'))];
+  const observation = mediaKinds.length
+    ? `${mediaKinds.join('、')}正在按 ${context.clusters.length} 个实际地点或事件靠近。`
+    : city.fact;
   const clusterHtml = clusters.map((cluster, index) => `
     <div class="city-cluster city-cluster--${cluster.key}" data-cluster-anchor style="--cluster-order:${index}">
       <span class="city-cluster__name">${escapeHtml(cluster.name)}<small>${escapeHtml(cluster.meta)}</small></span>
@@ -306,7 +290,7 @@ export function renderCityHome(routeId = 'bangkok', state = {}) {
     scenePayload: {
       target: 'cityCluster',
       cityId: city.id,
-      itemCount: cityFragments.length,
+      itemCount: city.fragmentCount ?? context.fragments.length,
       items: anchoredFragments.map((fragment) => ({ id: fragment.id, role: 'fragment', clusterId: fragment.placeId || 'unplaced', status: fragment.status })),
       pointSize: 1.5,
       opacity: 0.92,
@@ -322,16 +306,16 @@ export function renderCityHome(routeId = 'bangkok', state = {}) {
         </div>
       </header>
 
-      ${clusters.length ? `<section class="city-cluster-space" aria-label="城市碎片场">${clusterHtml}</section>
+      ${clusters.length ? `<section class="city-cluster-space city-cluster-space--count-${clusters.length}" aria-label="城市碎片场">${clusterHtml}</section>
       <div class="city-observation will-flow">
-        <p>${escapeHtml(isLive ? city.fact : '照片、小票、菜单与地图在同一空间中靠近；三个早晨都从 Ari 开始。')}</p>
+        <p>${escapeHtml(observation)}</p>
         <strong>${city.fragmentCount} 个碎片 · ${city.placeCount} 个地点</strong>
       </div>` : `<section class="city-cluster-space city-cluster-space--empty"><p>${escapeHtml(city.fact)}</p></section>`}
 
       <div class="city-foot will-flow">
-        <button class="primary-action primary-action--filled" type="button" data-primary-action data-action="navigate" data-route="#/world/city/${city.slug}/capsule">${isLive || isBangkok ? '回到这段日子' : '查看城市索引'}</button>
+        <button class="primary-action primary-action--filled" type="button" data-primary-action data-action="navigate" data-route="#/world/city/${city.slug}/capsule">回到这段日子</button>
         <div class="city-foot__aux">
-          <button class="text-action" type="button" data-action="navigate" data-route="#/world/inbox">待确认 ${reviewQueue.length}</button>
+          <button class="text-action" type="button" data-action="navigate" data-route="#/world/inbox">待确认 ${context.reviews.length}</button>
           <button class="text-action" type="button" data-action="navigate" data-route="#/world/fragments">查看该城市全部碎片 →</button>
         </div>
       </div>

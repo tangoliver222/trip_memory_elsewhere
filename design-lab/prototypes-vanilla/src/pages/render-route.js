@@ -18,7 +18,7 @@ export function renderRoute(pathOrRoute, state = {}) {
   const route = typeof pathOrRoute === 'string' ? matchRoute(pathOrRoute) : pathOrRoute;
   if (route.contract.space === 'onboarding') return renderOnboarding(route.pageId, state);
   if (route.pageId === 'world-home') return renderWorldHome(state);
-  if (route.pageId === 'world-cities') return renderWorldCities(state);
+  if (route.pageId === 'world-cities') return renderWorldCities(state, route.query.year || 'all');
   if (route.pageId === 'world-city-home') return renderCityHome(route.params.id, state);
   if (route.pageId === 'world-fragments') return renderFragmentField(state);
   if (route.pageId === 'world-import') return renderImportPage(state);

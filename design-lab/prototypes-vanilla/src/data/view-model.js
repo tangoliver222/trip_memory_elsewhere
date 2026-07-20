@@ -3,6 +3,7 @@ import {
   connections,
   discoveries,
   fragments,
+  journeys,
   places,
   processingItems,
   reviewQueue,
@@ -16,6 +17,7 @@ export function currentMemoryCatalog() {
     world,
     cities,
     fragments,
+    journeys,
     places,
     scenes,
     connections,
@@ -72,6 +74,7 @@ function buildCityContext(routeId, catalog) {
   if (!city) return null;
 
   const cityFragments = catalog.fragments.filter((fragment) => fragment.cityId === city.id);
+  const journey = catalog.journeys?.find(({ id }) => id === city.journeyId) || null;
   const fragmentIds = new Set(cityFragments.map(({ id }) => id));
   const cityScenes = catalog.scenes.filter((scene) => (
     scene.journeyId === city.journeyId
@@ -105,12 +108,14 @@ function buildCityContext(routeId, catalog) {
 
   return {
     city,
+    journey,
     fragments: cityFragments,
     places: cityPlaces,
     scenes: cityScenes,
     connections: cityConnections,
     discoveries: cityDiscoveries,
     notes: catalog.userNotes.filter((note) => note.related?.some((id) => relatedIds.has(id))),
+    reviews: catalog.reviewQueue.filter((review) => review.fragmentIds?.some((id) => fragmentIds.has(id))),
     clusters: buildClusters(cityFragments, catalog),
   };
 }
