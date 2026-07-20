@@ -218,3 +218,40 @@ test('scene manager scroll binding moves the group without replaying a morph', (
   stop();
   manager.dispose();
 });
+
+test('page scroll and field camera transforms compose instead of overwriting each other', () => {
+  const canvas = createCanvas();
+  canvas.clientWidth = 390;
+  canvas.clientHeight = 844;
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 390, height: 844 });
+  const scrollRoot = createEventTarget();
+  let scrollTop = 0;
+  const anchorElement = {
+    dataset: { particleId: 'fragment-a', particleWeight: '1' },
+    getBoundingClientRect: () => ({ left: 80, top: 260 - scrollTop, width: 160, height: 120 }),
+  };
+  const manager = new MemorySceneManager({
+    rendererFactory: createRendererFactory(),
+    profile: 'low',
+    environment: {
+      innerWidth: 390,
+      innerHeight: 844,
+      requestAnimationFrame(callback) { callback(); return 1; },
+      cancelAnimationFrame() {},
+    },
+  });
+  manager.mount(canvas);
+  manager.bindPageSpace({ elements: [anchorElement], scrollRoot, mode: 'field', payload: { itemCount: 1 } });
+
+  scrollTop = 80;
+  scrollRoot.emit('scroll');
+  manager.setSpatialTransform({ pixelX: 30, pixelY: 12, scale: 1.4, source: 'field-camera' });
+
+  assert.deepEqual(manager.debug().spatialTransform, {
+    pixelX: 30,
+    pixelY: -68,
+    scale: 1.4,
+    source: 'composed',
+  });
+  manager.dispose();
+});
