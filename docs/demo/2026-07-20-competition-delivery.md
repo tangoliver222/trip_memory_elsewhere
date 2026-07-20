@@ -81,6 +81,37 @@ ELSEWHERE_PUBLIC_URL=https://elsewhere-memory-tyx-2026.web.app \
 3 passed
 ```
 
+## Data-anchored particle release
+
+The particle layer now compiles its geometry and visible density from the current route data and live DOM anchors.
+It remains one shared WebGL pool, but it no longer behaves as a fixed wallpaper: page scroll, Fragment Field
+pan/zoom, route changes, Fragment Lens extraction and Else expansion all update the same spatial transform or
+rebind the pool to the active semantic sources. An explicit zero-item payload produces a sparse
+`initializing` scene instead of fixture clusters; increasing item counts increases visible density without
+allocating a second renderer.
+
+Fresh verification for this release:
+
+```text
+npm test
+122 passed
+
+npx playwright test tests/e2e/particle-space.spec.js --project=mobile-390
+5 passed
+
+npx playwright test tests/e2e/particle-space.spec.js --project=mobile-430
+5 passed
+
+npx playwright test tests/e2e/performance.spec.js --project=mobile-390
+2 passed
+
+npx playwright test tests/e2e/recording-visual.spec.js --project=mobile-390
+1 passed (internally captures 390x844 and 430x932)
+
+npm run build
+75 modules transformed; build completed
+```
+
 ## Production data-path release
 
 The backend shared image `3a2af7e` is deployed to three isolated Cloud Run composition roots. The
