@@ -417,6 +417,32 @@ test('live World and Fragment Field copy contains no frozen fixture totals', () 
   assert.doesNotMatch(fieldHtml, /172 个碎片|Tokyo · 81|Chiang Mai · 28/);
 });
 
+test('live visits inherit the journey of their own place instead of a fixed Bangkok journey', async () => {
+  const snapshot = snapshotWith(['frag_city_a', 'frag_city_b']);
+  snapshot.cities = [
+    { id: 'city-a', name: 'Osaka', country: 'Japan', fragmentCount: 1, placeCount: 1, sourceIds: ['frag_city_a'] },
+    { id: 'city-b', name: 'Lisbon', country: 'Portugal', fragmentCount: 1, placeCount: 1, sourceIds: ['frag_city_b'] },
+  ];
+  snapshot.fragments[0].cityId = 'city-a';
+  snapshot.fragments[0].placeId = 'place-a';
+  snapshot.fragments[1].cityId = 'city-b';
+  snapshot.fragments[1].placeId = 'place-b';
+  snapshot.places = [
+    { id: 'place-a', name: 'Namba', area: 'Osaka', lat: 34.66, lng: 135.5, cityId: 'city-a', fragmentCount: 1, sourceIds: ['frag_city_a'] },
+    { id: 'place-b', name: 'Alfama', area: 'Lisbon', lat: 38.71, lng: -9.13, cityId: 'city-b', fragmentCount: 1, sourceIds: ['frag_city_b'] },
+  ];
+  snapshot.visits = [
+    { id: 'visit-a', placeId: 'place-a', placeName: 'Namba', startedAt: snapshot.fragments[0].capturedAt, endedAt: snapshot.fragments[0].capturedAt, fragmentCount: 1, sourceIds: ['frag_city_a'] },
+    { id: 'visit-b', placeId: 'place-b', placeName: 'Alfama', startedAt: snapshot.fragments[1].capturedAt, endedAt: snapshot.fragments[1].capturedAt, fragmentCount: 1, sourceIds: ['frag_city_b'] },
+  ];
+  snapshot.world.totalCities = 2;
+
+  hydrateLiveCollections(snapshot);
+
+  const { scenes } = await import('../../src/fixtures/data.js');
+  assert.deepEqual(scenes.map(({ journeyId }) => journeyId), ['journey-city-a', 'journey-city-b']);
+});
+
 test('persisted processing provenance reaches receipt and Fragment Lens without internal ids', () => {
   const snapshot = snapshotWith(['frag_trace_receipt']);
   snapshot.fragments[0].processingTrace = [

@@ -73,19 +73,19 @@ export function hydrateLiveCollections(snapshot) {
   const liveCities = snapshot.cities.map((city) => {
     const cityFragments = liveFragments.filter((fragment) => fragment.cityId === city.id);
     const cityPlaces = snapshot.places.filter((place) => place.cityId === city.id);
-    const lat = cityPlaces.length > 0
+    const lat = Number.isFinite(city.lat) ? city.lat : cityPlaces.length > 0
       ? cityPlaces.reduce((sum, place) => sum + place.lat, 0) / cityPlaces.length
-      : 13.7563;
-    const lng = cityPlaces.length > 0
+      : null;
+    const lng = Number.isFinite(city.lng) ? city.lng : cityPlaces.length > 0
       ? cityPlaces.reduce((sum, place) => sum + place.lng, 0) / cityPlaces.length
-      : 100.5018;
+      : null;
     return {
       id: city.id,
       slug: city.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       journeyId: journeyId(city.id),
       name: city.name,
       localizedName: city.name === 'Bangkok' ? '曼谷' : city.name,
-      coordinates: { lat, lng },
+      coordinates: Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null,
       period: '当前导入',
       placeCount: city.placeCount,
       fragmentCount: city.fragmentCount,
@@ -100,7 +100,7 @@ export function hydrateLiveCollections(snapshot) {
     cityId: city.id,
     label: `${city.name} · 当前导入`,
     range: null,
-    timezone: 'Asia/Bangkok',
+    timezone: city.timezone || null,
     representativeFragmentCount: city.sourceIds.length,
     totalFragmentCount: city.fragmentCount,
   }));
@@ -117,19 +117,24 @@ export function hydrateLiveCollections(snapshot) {
     fact: `${place.fragmentCount} 个原件位于 80 米确定性锚点内。`,
     sourceIds: [...place.sourceIds],
   }));
-  const liveScenes = snapshot.visits.map((visit) => ({
-    id: visit.id,
-    journeyId: journeyId('city-bangkok'),
-    date: dateLabel(visit.startedAt),
-    label: `${visit.placeName} 的一次到访`,
-    timeRange: `${timeLabel(visit.startedAt)}—${timeLabel(visit.endedAt)}`,
-    placeId: visit.placeId,
-    fragmentIds: [...visit.sourceIds],
-    status: 'confirmed',
-    primaryAsset: visit.sourceIds.map((id) => byId.get(id)?.asset).find(Boolean) ?? null,
-    observation: `${visit.fragmentCount} 个原件在 45 分钟访问窗口内。`,
-    sourceIds: [...visit.sourceIds],
-  }));
+  const liveScenes = snapshot.visits.map((visit) => {
+    const sourceFragment = visit.sourceIds.map((id) => byId.get(id)).find(Boolean);
+    const sourcePlace = snapshot.places.find(({ id }) => id === visit.placeId);
+    const cityId = sourcePlace?.cityId || sourceFragment?.cityId || null;
+    return {
+      id: visit.id,
+      journeyId: cityId ? journeyId(cityId) : null,
+      date: dateLabel(visit.startedAt),
+      label: `${visit.placeName} 的一次到访`,
+      timeRange: `${timeLabel(visit.startedAt)}—${timeLabel(visit.endedAt)}`,
+      placeId: visit.placeId,
+      fragmentIds: [...visit.sourceIds],
+      status: 'confirmed',
+      primaryAsset: visit.sourceIds.map((id) => byId.get(id)?.asset).find(Boolean) ?? null,
+      observation: `${visit.fragmentCount} 个原件在 45 分钟访问窗口内。`,
+      sourceIds: [...visit.sourceIds],
+    };
+  });
   const liveConnections = snapshot.connections.map((connection) => ({
     id: connection.id,
     type: connection.type,

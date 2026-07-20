@@ -27,10 +27,13 @@ import {
   resolveSnapshotMedia,
   runtimeState,
 } from './data/runtime.js';
+import { applyDevScenario } from './data/dev-scenarios.js';
 
 const root = document.querySelector('#app-root');
 const initialHash = window.location.hash || '#/onboarding';
 const liveDataMode = isLiveDataMode(import.meta.env);
+const devScenario = liveDataMode ? null : applyDevScenario(import.meta.env, window.location.search);
+if (devScenario) document.documentElement.dataset.dataScenario = devScenario;
 const store = createStore(createInitialState({
   route: initialHash,
   runtime: {
