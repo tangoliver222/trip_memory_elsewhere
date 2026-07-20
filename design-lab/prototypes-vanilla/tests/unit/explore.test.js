@@ -20,10 +20,11 @@ test('connection detail states evidence and gaps without confidence percentages'
   assert.doesNotMatch(html, /%|物理闭合|因果/);
 });
 
-test('scene and place details remain evidence-first authority pages', () => {
+test('scene and place details identify the selected object before its evidence', () => {
   const moment = renderRoute('#/world/scene/scene-river-evening', state).html;
   const place = renderRoute('#/world/place/place-common-grounds', state).html;
-  assert.ok(moment.indexOf('17:42') < moment.indexOf('河岸候船'));
+  assert.ok(moment.indexOf('河岸候船') < moment.indexOf('data-authority-evidence'));
+  assert.ok(place.indexOf('Common Grounds') < place.indexOf('data-particle-anchor'));
   assert.match(moment, /查看原件/);
   assert.match(place, /三次确认到访/);
   assert.match(place, /12 OCT|12—19 OCT/);

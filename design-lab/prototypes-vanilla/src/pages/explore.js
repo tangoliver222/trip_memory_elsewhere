@@ -158,7 +158,12 @@ function capsuleAfterRender({ pageRoot }) {
   if (typeof window === 'undefined' || !pageRoot) return null;
   gsap.registerPlugin(ScrollTrigger);
   const context = gsap.context(() => {
-    gsap.utils.toArray('.capsule-chapter').forEach((chapter) => {
+    gsap.utils.toArray('.capsule-chapter').forEach((chapter, index) => {
+      const reveals = chapter.querySelectorAll('.capsule-reveal');
+      if (index === 0) {
+        gsap.set(reveals, { opacity: 1, y: 0 });
+        return;
+      }
       gsap.fromTo(chapter.querySelectorAll('.capsule-reveal'),
         { opacity: 0, y: 36 },
         { opacity: 1, y: 0, stagger: 0.12, duration: 1, ease: 'power3.out', scrollTrigger: { trigger: chapter, start: 'top 72%', once: true } });
@@ -247,8 +252,8 @@ export function renderSceneDetail(sceneId) {
     },
     afterRender: null,
     html: `<main class="page authority-page moment-detail" data-page-id="world-scene-detail">
-      <section class="moment-evidence" data-authority-evidence>${originals.map((item, index) => `<div class="moment-evidence__item"><span>${escapeHtml(item.capturedAt.slice(11, 16))}</span>${renderOriginalTile(item, { interactive: true, index, label: item.evidencePreview })}</div>`).join('')}${originals.length > 1 ? renderTimeBridge({ from: originals[0].capturedAt.slice(11, 16), to: originals[1].capturedAt.slice(11, 16), duration: `${Math.max(1, Math.round((new Date(originals[1].capturedAt) - new Date(originals[0].capturedAt)) / 60000))} 分钟` }) : ''}</section>
       <header class="authority-header"><p class="eyebrow">一次具体事件 · ${escapeHtml(moment.date)}</p><h1>${escapeHtml(moment.label)}</h1><p>${escapeHtml(moment.observation)}</p></header>
+      <section class="moment-evidence" data-authority-evidence>${originals.map((item, index) => `<div class="moment-evidence__item"><span>${escapeHtml(item.capturedAt.slice(11, 16))}</span>${renderOriginalTile(item, { interactive: true, index, label: item.evidencePreview })}</div>`).join('')}${originals.length > 1 ? renderTimeBridge({ from: originals[0].capturedAt.slice(11, 16), to: originals[1].capturedAt.slice(11, 16), duration: `${Math.max(1, Math.round((new Date(originals[1].capturedAt) - new Date(originals[0].capturedAt)) / 60000))} 分钟` }) : ''}</section>
       <section class="authority-facts">${factBlocks}</section>
       ${primaryAction}
     </main>`,
@@ -272,8 +277,8 @@ export function renderPlaceDetail(placeId) {
     },
     afterRender: null,
     html: `<main class="page authority-page place-detail" data-page-id="world-place-detail">
-      <div class="place-anchor" data-particle-anchor data-particle-id="${place.id}" data-particle-role="place" data-particle-weight="${Math.max(1, visitCount || 1)}" aria-hidden="true"><i></i><i></i><i></i><span>${escapeHtml(visitCount || '—')}</span></div>
       <header class="authority-header"><p class="eyebrow">${escapeHtml(place.area)} · ${escapeHtml(place.dateRange)}</p><h1>${escapeHtml(place.name)}</h1><p>${escapeHtml(place.fact)}</p></header>
+      <div class="place-anchor" data-particle-anchor data-particle-id="${place.id}" data-particle-role="place" data-particle-weight="${Math.max(1, visitCount || 1)}" aria-hidden="true"><i></i><i></i><i></i><span>${escapeHtml(visitCount || '—')}</span></div>
       <section class="visit-list"><h2>${visitCount} 次${visits.length ? '可回溯到访' : '出现'}</h2>${visits.map((visit) => `<button type="button" data-particle-anchor data-particle-id="${visit.id}" data-particle-role="scene" data-particle-weight="1" data-action="navigate" data-route="${getAuthorityLink('scene', visit.id)}"><span>${escapeHtml(shortDate(visit.date))}</span><strong>${escapeHtml(visit.label)}</strong><small>${escapeHtml(visit.timeRange)}</small></button>`).join('')}</section>
       <p class="authority-source-note">这里只汇总已有原件和已确认的地点关系；候选内容仍保持待确认。</p>
       ${primary('在时间中查看', `${backRoute}/explore?view=time`)}
@@ -302,9 +307,9 @@ export function renderConnectionDetail(connectionId, state = {}) {
     },
     afterRender: null,
     html: `<main class="page authority-page connection-detail" data-page-id="world-connection-detail">
+      <header class="authority-header"><p class="eyebrow">连接详情 · ${connection.status === 'confirmed' ? '已确认' : connection.status === 'suggested' ? '等待判断' : '仍未安放'}</p><h1>${escapeHtml(humanType)}</h1><p>${entity ? `共同指向 ${escapeHtml(entity.name)}，关系强度只由下方来源支撑。` : '这条关系只由下方原件来源支撑。'}</p></header>
       <section class="connection-originals" data-authority-evidence>${originals.length ? originals.map((item) => renderEvidenceCard(item, { title: item.evidencePreview, detail: item.placeCandidate })).join('') : '<div class="missing-original">原件尚未加入当前数据</div>'}</section>
       ${renderRelationThread({ label: humanType, evidence: connection.evidence, uncertainty: gap, state: connection.status })}
-      <header class="authority-header"><p class="eyebrow">连接详情 · ${connection.status === 'confirmed' ? '已确认' : connection.status === 'suggested' ? '等待判断' : '仍未安放'}</p><h1>${escapeHtml(humanType)}</h1><p>${entity ? `共同指向 ${escapeHtml(entity.name)}，关系强度只由上方来源支撑。` : '这条关系只由上方原件来源支撑。'}</p></header>
       <section class="connection-gap"><span>仍缺少</span><p>${escapeHtml(gap)}</p></section>
       <div class="connection-actions"><button type="button" data-action="connection-decision" data-connection-id="${connection.id}" data-value="confirmed"${decision === 'confirmed' ? ' class="is-selected"' : ''}>确认这条连接</button><button type="button" data-action="connection-decision" data-connection-id="${connection.id}" data-value="rejected"${decision === 'rejected' ? ' class="is-selected"' : ''}>保持分开</button></div>
       ${decision ? `<p class="decision-feedback" role="status">${decision === 'confirmed' ? '已确认这条连接。' : '已保持两组原件分开。'}</p>` : ''}

@@ -342,7 +342,7 @@
 
   .explore-page { padding-left: 18px; padding-right: 18px; overflow: hidden; }
   .explore-header { gap: 12px; margin-bottom: 10px; }
-  .explore-header h1 { max-width: 330px; margin-top: 4px; font-size: clamp(2rem, 10vw, 2.7rem); line-height: .94; }
+  .explore-header h1 { max-width: 330px; margin-top: 4px; font-size: clamp(1.85rem, 8.8vw, 2.35rem); line-height: .96; letter-spacing: -.035em; }
   .explore-tabs { width: 100%; }
   .explore-tabs button { min-width: 0; flex: 1; padding: 8px; }
   .date-rail { gap: 5px; padding: 14px 0 5px; font-size: .52rem; }
@@ -410,11 +410,11 @@
   .map-place { left: calc(var(--place-x)*1%); top: calc(var(--place-y)*1%); right: auto; bottom: auto; }
   .relation-node { left: calc(var(--relation-x)*1%); top: calc(var(--relation-y)*1%); right: auto; bottom: auto; }
 
-  .capsule-cover { min-height: min(100dvh, 844px); padding: 24px 18px; }
+  .capsule-cover { min-height: min(74dvh, 640px); padding: 24px 18px; }
   .capsule-cover__image::after { background: linear-gradient(90deg, rgba(2,3,4,.25), rgba(2,3,4,.68)), linear-gradient(transparent 42%, rgba(3,4,5,.94)); }
-  .capsule-cover__copy { left: 24px; right: 24px; top: 43%; width: auto; transform: translateY(-50%); }
-  .capsule-cover h1 { margin: 8px 0; font-size: clamp(3.75rem, 17vw, 4.5rem); line-height: .86; letter-spacing: -.055em; }
-  .capsule-cover blockquote { max-width: 330px; margin: 28px 0 0; font-size: 1.04rem; line-height: 1.5; }
+  .capsule-cover__copy { left: 24px; right: 24px; top: 48%; width: auto; transform: translateY(-50%); }
+  .capsule-cover h1 { margin: 8px 0; font-size: clamp(3.1rem, 15vw, 3.75rem); line-height: .88; letter-spacing: -.05em; }
+  .capsule-cover blockquote { max-width: 330px; margin: 20px 0 0; font-size: .94rem; line-height: 1.5; }
   .capsule-chapter { min-height: auto; padding: 72px 18px 54px; gap: 22px; overflow: visible; }
   .capsule-chapter__title h2 { margin: 6px 0; font-size: clamp(2rem, 10vw, 2.65rem); line-height: .98; letter-spacing: -.035em; }
   .capsule-spread { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; height: auto; }
@@ -423,22 +423,22 @@
   .capsule-actions { gap: 5px; padding: 42px 18px 132px; }
 
   .authority-page { padding-top: 22px; }
-  .authority-header { margin: 28px 0; }
-  .authority-header h1 { margin: 8px 0 13px; font-size: clamp(2.15rem, 10vw, 2.75rem); line-height: .98; letter-spacing: -.035em; }
+  .authority-header { margin: 18px 0 24px; }
+  .authority-header h1 { margin: 7px 0 11px; font-size: clamp(2rem, 9vw, 2.5rem); line-height: .98; letter-spacing: -.03em; }
   .authority-header > p:last-child { margin: 0; font-size: .84rem; line-height: 1.58; }
   .moment-evidence { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-height: 0; align-items: start; }
   .moment-evidence__item > span { font-size: 1rem; }
   .moment-evidence .original-tile { height: 210px; min-height: 0; }
   .moment-evidence .time-bridge { grid-column: 1 / -1; min-height: 46px; gap: 5px; font-size: .62rem; }
-  .place-anchor { width: 138px; margin: 0 auto 26px; }
-  .place-anchor span { font-size: 2.6rem; }
-  .visit-list { margin-top: 38px; }
+  .place-anchor { width: 112px; margin: -4px 0 18px auto; }
+  .place-anchor span { font-size: 2.15rem; }
+  .visit-list { margin-top: 18px; }
   .visit-list h2 { font-size: 1.5rem; }
   .visit-list button { grid-template-columns: 70px minmax(0, 1fr); gap: 12px; padding: 17px 0; }
   .visit-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .connection-originals { gap: 8px; }
-  .connection-originals .evidence-card { grid-template-columns: 110px minmax(0, 1fr); min-height: 166px; padding: 9px; border-radius: 15px; }
-  .connection-originals .evidence-card__original { min-height: 148px; }
+  .connection-originals .evidence-card { grid-template-columns: 96px minmax(0, 1fr); min-height: 142px; padding: 8px; border-radius: 15px; }
+  .connection-originals .evidence-card__original { min-height: 126px; }
   .connection-originals .evidence-card__copy h3 { margin: 9px 0 5px; font-size: .88rem; line-height: 1.2; }
   .connection-originals .evidence-card__copy p { margin: 0; font-size: .66rem; line-height: 1.35; }
   .relation-thread { gap: 12px; padding: 26px 0; }
@@ -446,6 +446,7 @@
   .relation-thread__copy ul { margin: 8px 0; padding-left: 18px; font-size: .8rem; line-height: 1.45; }
   .connection-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .connection-actions button { padding: 11px 9px; font-size: .72rem; }
+  .authority-facts > div { grid-template-columns: 76px minmax(0, 1fr); align-items: center; padding: 13px 0; border-right: 0; }
 }
 
 .review-choices button.is-selected,

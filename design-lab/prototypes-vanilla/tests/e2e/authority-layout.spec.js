@@ -117,3 +117,43 @@ test('adversarial seven-node explore layouts place every data node with generate
     expect(particleScene.anchorCount).toBe(7);
   }
 });
+
+test('authority views keep a compact hierarchy before evidence on mobile', async ({ page }) => {
+  await page.goto('/#/world/city/bangkok/capsule');
+  await waitForStable(page);
+  const capsule = await page.evaluate(() => ({
+    coverHeight: document.querySelector('.capsule-cover').getBoundingClientRect().height,
+    titleSize: Number.parseFloat(getComputedStyle(document.querySelector('.capsule-cover h1')).fontSize),
+    firstChapterTop: document.querySelector('.capsule-chapter__title').getBoundingClientRect().top,
+    firstChapterOpacity: Number.parseFloat(getComputedStyle(document.querySelector('.capsule-chapter__title')).opacity),
+    navigationTop: document.querySelector('.app-navigation').getBoundingClientRect().top,
+  }));
+  expect(capsule.coverHeight).toBeLessThanOrEqual(660);
+  expect(capsule.titleSize).toBeLessThanOrEqual(60);
+  expect(capsule.firstChapterTop).toBeLessThan(capsule.navigationTop - 24);
+  expect(capsule.firstChapterOpacity).toBeGreaterThanOrEqual(0.8);
+
+  await page.goto('/#/world/city/bangkok/explore?view=time');
+  await waitForStable(page);
+  const exploreHeading = await page.locator('.explore-header h1').evaluate((heading) => Number.parseFloat(getComputedStyle(heading).fontSize));
+  expect(exploreHeading).toBeLessThanOrEqual(38);
+
+  for (const [route, evidenceSelector] of [
+    ['/#/world/scene/scene-river-evening', '.moment-evidence'],
+    ['/#/world/place/place-common-grounds', '.place-anchor'],
+    ['/#/world/connection/rel-river-ticket-photo', '.connection-originals'],
+  ]) {
+    await page.goto(route);
+    await waitForStable(page);
+    const order = await page.evaluate((selector) => ({
+      headerTop: document.querySelector('.authority-header').getBoundingClientRect().top,
+      evidenceTop: document.querySelector(selector).getBoundingClientRect().top,
+    }), evidenceSelector);
+    expect(order.headerTop).toBeLessThan(order.evidenceTop);
+  }
+
+  await page.goto('/#/world/place/place-common-grounds');
+  await waitForStable(page);
+  const anchorWidth = await page.locator('.place-anchor').evaluate((anchor) => anchor.getBoundingClientRect().width);
+  expect(anchorWidth).toBeLessThanOrEqual(120);
+});
