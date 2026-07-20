@@ -12,6 +12,14 @@ const particleRoutes = [
   '#/world/city/bangkok/explore?view=time',
   '#/world/city/bangkok/explore?view=place',
   '#/world/city/bangkok/explore?view=connection',
+  '#/world/cities',
+  '#/world/inbox/receipt/batch-bangkok-backfill',
+  '#/world/inbox',
+  '#/world/city/bangkok/capsule',
+  '#/world/scene/scene-river-evening',
+  '#/world/place/place-common-grounds',
+  '#/world/connection/rel-river-ticket-photo',
+  '#/onboarding/first-connection',
 ];
 
 for (const route of particleRoutes) {
