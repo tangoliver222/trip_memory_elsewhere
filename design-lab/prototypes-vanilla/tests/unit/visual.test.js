@@ -4,6 +4,7 @@ import { MemorySceneManager } from '../../src/visual/scene-manager.js';
 import { layoutCityPinLabels } from '../../src/visual/scene-manager.js';
 import { createFlowController } from '../../src/visual/flow-controller.js';
 import { createSemanticTarget } from '../../src/visual/particle-targets.js';
+import { GLOBE_RADIUS } from '../../src/visual/particle-targets.js';
 import { createSpatialAnchorRegistry } from '../../src/visual/spatial-anchor-registry.js';
 
 const createCanvas = () => ({
@@ -71,6 +72,42 @@ test('one damped spatial controller enables rotation and zoom only in the world 
   assert.equal(controls.enablePan, false);
   manager.setMode('fragment-field', {});
   assert.equal(controls.enabled, false);
+  manager.dispose();
+});
+
+test('world alignment fits the near hemisphere inside its DOM stage and limits zoom drift', () => {
+  let controlTarget = null;
+  const controls = {
+    enabled: false,
+    enableDamping: false,
+    enablePan: true,
+    target: { set(...value) { controlTarget = value; } },
+    update() {},
+    dispose() {},
+    addEventListener() {},
+  };
+  const canvas = createCanvas();
+  canvas.clientWidth = 390;
+  canvas.clientHeight = 844;
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 390, height: 844 });
+  const manager = new MemorySceneManager({
+    rendererFactory: createRendererFactory(),
+    controlsFactory: () => controls,
+    profile: 'low',
+  });
+  manager.mount(canvas);
+  manager.alignWorldToElement({
+    getBoundingClientRect: () => ({ left: 0, top: 120, width: 390, height: 390 }),
+  });
+
+  const radiusWorld = GLOBE_RADIUS * manager.group.scale.x;
+  const focalPixels = canvas.clientHeight / (2 * Math.tan(manager.camera.fov * Math.PI / 360));
+  const projectedRadius = focalPixels * radiusWorld
+    / Math.sqrt(manager.camera.position.z ** 2 - radiusWorld ** 2);
+
+  assert.ok(projectedRadius <= 390 * 0.5 * 0.9 + 1, `projected radius ${projectedRadius} must fit the stage`);
+  assert.ok(controls.maxDistance / controls.minDistance <= 1.2, 'world zoom must not detach globe layers');
+  assert.deepEqual(controlTarget, [0, 0, 0], 'camera target must not recenter a DOM-aligned globe');
   manager.dispose();
 });
 

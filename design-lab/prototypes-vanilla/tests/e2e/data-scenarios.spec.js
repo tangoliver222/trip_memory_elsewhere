@@ -59,14 +59,23 @@ test('World Home is truthful and geometrically distinct for empty, current and d
 test('World Home stays inside both mobile viewports', async ({ page }) => {
   await page.goto('/#/world');
   await waitForStable(page);
-  const layout = await page.evaluate(() => ({
-    documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    layerOverflow: document.querySelector('#page-content-layer').scrollWidth - document.querySelector('#page-content-layer').clientWidth,
-    elseCount: document.querySelectorAll('[data-else-orb]').length,
-  }));
+  const layout = await page.evaluate(() => {
+    const lede = document.querySelector('.globe-lede')?.getBoundingClientRect();
+    const visual = document.querySelector('[data-globe-visual]')?.getBoundingClientRect();
+    const firstEntry = document.querySelector('.world-entry')?.getBoundingClientRect();
+    return {
+      documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      layerOverflow: document.querySelector('#page-content-layer').scrollWidth - document.querySelector('#page-content-layer').clientWidth,
+      elseCount: document.querySelectorAll('[data-else-orb]').length,
+      visualStartsAfterLede: Boolean(lede && visual && visual.top >= lede.bottom + 8),
+      visualEndsBeforeEntry: Boolean(visual && firstEntry && visual.bottom <= firstEntry.top),
+    };
+  });
   expect(layout.documentOverflow).toBe(0);
   expect(layout.layerOverflow).toBe(0);
   expect(layout.elseCount).toBe(1);
+  expect(layout.visualStartsAfterLede).toBe(true);
+  expect(layout.visualEndsBeforeEntry).toBe(true);
 });
 
 test('City Home and Capsule derive visible anchors and density from each dataset', async ({ page }, testInfo) => {

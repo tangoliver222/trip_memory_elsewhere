@@ -322,7 +322,7 @@ export class MemorySceneManager {
   }
 
   /** 把点云地球对齐到页面内的 stage 元素（位置 + 缩放），DOM 与粒子共享坐标系。 */
-  alignWorldToElement(element, { fill = 0.98 } = {}) {
+  alignWorldToElement(element, { fill = 0.9 } = {}) {
     if (!element?.getBoundingClientRect || !this.canvas?.getBoundingClientRect || !this.group) return;
     const canvasRect = this.canvas.getBoundingClientRect();
     const rect = element.getBoundingClientRect();
@@ -333,13 +333,24 @@ export class MemorySceneManager {
       0,
     );
     const height = Math.max(1, this.canvas.clientHeight || 1);
-    const visibleHeight = 2 * DEFAULT_CAMERA_Z * Math.tan((this.camera?.fov ?? 44) * Math.PI / 360);
-    const pxPerUnit = height / visibleHeight;
-    const radiusPx = Math.min(rect.width * 0.5 * fill, rect.height * 0.62);
-    const scale = (radiusPx / pxPerUnit) / GLOBE_RADIUS;
+    const halfFovTangent = Math.tan((this.camera?.fov ?? 44) * Math.PI / 360);
+    const focalPixels = height / (2 * halfFovTangent);
+    const distance = this.camera.position.distanceTo(center);
+    const radiusPx = Math.min(rect.width, rect.height) * 0.5 * fill;
+    // Perspective-correct apparent radius of a sphere: p = f*r/sqrt(d²-r²).
+    // Solving for r keeps the particle surface inside the same DOM stage at every viewport.
+    const radiusWorld = (radiusPx * distance) / Math.sqrt(focalPixels ** 2 + radiusPx ** 2);
+    const scale = radiusWorld / GLOBE_RADIUS;
     this.group.position.set(center.x, center.y, 0);
     this.group.scale.setScalar(scale);
-    this.controls?.target?.set?.(center.x, center.y, 0);
+    // OrbitControls keeps its target at the camera's optical centre. Pointing it at
+    // the offset group would recenter the globe on the viewport and break DOM anchoring.
+    this.controls?.target?.set?.(0, 0, 0);
+    if (this.controls) {
+      const cameraDistance = this.camera.position.length();
+      this.controls.minDistance = cameraDistance * 0.94;
+      this.controls.maxDistance = cameraDistance * 1.06;
+    }
   }
 
   /** 城市 pin：每帧把 lat/lng 投影到屏幕，驱动 DOM 标签跟随点云地球。 */

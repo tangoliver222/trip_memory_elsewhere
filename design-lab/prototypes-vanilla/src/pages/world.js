@@ -113,6 +113,7 @@ export function renderWorldHome() {
           <h1>去过的每个地方，仍然相连。</h1>
           <p class="world-stats">${counts.cities} 座城市 · ${counts.fragments} 个碎片 · ${counts.connections} 条连接</p>
         </div>
+        <div class="globe-visual-anchor" data-globe-visual aria-hidden="true"></div>
         <div class="world-city-pins">${renderCityPins(locatedCities)}</div>
       </section>
 
@@ -161,9 +162,10 @@ export function renderWorldHome() {
     </main>`,
     afterRender({ pageRoot, sceneManager }) {
       const stage = pageRoot.querySelector('[data-globe-stage]');
+      const visual = pageRoot.querySelector('[data-globe-visual]');
       if (stage) {
         sceneManager.bindControls(stage);
-        sceneManager.alignWorldToElement(stage);
+        sceneManager.alignWorldToElement(visual || stage, { fill: 0.96 });
       }
       sceneManager.trackCityPins(locatedCities.map((city) => ({
         lat: city.coordinates.lat,
