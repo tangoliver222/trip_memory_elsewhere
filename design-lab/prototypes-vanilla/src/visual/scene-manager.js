@@ -9,6 +9,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createFlowController } from './flow-controller.js';
 import { createParticleSystem } from './particle-system.js';
 import { compileParticleScene } from './particle-scene-compiler.js';
+import { createSpatialAnchorRegistry } from './spatial-anchor-registry.js';
 import { GLOBE_RADIUS, dirFromLatLng, loadLandMask, onLandMaskReady } from './particle-targets.js';
 import { detectPerformanceProfile, getPerformanceProfile } from './performance-profile.js';
 
@@ -58,6 +59,11 @@ export class MemorySceneManager {
     this.stableCallbacks = [];
     this._pinVecA = null;
     this._pinVecB = null;
+    this.spatialBindingCleanup = null;
+    this.spatialTransform = { pixelX: 0, pixelY: 0, scale: 1, source: 'none' };
+    this.spatialBasePosition = null;
+    this.spatialBaseScale = null;
+    this.spatialLayoutRevision = 0;
     this._boundFrame = (time) => this.renderFrame(time);
     this._boundVisibility = () => (this.environment.document?.hidden ? this.pause() : this.resume());
     this._boundContextLost = (event) => { event.preventDefault?.(); this.pause(); this.setStaticFallback(true); };
@@ -189,6 +195,59 @@ export class MemorySceneManager {
       if (weights[index] != null) anchor.weight = weights[index];
       return anchor;
     });
+  }
+
+  setSpatialTransform({ pixelX = 0, pixelY = 0, scale = 1, source = 'layout' } = {}) {
+    if (!this.group || !this.spatialBasePosition || !this.spatialBaseScale) return;
+    const origin = this.worldFromViewport(0, 0, 0);
+    const translated = this.worldFromViewport(pixelX, pixelY, 0);
+    this.group.position.set(
+      this.spatialBasePosition.x + translated.x - origin.x,
+      this.spatialBasePosition.y + translated.y - origin.y,
+      this.spatialBasePosition.z,
+    );
+    this.group.scale.set(
+      this.spatialBaseScale.x * scale,
+      this.spatialBaseScale.y * scale,
+      this.spatialBaseScale.z * scale,
+    );
+    this.spatialTransform = { pixelX, pixelY, scale, source };
+  }
+
+  /** Bind this route's particle scene to current DOM fragment anchors. */
+  bindPageSpace({ elements = [], scrollRoot = null, mode, payload = {}, z = -2 } = {}) {
+    this.spatialBindingCleanup?.();
+    this.spatialLayoutRevision = 0;
+    this.spatialBasePosition = this.group?.position.clone?.() || null;
+    this.spatialBaseScale = this.group?.scale.clone?.() || null;
+    this.spatialTransform = { pixelX: 0, pixelY: 0, scale: 1, source: 'initial' };
+    const registry = createSpatialAnchorRegistry({
+      environment: this.environment,
+      onTransform: (transform) => this.setSpatialTransform(transform),
+      onLayout: ({ anchors }) => {
+        const canvasRect = this.canvas?.getBoundingClientRect?.() || { left: 0, top: 0 };
+        const worldAnchors = anchors.map((anchor) => ({
+          id: anchor.id,
+          role: anchor.role,
+          weight: anchor.weight,
+          ...this.worldFromViewport(anchor.viewportX - canvasRect.left, anchor.viewportY - canvasRect.top, z),
+        }));
+        const scene = compileParticleScene(mode, this.particles.count, { ...payload, anchors: worldAnchors });
+        this.particles.setScene(scene, { snap: this.spatialLayoutRevision > 0 });
+        this.spatialLayoutRevision += 1;
+      },
+    });
+    const cleanup = registry.bind({ elements, scrollRoot });
+    this.spatialBindingCleanup = () => {
+      cleanup();
+      if (this.spatialBindingCleanup) this.spatialBindingCleanup = null;
+    };
+    return this.spatialBindingCleanup;
+  }
+
+  clearPageSpace() {
+    this.spatialBindingCleanup?.();
+    this.spatialBindingCleanup = null;
   }
 
   /** 把点云地球对齐到页面内的 stage 元素（位置 + 缩放），DOM 与粒子共享坐标系。 */
@@ -423,11 +482,13 @@ export class MemorySceneManager {
       activeParticleCount: sceneMeta.activeCount || 0,
       anchorCount: sceneMeta.anchorCount || 0,
       particleState: sceneMeta.state || 'initializing',
+      spatialTransform: { ...this.spatialTransform },
     };
   }
 
   dispose() {
     this.pause();
+    this.clearPageSpace();
     this.flows.killAll();
     this.resizeObserver?.disconnect();
     this.intersectionObserver?.disconnect();
