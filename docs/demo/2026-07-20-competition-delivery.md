@@ -47,6 +47,40 @@ curl -sSIL https://elsewhere-memory-tyx-2026.web.app/demo/elsewhere-competition-
 HTTP/2 200; content-type video/mp4; accept-ranges bytes
 ```
 
+## Frontend stability release
+
+The public Hosting release was rebuilt and redeployed after a full 390px visual audit. The release fixes three
+recording-visible defects without changing the frozen World/City composition:
+
+- non-photo artifacts no longer render a second caption/type layer over their own receipt, ticket, menu or map copy;
+- Discover Home reserves a complete mobile evidence field before the conclusion copy begins;
+- Fragment Field city labels use data-order slots, so a new or hyphenated city slug cannot fall back to `(0, 0)`.
+
+Fresh verification executed immediately before and after deployment:
+
+```text
+npm test
+88 passed
+
+npx playwright test tests/e2e/routes.spec.js tests/e2e/performance.spec.js \
+  --project=mobile-390 --project=mobile-430
+60 passed
+
+npx playwright test --config playwright.recording.config.js
+1 passed (both 390x844 and 430x932 paths)
+
+npm run build
+73 modules transformed
+
+npx firebase-tools deploy --project elsewhere-memory-tyx-2026 \
+  --config firebase/firebase.json --only hosting
+Deploy complete
+
+ELSEWHERE_PUBLIC_URL=https://elsewhere-memory-tyx-2026.web.app \
+  npx playwright test --config playwright.public.config.js
+3 passed
+```
+
 ## Submission collector status
 
 The official `vibe-submission-collector` rendered all numbered documents and technical evidence. The remaining
