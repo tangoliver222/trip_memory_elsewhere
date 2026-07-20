@@ -19,12 +19,12 @@ and combines an actual local-file import flow with separately verified Google Cl
 ## Video acceptance
 
 ```text
-Duration: 70.8 seconds
-Size: 4,523,099 bytes
+Duration: 127.72 seconds (2m 7.7s)
+Size: 4,923,609 bytes
 Video: H.264, 368x800, 25 fps
 Audio: none
 Public content type: video/mp4
-Public content length: 4,523,099 bytes
+Public content length: 4,923,609 bytes
 ```
 
 The walkthrough was recorded only after the two mobile viewport suites passed. It includes World, City, Fragment

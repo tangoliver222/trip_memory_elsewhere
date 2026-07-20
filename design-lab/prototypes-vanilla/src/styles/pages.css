@@ -53,6 +53,10 @@
 .world-city-pin i::after { content: ''; position: absolute; left: 0; top: 9px; width: 1px; height: 14px; background: var(--line-1); }
 .world-city-pin span { margin-top: 14px; font: .78rem var(--serif); color: var(--text-0); }
 .world-city-pin small { color: var(--text-3); font-size: .58rem; letter-spacing: .08em; }
+.world-city-pin[data-city-pin="chiang-mai"] span,
+.world-city-pin[data-city-pin="chiang-mai"] small { transform: translate(-72px, -42px); }
+.world-city-pin[data-city-pin="bangkok"] span,
+.world-city-pin[data-city-pin="bangkok"] small { transform: translate(12px, 8px); }
 
 .world-entries { display: grid; gap: 10px; padding: 8px var(--space-page) 0; }
 .world-entry { position: relative; display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center; padding: 14px; border: 1px solid var(--line-0); border-radius: 18px; background: var(--surface-0); backdrop-filter: var(--blur-panel); text-align: left; color: inherit; cursor: pointer; transition: border-color .3s; }

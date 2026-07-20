@@ -64,8 +64,8 @@ test('public competition video exposes valid review metadata', async ({ page }) 
     return { duration: video.duration, width: video.videoWidth, height: video.videoHeight };
   });
 
-  expect(metadata.duration).toBeGreaterThan(70);
-  expect(metadata.duration).toBeLessThan(72);
+  expect(metadata.duration).toBeGreaterThan(127);
+  expect(metadata.duration).toBeLessThan(129);
   expect(metadata.width).toBe(368);
   expect(metadata.height).toBe(800);
 });
