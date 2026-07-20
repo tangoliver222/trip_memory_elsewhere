@@ -60,7 +60,7 @@ Fresh verification executed immediately before and after deployment:
 
 ```text
 npm test
-88 passed
+89 passed
 
 npx playwright test tests/e2e/routes.spec.js tests/e2e/performance.spec.js \
   --project=mobile-390 --project=mobile-430
@@ -80,6 +80,24 @@ ELSEWHERE_PUBLIC_URL=https://elsewhere-memory-tyx-2026.web.app \
   npx playwright test --config playwright.public.config.js
 3 passed
 ```
+
+## Production data-path release
+
+The backend shared image `d69e154` is deployed to three isolated Cloud Run composition roots. The
+API now includes the reviewed authenticated `GET /v1/memory-snapshot` endpoint; it does not expose
+demo reset, manual finalize, or Else routes. A fresh real-cloud smoke completed an actual receipt
+upload and verified:
+
+```text
+authenticated_api=passed
+owner_memory_snapshot=passed
+storage_eventarc_routing_tasks=passed
+document_ai_result=completed
+test_owner_cleanup=passed
+```
+
+Backend verification after release: 614 ordinary tests with 606 pass, 8 expected Emulator-only
+skips and 0 failures; Firebase Emulator suite 70/70.
 
 ## Submission collector status
 

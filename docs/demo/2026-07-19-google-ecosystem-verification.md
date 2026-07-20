@@ -10,7 +10,8 @@ OCR；本地隔离的录制 composition 从持久化结果投影 World、City、
 
 这不是前端 fixture 或固定 AI 文案。供评审直接浏览的静态产品原型已部署到 Firebase Hosting；它使用经过
 双尺寸视觉回归的公开评审数据，不声称能在公网写入私人原件。真实上传、OCR 与 Gemini 录制入口仍是本地视觉
-应用连接真实 Google Cloud 数据链，直到生产 snapshot/Else 读模型完成独立边界审阅。
+应用连接真实 Google Cloud 数据链。通用 production memory snapshot 已完成独立边界审阅并上线；Bangkok
+Discovery projection 与 Else 仍保持隔离。
 
 ## 最终验收矩阵
 
@@ -18,15 +19,15 @@ OCR；本地隔离的录制 composition 从持久化结果投影 World、City、
 | --- | --- | --- |
 | 真实云浏览器主链 | 通过 | Playwright 1/1，46.7 秒；8 个真实文件；一次 OCR；一次 Gemini；来源可打开 Lens |
 | Cloud Run ingestion 主链 | 通过 | Auth/App Check → ImportBatch → Storage → Eventarc → routing → Tasks → Document AI |
-| 后端普通测试 | 通过 | 610 项：602 通过、8 项为未启动 Emulator 时的预期跳过、0 失败；7.9 秒 |
+| 后端普通测试 | 通过 | 614 项：606 通过、8 项为未启动 Emulator 时的预期跳过、0 失败；6.0 秒 |
 | Firebase Emulator 套件 | 通过 | 70/70，0 失败；43.5 秒；Auth、Firestore、Storage 和 Rules |
-| 前端单元测试 | 通过 | 88/88，0 失败 |
+| 前端单元测试 | 通过 | 89/89，0 失败 |
 | 本地无付费浏览器回归 | 通过 | Playwright 1/1，16.0 秒；Gemini 和真实云能力关闭 |
 | 录屏视觉回归 | 通过 | 390×844 与 430×932 共 18 张页面截图；无乱码、溢出或粒子锚点漂移 |
 | 前端生产构建 | 通过 | 默认 build 与 cloud-mode build 均成功 |
 | Firebase Hosting 评审版 | 通过 | `https://elsewhere-memory-tyx-2026.web.app`；公网 smoke 1/1 |
 | 云资源状态 | 通过 | 三个 Cloud Run revision Ready；Tasks queue RUNNING；Eventarc 精确绑定 Firebase bucket |
-| 云端测试数据清理 | 通过 | Auth users 0、Firestore root user documents 0、Storage `users/` objects 0 |
+| 云端测试数据清理 | 通过 | 本次 smoke uid 的 Auth、Firestore owner document、Storage prefix 均确认不存在 |
 
 前端构建仍会报告约 940 KB 的 JavaScript chunk 警告（gzip 约 275 KB）。它不是构建失败，也不影响本次
 录制，但属于录制后应处理的性能债务。
@@ -53,9 +54,9 @@ OCR；本地隔离的录制 composition 从持久化结果投影 World、City、
 
 | 资源 | 已验证状态 |
 | --- | --- |
-| `elsewhere-api` | Ready revision `elsewhere-api-00002-q9b`；外部 `/readyz` 为健康检查入口 |
-| `elsewhere-ingestion` | Ready revision `elsewhere-ingestion-00002-lzw`；只允许 Eventarc invoker |
-| `elsewhere-capability-worker` | Ready revision `elsewhere-capability-worker-00002-z44`；只允许 Tasks OIDC invoker |
+| `elsewhere-api` | Ready revision `elsewhere-api-00003-gcp`；外部 `/readyz` 为健康检查入口 |
+| `elsewhere-ingestion` | Ready revision `elsewhere-ingestion-00003-zdd`；只允许 Eventarc invoker |
+| `elsewhere-capability-worker` | Ready revision `elsewhere-capability-worker-00003-p2h`；只允许 Tasks OIDC invoker |
 | `elsewhere-ocr` | RUNNING；2 dispatch/s；2 concurrent |
 | `elsewhere-original-finalized` | 绑定单一 Firebase bucket 和 ingestion receiver |
 
@@ -89,18 +90,20 @@ PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH \
 
 - Firebase Hosting 已发布经验证的静态 SPA 评审版；它用于免登录浏览产品体验。
 - `/v1/**` → `elsewhere-api` rewrite 和 cloud-mode Vite production build 已实现。
-- 视觉原型所需的 snapshot/Discovery projection 和 Else endpoint 仍位于隔离 demo composition。
+- 生产 `GET /v1/memory-snapshot` 已部署，并通过真实 owner 数据验证。
+- 视觉原型所需的 Bangkok Discovery projection 和 Else endpoint 仍位于隔离 demo composition。
 
-生产 API 目前只包含完成边界审阅的 ImportBatch 写入/回执接口。因此公开评审版不连接生产写入能力，避免形成
-“界面上线、核心读模型仍依赖开发 composition”的误导状态；真实云处理能力由受控录制链和验证记录证明。
+生产 API 目前包含完成边界审阅的 ImportBatch 写入/回执和通用 owner memory snapshot。公开评审版仍不连接
+生产写入能力，因为 Bangkok 发现关系与 Else 尚未提升为生产 composition；真实云处理能力由受控录制链和验证
+记录证明。
 
 ## 本轮明确排除
 
 - Places、Embedding、Agent Engine 和地图 Grounding。
 - 外部来源导入与手机备忘录连接器。
 - 前端登录 UI、角色/管理员权限、session 数据库。
-- replay protection、限流和生产 snapshot/Else API。
-- 公网评审版直接写入生产数据，以及生产 snapshot/Else 读 API。
+- replay protection、限流和生产 Else API。
+- 公网评审版直接写入生产数据，以及生产 Else API。
 
 这些项目不影响当前 Bangkok 核心故事的真实数据录制，但不得在参赛材料中描述为已经实现。
 

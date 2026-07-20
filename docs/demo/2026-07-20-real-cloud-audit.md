@@ -20,11 +20,11 @@ Firebase Auth + App Check
   -> Firestore and private Storage artifacts
 ```
 
-The confirmed product gap is narrower: the production API has no reviewed owner-scoped memory
-snapshot endpoint. The public Hosting build therefore remains a read-only judge fixture even though
-the import and processing services are real. The isolated demo composition has a projection, Else,
-reset, and manual-finalize surface; it must not be promoted wholesale because the reset and manual
-finalize routes are test controls, not production product APIs.
+The audit identified one bounded gap and this release closed it: the production API now exposes a
+reviewed owner-scoped memory snapshot endpoint. The public Hosting build remains a read-only judge
+fixture because the production snapshot is intentionally a generic persisted-data boundary rather
+than the Bangkok-specific competition projection. The isolated demo composition still owns Else,
+reset, and manual-finalize controls; it was not promoted wholesale.
 
 ## Live Google Cloud evidence
 
@@ -32,9 +32,9 @@ The following resources were queried directly from project `elsewhere-memory-tyx
 
 | Resource | Current state | Boundary |
 | --- | --- | --- |
-| `elsewhere-api` | Ready, revision `elsewhere-api-00002-q9b` | Public Cloud Run transport; Firebase ID Token and App Check enforced in Fastify |
-| `elsewhere-ingestion` | Ready, revision `elsewhere-ingestion-00002-lzw` | Eventarc invoker only |
-| `elsewhere-capability-worker` | Ready, revision `elsewhere-capability-worker-00002-z44` | Cloud Tasks OIDC invoker only |
+| `elsewhere-api` | Ready, revision `elsewhere-api-00003-gcp` | Public Cloud Run transport; Firebase ID Token and App Check enforced in Fastify |
+| `elsewhere-ingestion` | Ready, revision `elsewhere-ingestion-00003-zdd` | Eventarc invoker only |
+| `elsewhere-capability-worker` | Ready, revision `elsewhere-capability-worker-00003-p2h` | Cloud Tasks OIDC invoker only |
 | Firestore `(default)` | `FIRESTORE_NATIVE`, `asia-southeast1` | Server-derived collections are client-write denied |
 | Cloud Tasks `elsewhere-ocr` | `RUNNING` | 2 dispatches/second, 2 concurrent deliveries |
 | Eventarc `elsewhere-original-finalized` | Active configuration | Exact bucket and `google.cloud.storage.object.v1.finalized` filter |
@@ -61,7 +61,8 @@ Document AI, Firebase App Check, and Identity Toolkit.
 | Deterministic media facts | real-cloud deployed and previously exercised | Format, metadata, hash, thumbnail, duplicate facts precede paid processing |
 | Authoritative routing and budget | real-cloud deployed and previously exercised | Versioned approved RoutePlan controls capability execution |
 | OCR execution | real-cloud deployed and previously exercised | Cloud Tasks plus Document AI worker; private normalized artifacts |
-| Owner memory projection | implemented only in isolated demo composition | Missing reviewed production read boundary |
+| Owner memory snapshot | real-cloud deployed and verified | Authenticated, bounded Firestore projection with redacted internals |
+| Bangkok competition projection | implemented only in isolated demo composition | Kept separate from the generic production snapshot |
 | Else sourced answer | implemented and real-provider verified in isolated demo composition | Missing reviewed production API and secret/runtime boundary |
 | Places and Embedding | intentionally not implemented | RoutePlan can skip/defer them; no provider is claimed |
 
@@ -70,8 +71,8 @@ Document AI, Firebase App Check, and Identity Toolkit.
 Backend ordinary suite:
 
 ```text
-tests 610
-pass 602
+tests 614
+pass 606
 fail 0
 skipped 8
 ```
@@ -92,7 +93,7 @@ skipped 0
 Frontend release gates immediately before this audit:
 
 ```text
-unit tests: 88/88
+unit tests: 89/89
 mobile routes and performance: 60/60
 recording visual flow: 1/1 at 390x844 and 430x932
 public Hosting smoke: 3/3
@@ -108,11 +109,38 @@ configuration remains in `design-lab/prototypes-vanilla/.env.cloud.local`.
 
 ## Confirmed next slice
 
-Add one production owner-scoped, bounded, read-only memory snapshot boundary. It will reuse the
-existing server-owned Firestore facts but will not register demo reset, manual finalize, or demo gate
-routes. The slice must be proven by RED/GREEN integration tests before deployment. A production Else
-endpoint remains a separate follow-up because it adds a provider secret and cost boundary; it must
-not be smuggled into the read-model change.
+The next backend slice is a separately reviewed production Else boundary. It adds an interactive
+provider-cost policy and a provider credential or Vertex runtime authority, so it was not smuggled
+into this read-model change. Demo reset and manual-finalize routes remain absent from production.
+
+## Production snapshot release evidence
+
+The released image is:
+
+```text
+asia-southeast1-docker.pkg.dev/elsewhere-memory-tyx-2026/
+  elsewhere-backend/elsewhere-backend:d69e154
+```
+
+The endpoint is `GET /v1/memory-snapshot`. It requires the same verified Firebase ID Token and App
+Check boundary as ImportBatch. It returns at most 200 fragments and 50 batches, plus aggregate counts
+and explicit truncation flags. It omits storage bucket, generation, CRC/MD5, hashes, provider item
+identifiers, provider metadata, source references, and processor internals.
+
+The post-deploy production smoke passed:
+
+```text
+cloud-run-ingestion-smoke: PASS
+authenticated_api=passed
+owner_memory_snapshot=passed
+storage_eventarc_routing_tasks=passed
+document_ai_result=completed
+test_owner_cleanup=passed
+```
+
+The project currently has historical anonymous Auth identities that are not owned by this smoke and
+were not deleted. The smoke verifies its own uid is absent from Auth, its Firestore owner document is
+absent, and its Storage prefix is empty.
 
 ## Commands executed
 

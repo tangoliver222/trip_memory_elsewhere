@@ -15,8 +15,8 @@ only. Neither identity is used as a runtime service account. Minimum instances r
 dispatches per second and two concurrent deliveries.
 
 The production API contains no `/demo/v1/**` route. Firebase Hosting rewrites only `/v1/**` to `elsewhere-api`; all
-other paths remain the static SPA. The verified recording path may continue using the isolated local cloud-demo
-composition until a production read-model and Else endpoint receive their own reviewed boundary.
+other paths remain the static SPA. Production exposes the reviewed ImportBatch routes and the bounded owner-scoped
+`GET /v1/memory-snapshot` read boundary. Else and all demo reset/manual-finalize controls remain isolated.
 
 ## Deploy
 
@@ -61,14 +61,15 @@ Required checks:
 The production ingestion smoke uses no `/demo/v1/**` route and never manually invokes the finalized handler. It uses a
 real anonymous Firebase identity and App Check token to create one batch, uploads the project-owned Common Grounds
 receipt through Storage Rules, waits for Eventarc, deterministic processing, Authoritative Routing, Cloud Tasks, and
-Document AI, verifies the persisted result, and deletes the owner from Auth, Firestore, and Storage:
+Document AI, verifies the persisted result through `GET /v1/memory-snapshot`, and verifies owner-specific cleanup in
+Auth, Firestore, and Storage:
 
 ```bash
 RUN_REAL_GOOGLE_PROVIDER_TESTS=true npm --prefix services/backend run smoke:cloud-run
 ```
 
-This passed on 2026-07-20 in `asia-southeast1`; the cleanup audit returned zero Auth users, zero root user documents,
-and zero `users/` Storage objects.
+This passed on 2026-07-20 in `asia-southeast1`; `test_owner_cleanup=passed` verifies the generated smoke uid only.
+Historical anonymous Auth identities are outside the smoke cleanup boundary and are not deleted.
 
 Firebase Hosting deployment is separate. A production cloud build may use:
 
@@ -79,8 +80,7 @@ cd ../../firebase
 firebase deploy --project elsewhere-memory-tyx-2026 --only hosting
 ```
 
-Hosting is intentionally not deployed yet. The production API currently exposes the reviewed ImportBatch write/receipt
-boundary, not the demo snapshot and Else read model used by the visual prototype. Deploying the cloud-mode SPA now
-would create a misleading partially live product. The Cloud Run ingestion chain is staging-verified; the Task 6
-local-cloud browser gate remains the authoritative end-to-end recording path. No Gemini key is deployed to Cloud Run
-because none of the three reviewed production composition roots consumes Gemini.
+Hosting is deployed as the fixture-backed judge build. The production API exposes the reviewed ImportBatch
+write/receipt boundary and a generic persisted memory snapshot, but not the Bangkok-specific competition projection or
+Else. Switching the public SPA wholesale to cloud mode would therefore still be misleading. No Gemini key is deployed
+to Cloud Run because none of the three reviewed production composition roots consumes Gemini.
