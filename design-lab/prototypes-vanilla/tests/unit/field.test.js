@@ -35,6 +35,32 @@ test('field zoom clamps between 0.62 and 2.4 and snapshot is restorable', () => 
   field.destroy();
 });
 
+test('field camera publishes the exact DOM transform to particle space', () => {
+  const transforms = [];
+  const store = createStore(createInitialState());
+  const field = createFieldController({
+    viewport,
+    store,
+    sceneManager: {
+      setMode() {},
+      setSpatialTransform(value) { transforms.push(value); },
+    },
+  });
+
+  field.panBy(32, -18, { publish: false });
+  assert.deepEqual(transforms.at(-1), {
+    pixelX: 32,
+    pixelY: -18,
+    scale: 1,
+    source: 'field-camera',
+  });
+
+  field.zoomAt(100, 80, 1, { publish: false });
+  assert.equal(transforms.at(-1).source, 'field-camera');
+  assert.equal(transforms.at(-1).scale, field.state.camera.scale);
+  field.destroy();
+});
+
 test('compact field layout keeps a useful ring of originals inside a phone-scale spatial radius', () => {
   const layout = createFieldLayout('', { compact: true });
   assert.ok(layout.every((node) => Math.abs(node.x) <= 245));
