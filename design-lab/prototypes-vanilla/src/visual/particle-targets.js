@@ -664,7 +664,13 @@ function importBatch(count, payload = {}) {
 
 function elseOrb(count, payload = {}) {
   const state = payload.state || 'idle';
-  const center = payload.center ? { z: -1, ...payload.center } : { x: 0, y: -2.4, z: -1 };
+  const anchoredSources = payload.anchors?.length
+    ? payload.anchors.map((anchor) => ({ z: -1, ...anchor }))
+    : [];
+  const center = payload.center
+    ? { z: -1, ...payload.center }
+    : (anchoredSources[0] || { x: 0, y: -2.4, z: -1 });
+  const sources = anchoredSources.slice(1);
   const result = new Float32Array(count * 3);
   const mainEnd = Math.floor(count * POOL_MAIN);
   const haloEnd = Math.floor(count * POOL_HALO);
@@ -672,7 +678,10 @@ function elseOrb(count, payload = {}) {
   for (let i = 0; i < mainEnd; i += 1) {
     if (state === 'found' && i % 3 !== 0) {
       // 来源流：从三个来源角流向 Orb
-      const source = [[-7, 6, -8], [7, 5, -12], [-5, -7, -6]][i % 3];
+      const sourceNode = sources.length
+        ? sources[i % sources.length]
+        : [[-7, 6, -8], [7, 5, -12], [-5, -7, -6]][i % 3];
+      const source = Array.isArray(sourceNode) ? sourceNode : [sourceNode.x, sourceNode.y, sourceNode.z];
       const t = Math.pow(seeded(i, 105), 0.8);
       const [x, y, z] = bezier(source, [(source[0] + center.x) / 2, (source[1] + center.y) / 2 + 2, -4], [center.x, center.y, center.z], t);
       write(result, i, x + gaussian(i, 106) * 0.3, y + gaussian(i, 107) * 0.3, z);
@@ -691,7 +700,7 @@ function elseOrb(count, payload = {}) {
     );
   }
   for (let i = mainEnd; i < haloEnd; i += 1) {
-    write(result, i, (seeded(i, 112) - 0.5) * 18, (seeded(i, 113) - 0.5) * 22, -16 - seeded(i, 114) * 18);
+    write(result, i, center.x + (seeded(i, 112) - 0.5) * 18, center.y + (seeded(i, 113) - 0.5) * 22, center.z - 14 - seeded(i, 114) * 18);
   }
   for (let i = haloEnd; i < count; i += 1) {
     write(result, i, center.x + gaussian(i, 115) * 0.5, center.y + gaussian(i, 116) * 0.5, center.z + 0.4);
