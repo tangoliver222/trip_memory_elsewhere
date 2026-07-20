@@ -14,6 +14,7 @@ import { createFirebaseTokenVerifier } from '../../src/adapters/firebase-token-v
 import { createFirebaseAdmin } from '../../src/adapters/firebase.js';
 import { createApiComposition } from '../../src/composition/api.js';
 import { createIngestionComposition } from '../../src/composition/ingestion.js';
+import { createFirestoreMemorySnapshotReader } from '../../src/memory/reader.js';
 import { createFirestoreRepository } from '../../src/repositories/firestore.js';
 import { makeLocalFileSource } from '../fixtures/import.js';
 
@@ -73,6 +74,7 @@ test('anonymous user saves one original through Auth, Firestore and Storage Emul
     repository,
     tokenVerifier,
     allowedAppIds: ['elsewhere-web-dev'],
+    memorySnapshotReader: createFirestoreMemorySnapshotReader({ db: admin.db }),
   });
   const processingEvents = [];
   const ingestion = createIngestionComposition({
@@ -208,6 +210,21 @@ test('anonymous user saves one original through Auth, Firestore and Storage Emul
     counters: { saved: 1, processed: 0, failed: 0, needsReview: 0 },
     items: [{ fragmentId: upload.fragmentId, sourceType: 'photo', state: 'finalized' }],
   });
+
+  const memoryResponse = await api.inject({
+    method: 'GET',
+    url: '/v1/memory-snapshot',
+    headers: authHeaders,
+  });
+  assert.equal(memoryResponse.statusCode, 200);
+  const memory = memoryResponse.json();
+  assert.equal(memory.summary.totalFragments, 1);
+  assert.equal(memory.summary.totalImportBatches, 1);
+  assert.equal(memory.fragments[0].id, upload.fragmentId);
+  assert.equal(memory.fragments[0].original.storagePath, originalPath);
+  assert.equal(memory.page.fragmentsTruncated, false);
+  assert.equal(JSON.stringify(memory).includes('crc32c'), false);
+  assert.equal(JSON.stringify(memory).includes('hashes'), false);
 
   const fragment = await repository.getFragment(uid, upload.fragmentId);
   assert.deepEqual(fragment.source, source);
