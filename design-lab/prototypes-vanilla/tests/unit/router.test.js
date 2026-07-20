@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ROUTES } from '../../src/page-manifest.js';
 import { compileRoute, matchRoute } from '../../src/router.js';
+import { renderRoute } from '../../src/pages/render-route.js';
+import { createInitialState } from '../../src/store.js';
 
 test('dynamic route captures id without generating an invalid regex', () => {
   const route = compileRoute('#/world/city/:id', 'world-city-home');
@@ -14,6 +16,17 @@ test('every manifest route matches its page id and contract', () => {
     const match = matchRoute(route.samplePath);
     assert.equal(match.pageId, route.pageId, route.samplePath);
     assert.equal(match.contract.pageId, route.pageId, route.samplePath);
+  }
+});
+
+test('object sample routes resolve a real fixture object instead of an unavailable shell', () => {
+  const objectPages = new Set([
+    'world-city-home', 'world-receipt', 'world-capsule', 'world-scene-detail',
+    'world-place-detail', 'world-connection-detail', 'discover-detail', 'me-writing-detail',
+  ]);
+  for (const route of ROUTES.filter(({ pageId, samplePath }) => samplePath && objectPages.has(pageId))) {
+    const view = renderRoute(route.samplePath, createInitialState({ route: route.samplePath }));
+    assert.doesNotMatch(view.html, /authority-page--empty/, route.samplePath);
   }
 });
 
