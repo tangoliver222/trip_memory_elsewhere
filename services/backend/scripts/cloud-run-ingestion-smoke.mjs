@@ -196,14 +196,34 @@ try {
   console.log('storage_eventarc_routing_tasks=passed');
   console.log('document_ai_result=completed');
 } finally {
+  let cleanupError = null;
   if (admin && uid) {
-    await Promise.allSettled([
-      admin.storage.bucket(firebase.storageBucket).deleteFiles({ prefix: `users/${uid}/` }),
-      admin.db.recursiveDelete(admin.db.doc(`users/${uid}`)),
-      admin.auth.deleteUser(uid),
-    ]);
+    try {
+      await Promise.all([
+        admin.storage.bucket(firebase.storageBucket).deleteFiles({ prefix: `users/${uid}/` }),
+        admin.db.recursiveDelete(admin.db.doc(`users/${uid}`)),
+        admin.auth.deleteUser(uid),
+      ]);
+      const [owner, files] = await Promise.all([
+        admin.db.doc(`users/${uid}`).get(),
+        admin.storage.bucket(firebase.storageBucket).getFiles({ prefix: `users/${uid}/` }),
+      ]);
+      let authDeleted = false;
+      try {
+        await admin.auth.getUser(uid);
+      } catch (error) {
+        authDeleted = error?.code === 'auth/user-not-found';
+      }
+      if (owner.exists || files[0].length !== 0 || !authDeleted) {
+        throw new Error('Production smoke owner cleanup is incomplete.');
+      }
+      console.log('test_owner_cleanup=passed');
+    } catch (error) {
+      cleanupError = error;
+    }
   }
   await browser?.close().catch(() => {});
   if (admin) await deleteApp(admin.app).catch(() => {});
   if (vite.exitCode === null) vite.kill('SIGTERM');
+  if (cleanupError) throw cleanupError;
 }
