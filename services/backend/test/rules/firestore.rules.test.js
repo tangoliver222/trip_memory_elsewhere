@@ -152,9 +152,11 @@ test('Firestore rules isolate owner data and block client-derived writes', { ski
         'users/user_alpha/routingCohorts/routing_cohort_12345678',
         'users/user_alpha/budgetLedgers/budget_ledger_12345678',
         'users/user_alpha/budgetReservations/budget_reservation_12345678',
+        'users/user_alpha/elseQueryBudgets/2026-07-20',
         'users/user_alpha/capabilityExecutions/capability_execution_12345678',
         'users/user_alpha/capabilityResults/capability_result_12345678',
         'users/user_alpha/escalationRequests/escalation_request_12345678',
+        'elseQueryBudgets/2026-07-20',
       ];
       await environment.withSecurityRulesDisabled(async (context) => {
         for (const internalPath of internalPaths) {
