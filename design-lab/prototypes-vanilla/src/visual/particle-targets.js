@@ -283,21 +283,33 @@ function cityCluster(count, payload = {}) {
 /** 全部碎片：多城市星团。focusCity 时目标城市入中心，其余退远。 */
 function multiCityField(count, payload = {}) {
   const focus = payload.focusCity || null;
+  const domAnchors = payload.anchors?.length
+    ? payload.anchors.map((anchor, index) => ({
+      id: anchor.id,
+      slug: anchor.id || `fragment-${index}`,
+      weight: Math.max(0.4, Number(anchor.weight) || 1),
+      x: anchor.x,
+      y: anchor.y,
+      z: anchor.z ?? -4,
+      r: 0.7 + Math.min(1.5, Math.sqrt(Number(anchor.weight) || 1) * 0.35),
+    }))
+    : null;
   const slots = [
     { x: -2.6, y: 2.2, z: -6, r: 4.6 },
     { x: 5.4, y: 5.4, z: -30, r: 3.6 },
     { x: -6.6, y: -3.4, z: -22, r: 2.8 },
     { x: 3.4, y: -6.4, z: -12, r: 2.2 },
   ];
-  const source = Array.isArray(payload.clusters) && payload.clusters.length
+  const source = domAnchors || (Array.isArray(payload.clusters) && payload.clusters.length
     ? payload.clusters.filter(({ weight }) => Number(weight) > 0)
     : [
       { slug: 'bangkok', weight: 63 },
       { slug: 'tokyo', weight: 81 },
       { slug: 'chiang-mai', weight: 28 },
       { slug: 'unplaced', weight: 10 },
-    ];
+    ]);
   const clusters = source.map((item, index) => {
+    if (domAnchors) return item;
     const angle = index * 2.399963229728653;
     const ring = 4.2 + Math.floor(index / slots.length) * 2.4;
     const slot = slots[index] || {
@@ -361,7 +373,45 @@ function multiCityField(count, payload = {}) {
 
 /** 时间视角：垂直时间脊柱 + 日期节点 + 重复时间弧线。 */
 function timeline(count, payload = {}) {
-  const days = [...new Set(payload.days || [])].sort();
+  const anchored = payload.anchors?.length
+    ? payload.anchors.map((anchor) => ({ z: -3, weight: 1, ...anchor }))
+    : null;
+  if (anchored) {
+    const result = new Float32Array(count * 3);
+    const mainEnd = Math.floor(count * POOL_MAIN);
+    const haloEnd = Math.floor(count * POOL_HALO);
+    const trailEnd = Math.floor(mainEnd * 0.48);
+    for (let i = 0; i < trailEnd; i += 1) {
+      const segment = i % Math.max(1, anchored.length - 1);
+      const from = anchored[segment];
+      const to = anchored[Math.min(anchored.length - 1, segment + 1)] || from;
+      const t = seeded(i, 40);
+      const lift = Math.sin(t * Math.PI) * (segment % 2 ? -0.9 : 0.9);
+      write(result, i,
+        from.x + (to.x - from.x) * t + gaussian(i, 41) * 0.12,
+        from.y + (to.y - from.y) * t + lift,
+        from.z + (to.z - from.z) * t);
+    }
+    for (let i = trailEnd; i < mainEnd; i += 1) {
+      const node = anchored[i % anchored.length];
+      const radius = Math.pow(seeded(i, 42), 1.5) * (1.1 + node.weight * 0.25);
+      const theta = seeded(i, 43) * TAU;
+      write(result, i, node.x + Math.cos(theta) * radius, node.y + Math.sin(theta) * radius * 0.58, node.z + gaussian(i, 44) * 0.5);
+    }
+    const centerX = anchored.reduce((sum, node) => sum + node.x, 0) / anchored.length;
+    const centerY = anchored.reduce((sum, node) => sum + node.y, 0) / anchored.length;
+    for (let i = mainEnd; i < haloEnd; i += 1) {
+      write(result, i, centerX + (seeded(i, 45) - 0.5) * 18, centerY + (seeded(i, 46) - 0.5) * 22, -18 - seeded(i, 47) * 20);
+    }
+    for (let i = haloEnd; i < count; i += 1) {
+      const node = anchored[i % anchored.length];
+      write(result, i, node.x + gaussian(i, 48) * 0.18, node.y + gaussian(i, 49) * 0.18, node.z + 0.5);
+    }
+    return result;
+  }
+  const days = [...new Set((payload.days || []).map((day) => (
+    typeof day === 'string' ? day : (day.date || day.localDate || day.id)
+  )))].sort();
   if (days.length === 0) days.push('start', 'middle', 'end');
   const spineX = -4.6;
   const yTop = 7.5;
@@ -418,14 +468,16 @@ function placeMap(count, payload = {}) {
   const originLat = source.find((place) => Number.isFinite(place.lat ?? place.coordinates?.lat))?.lat
     ?? source.find((place) => Number.isFinite(place.coordinates?.lat))?.coordinates.lat
     ?? 13.752;
-  const anchors = source
-    .filter((place) => Number.isFinite(place.lng ?? place.coordinates?.lng) && Number.isFinite(place.lat ?? place.coordinates?.lat))
-    .map((place) => ({
-      x: ((place.lng ?? place.coordinates.lng) - originLng) * kx,
-      y: ((place.lat ?? place.coordinates.lat) - originLat) * ky,
-      weight: place.weight || place.visitCount || 1,
-      status: place.status,
-    }));
+  const anchors = payload.anchors?.length
+    ? payload.anchors.map((anchor) => ({ z: -4, weight: 1, status: 'confirmed', ...anchor }))
+    : source
+      .filter((place) => Number.isFinite(place.lng ?? place.coordinates?.lng) && Number.isFinite(place.lat ?? place.coordinates?.lat))
+      .map((place) => ({
+        x: ((place.lng ?? place.coordinates.lng) - originLng) * kx,
+        y: ((place.lat ?? place.coordinates.lat) - originLat) * ky,
+        weight: place.weight || place.visitCount || 1,
+        status: place.status,
+      }));
   if (anchors.length === 0) anchors.push({ x: 0, y: 0, weight: 1, status: 'unresolved' });
   const result = new Float32Array(count * 3);
   const mainEnd = Math.floor(count * POOL_MAIN);
@@ -450,7 +502,7 @@ function placeMap(count, payload = {}) {
       const spread = anchor.status === 'unresolved' ? 1.9 : 0.9;
       const radius = Math.pow(seeded(i, 56), 1.5) * spread * (0.8 + anchor.weight * 0.28);
       const theta = seeded(i, 57) * TAU;
-      write(result, i, anchor.x + Math.cos(theta) * radius, anchor.y + Math.sin(theta) * radius, -4 + (seeded(i, 58) - 0.5) * 2);
+      write(result, i, anchor.x + Math.cos(theta) * radius, anchor.y + Math.sin(theta) * radius, (anchor.z ?? -4) + (seeded(i, 58) - 0.5) * 2);
     }
     cursor += share;
   });
@@ -459,7 +511,7 @@ function placeMap(count, payload = {}) {
   }
   for (let i = haloEnd; i < count; i += 1) {
     const anchor = anchors[i % anchors.length];
-    write(result, i, anchor.x + gaussian(i, 62) * 0.3, anchor.y + gaussian(i, 63) * 0.3, -3);
+    write(result, i, anchor.x + gaussian(i, 62) * 0.3, anchor.y + gaussian(i, 63) * 0.3, (anchor.z ?? -4) + 1);
   }
   return result;
 }

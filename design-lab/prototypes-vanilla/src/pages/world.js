@@ -139,7 +139,13 @@ export function renderWorldHome() {
 export function renderWorldCities() {
   return {
     sceneMode: 'world',
-    scenePayload: { target: 'globe', indexMode: true },
+    scenePayload: {
+      target: 'globe',
+      indexMode: true,
+      itemCount: world.totalFragments,
+      items: cities.map((city) => ({ id: city.id, role: 'city', clusterId: city.id, status: city.status?.[0] })),
+      cities: cities.map((city) => ({ ...city, lat: city.coordinates.lat, lng: city.coordinates.lng })),
+    },
     html: `<main class="page cities-page" data-page-id="world-cities">
       <header class="compact-header">
         <div><p class="eyebrow">仍在同一个世界</p><h1>旅行城市</h1></div>
@@ -147,7 +153,7 @@ export function renderWorldCities() {
       </header>
       <div class="year-rail" role="tablist" aria-label="年份"><button class="is-active" type="button">全部</button><button type="button">2024</button><button type="button">2023</button></div>
       <section class="city-index">
-        ${cities.map((city, index) => `<article class="city-index__item" style="--city-order:${index}">
+        ${cities.map((city, index) => `<article class="city-index__item" style="--city-order:${index}" data-particle-anchor data-particle-id="${city.id}" data-particle-role="city" data-particle-weight="${Math.max(1, city.fragmentCount)}">
           <div class="city-index__media">
             ${city.representativeAsset
     ? `<img src="${city.representativeAsset}" alt="${escapeHtml(city.localizedName)} 代表原件">`

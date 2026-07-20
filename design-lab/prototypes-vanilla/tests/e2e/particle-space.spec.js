@@ -74,6 +74,13 @@ test('Fragment Field pan and zoom apply the same camera transform to particles',
   await nextFrame(page);
   const afterZoom = await page.evaluate(() => window.__ELSEWHERE_DEBUG__.snapshot().spatialTransform);
   expect(afterZoom.scale).toBeGreaterThan(1);
+
+  const beforeSearch = await page.evaluate(() => window.__ELSEWHERE_DEBUG__.snapshot());
+  await page.locator('[data-field-search]').fill('Common Grounds');
+  await nextFrame(page);
+  const afterSearch = await page.evaluate(() => window.__ELSEWHERE_DEBUG__.snapshot());
+  expect(afterSearch.dataSignature).not.toBe(beforeSearch.dataSignature);
+  expect(afterSearch.anchorCount).toBe(await page.locator('[data-field-node]').count());
 });
 
 test('route changes reuse one pool while current data and anchors change scene signature', async ({ page }) => {

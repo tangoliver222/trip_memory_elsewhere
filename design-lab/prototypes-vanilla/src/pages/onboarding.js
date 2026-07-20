@@ -56,7 +56,15 @@ export function renderOnboarding(pageId) {
     const ticket = fragments.find((item) => item.type === 'ticket');
     const photo = fragments.find((item) => item.evidencePreview.startsWith('河岸照片'));
     return {
-      sceneMode: 'connection', scenePayload: { target: 'relations', durationMinutes: 17 }, afterRender: null,
+      sceneMode: 'connection',
+      scenePayload: {
+        target: 'relations',
+        durationMinutes: 17,
+        itemCount: 2,
+        items: [ticket, photo].filter(Boolean).map((fragment) => ({ id: fragment.id, role: 'evidence', status: fragment.status })),
+        relations: [{ id: 'first-connection', status: 'suggested' }],
+      },
+      afterRender: null,
       html: `<main class="page first-connection" data-page-id="onboarding-first-connection">
         <header><p class="eyebrow">第一条可解释连接</p><h1>一张船票，十七分钟后的一张照片</h1><p>两份原件都靠近 Chao Phraya Ferry。连接来自时间与地点来源，不是情绪猜测。</p></header>
         <section class="first-connection__evidence">

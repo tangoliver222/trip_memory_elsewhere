@@ -69,7 +69,7 @@ export function createFieldController({ viewport, store, sceneManager, scenePayl
     });
   };
 
-  const render = () => {
+  const render = ({ layoutChanged = false } = {}) => {
     const nodes = viewport.querySelectorAll?.('[data-field-node]') || [];
     const byId = Object.fromEntries(state.layout.map((node) => [node.id, node]));
     nodes.forEach((element) => {
@@ -79,10 +79,12 @@ export function createFieldController({ viewport, store, sceneManager, scenePayl
       element.style.setProperty('--field-y', `${node.y + state.camera.y}px`);
       element.style.setProperty('--field-z', `${node.z}px`);
       element.style.setProperty('--field-scale', `${state.camera.scale}`);
+      element.dataset.particleDepth = String(-4 + node.z / 24);
       element.style.opacity = String(node.relevance);
       element.dataset.relevance = node.relevance === 1 ? 'focused' : 'background';
     });
     syncParticleCamera();
+    if (layoutChanged) sceneManager?.refreshPageSpace?.();
   };
 
   const publishCamera = () => store.dispatch({ type: 'SET_FIELD_CAMERA', camera: clone(state.camera) });
@@ -116,7 +118,7 @@ export function createFieldController({ viewport, store, sceneManager, scenePayl
     store.dispatch({ type: 'SET_FIELD_FILTERS', filters: { query: normalized } });
     if (!normalized) publishCamera();
     sceneManager?.setMode?.('fragment-field', { ...scenePayload, query: normalized, focusedIds: [...state.focusedIds] });
-    render();
+    render({ layoutChanged: true });
     return [...state.focusedIds];
   };
 
@@ -144,7 +146,7 @@ export function createFieldController({ viewport, store, sceneManager, scenePayl
     state.filters = clone(saved.filters);
     state.focusedIds = [...(saved.focusedIds || [])];
     state.layout = createFieldLayout(state.filters.query, { compact: Boolean(environment.innerWidth && environment.innerWidth <= 700) });
-    render();
+    render({ layoutChanged: true });
     publishCamera();
     store.dispatch({ type: 'SET_FIELD_FILTERS', filters: clone(state.filters) });
   };

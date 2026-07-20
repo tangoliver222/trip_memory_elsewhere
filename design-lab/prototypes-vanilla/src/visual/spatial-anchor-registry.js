@@ -8,6 +8,7 @@ const readAnchors = (elements, scrollDelta = { x: 0, y: 0 }) => [...elements].ma
     id: element.dataset?.particleId || `anchor-${index}`,
     role: element.dataset?.particleRole || 'fragment',
     weight: Number(element.dataset?.particleWeight) || 1,
+    depth: Number.isFinite(Number(element.dataset?.particleDepth)) ? Number(element.dataset.particleDepth) : null,
     viewportX: rect.left + rect.width / 2 + scrollDelta.x,
     viewportY: rect.top + rect.height / 2 + scrollDelta.y,
     left: rect.left + scrollDelta.x,

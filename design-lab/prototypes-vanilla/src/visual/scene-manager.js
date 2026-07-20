@@ -69,6 +69,7 @@ export class MemorySceneManager {
     this.spatialBaseScale = null;
     this.spatialLayoutRevision = 0;
     this.spatialAnchors = [];
+    this.spatialRegistry = null;
     this._boundFrame = (time) => this.renderFrame(time);
     this._boundVisibility = () => (this.environment.document?.hidden ? this.pause() : this.resume());
     this._boundContextLost = (event) => { event.preventDefault?.(); this.pause(); this.setStaticFallback(true); };
@@ -251,7 +252,7 @@ export class MemorySceneManager {
           id: anchor.id,
           role: anchor.role,
           weight: anchor.weight,
-          ...this.worldFromViewport(anchor.viewportX - canvasRect.left, anchor.viewportY - canvasRect.top, z),
+          ...this.worldFromViewport(anchor.viewportX - canvasRect.left, anchor.viewportY - canvasRect.top, anchor.depth ?? z),
         }));
         this.spatialAnchors = worldAnchors;
         const scene = compileParticleScene(mode, this.particles.count, { ...payload, anchors: worldAnchors });
@@ -260,6 +261,7 @@ export class MemorySceneManager {
       },
     });
     const cleanup = registry.bind({ elements, scrollRoot });
+    this.spatialRegistry = registry;
     this.spatialBindingCleanup = () => {
       cleanup();
       if (this.spatialBindingCleanup) this.spatialBindingCleanup = null;
@@ -271,6 +273,11 @@ export class MemorySceneManager {
     this.spatialBindingCleanup?.();
     this.spatialBindingCleanup = null;
     this.spatialAnchors = [];
+    this.spatialRegistry = null;
+  }
+
+  refreshPageSpace() {
+    this.spatialRegistry?.flush?.('layout');
   }
 
   /** 把点云地球对齐到页面内的 stage 元素（位置 + 缩放），DOM 与粒子共享坐标系。 */

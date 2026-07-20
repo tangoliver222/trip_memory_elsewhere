@@ -102,8 +102,17 @@ export function renderCapsule(routeId = 'bangkok') {
   const city = getCityByRouteId(routeId) || getCityByRouteId('bangkok');
   const ari = fragments.filter((item) => item.placeId === 'place-common-grounds');
   const river = fragments.filter((item) => item.placeId === 'place-chao-phraya-ferry');
+  const capsuleFragments = [...ari, ...river];
   return {
-    sceneMode: 'capsule', scenePayload: { target: 'city-field', chapters: 3, cityId: city.id }, afterRender: capsuleAfterRender,
+    sceneMode: 'capsule',
+    scenePayload: {
+      target: 'city-field',
+      chapters: 3,
+      cityId: city.id,
+      itemCount: capsuleFragments.length,
+      items: capsuleFragments.map((fragment) => ({ id: fragment.id, role: 'fragment', clusterId: fragment.placeId, status: fragment.status })),
+    },
+    afterRender: capsuleAfterRender,
     html: `<main class="capsule-page" data-page-id="world-capsule">
       <header class="capsule-cover"><div class="capsule-cover__image"><img src="/assets/bangkok-photo-03-old-town.jpg" alt="Bangkok Old Town 原件"></div><div class="capsule-cover__copy capsule-reveal"><p>ELSEWHERE CITY CAPSULE · 001</p><h1>Bangkok</h1><span>12—22 OCT 2024</span><blockquote>“${escapeHtml(userNotes.find((item) => item.id === 'writing-city-reflection').text)}”</blockquote></div></header>
       <section class="capsule-chapter capsule-chapter--ari">
@@ -127,7 +136,15 @@ export function renderSceneDetail(sceneId) {
   const originals = getSceneFragments(moment.id);
   const place = indexes.placesById[moment.placeId];
   return {
-    sceneMode: 'connection', scenePayload: { target: 'timeline', sceneId: moment.id }, afterRender: null,
+    sceneMode: 'connection',
+    scenePayload: {
+      target: 'timeline',
+      sceneId: moment.id,
+      itemCount: originals.length,
+      items: originals.map((fragment) => ({ id: fragment.id, role: 'evidence', clusterId: moment.id, status: fragment.status })),
+      days: [moment.date],
+    },
+    afterRender: null,
     html: `<main class="page authority-page moment-detail" data-page-id="world-scene-detail">
       <section class="moment-evidence" data-authority-evidence>${originals.map((item, index) => `<div class="moment-evidence__item"><span>${escapeHtml(item.capturedAt.slice(11,16))}</span>${renderOriginalTile(item, { interactive: true, index, label: item.evidencePreview })}</div>`).join('')}${originals.length > 1 ? renderTimeBridge({ from: originals[0].capturedAt.slice(11,16), to: originals[1].capturedAt.slice(11,16), duration: '17 分钟' }) : ''}</section>
       <header class="authority-header"><p class="eyebrow">一次具体事件 · ${escapeHtml(moment.date)}</p><h1>${escapeHtml(moment.label)}</h1><p>${escapeHtml(moment.observation)}</p></header>
@@ -141,11 +158,19 @@ export function renderPlaceDetail(placeId) {
   const place = indexes.placesById[placeId] || places[0];
   const visits = getPlaceScenes(place.id);
   return {
-    sceneMode: 'city', scenePayload: { target: 'map', placeId: place.id }, afterRender: null,
+    sceneMode: 'city',
+    scenePayload: {
+      target: 'map',
+      placeId: place.id,
+      itemCount: visits.length,
+      items: visits.map((visit) => ({ id: visit.id, role: 'scene', clusterId: place.id, status: visit.status })),
+      places: [place],
+    },
+    afterRender: null,
     html: `<main class="page authority-page place-detail" data-page-id="world-place-detail">
-      <div class="place-anchor" aria-hidden="true"><i></i><i></i><i></i><span>${escapeHtml(place.visitCount ?? '?')}</span></div>
+      <div class="place-anchor" data-particle-anchor data-particle-id="${place.id}" data-particle-role="place" data-particle-weight="${Math.max(1, place.visitCount || visits.length)}" aria-hidden="true"><i></i><i></i><i></i><span>${escapeHtml(place.visitCount ?? '?')}</span></div>
       <header class="authority-header"><p class="eyebrow">${escapeHtml(place.area)} · ${escapeHtml(place.dateRange)}</p><h1>${escapeHtml(place.name)}</h1><p>${escapeHtml(place.fact)}</p></header>
-      <section class="visit-list"><h2>${place.visitCount === 3 ? '三次确认到访' : `${place.visitCount || visits.length} 次出现`}</h2>${visits.map((visit) => `<button type="button" data-action="navigate" data-route="${getAuthorityLink('scene', visit.id)}"><span>${escapeHtml(visit.date.replace('2024-', '').replace('-', ' / '))}</span><strong>${escapeHtml(visit.label)}</strong><small>${escapeHtml(visit.timeRange)}</small></button>`).join('')}</section>
+      <section class="visit-list"><h2>${place.visitCount === 3 ? '三次确认到访' : `${place.visitCount || visits.length} 次出现`}</h2>${visits.map((visit) => `<button type="button" data-particle-anchor data-particle-id="${visit.id}" data-particle-role="scene" data-particle-weight="1" data-action="navigate" data-route="${getAuthorityLink('scene', visit.id)}"><span>${escapeHtml(visit.date.replace('2024-', '').replace('-', ' / '))}</span><strong>${escapeHtml(visit.label)}</strong><small>${escapeHtml(visit.timeRange)}</small></button>`).join('')}</section>
       <p class="authority-source-note">这里只汇总已有原件和你确认的地点关系；候选内容仍会标记为待确认。</p>
       ${primary('在时间中查看', '#/world/city/bangkok/explore?view=time')}
     </main>`,
@@ -159,7 +184,15 @@ export function renderConnectionDetail(connectionId) {
   const humanType = { same_visit: '可能属于同一次到访', repeated_place: '同一地点反复出现', temporal_and_textual_near: '时间与文字语境靠近', place_candidate: '地点候选' }[connection.type];
   const gap = connection.uncertainty || '当前来源没有明显缺口。';
   return {
-    sceneMode: 'connection', scenePayload: { target: 'relations', state: connection.status }, afterRender: null,
+    sceneMode: 'connection',
+    scenePayload: {
+      target: 'relations',
+      state: connection.status,
+      itemCount: originals.length,
+      items: originals.map((fragment) => ({ id: fragment.id, role: 'evidence', status: fragment.status })),
+      relations: [connection],
+    },
+    afterRender: null,
     html: `<main class="page authority-page connection-detail" data-page-id="world-connection-detail">
       <section class="connection-originals" data-authority-evidence>${originals.length ? originals.map((item) => renderEvidenceCard(item, { title: item.evidencePreview, detail: item.placeCandidate })).join('') : '<div class="missing-original">原件尚未加入当前演示包</div>'}</section>
       ${renderRelationThread({ label: humanType, evidence: connection.evidence, uncertainty: gap, state: connection.status })}

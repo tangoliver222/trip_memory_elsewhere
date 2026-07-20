@@ -74,7 +74,7 @@ export function renderFragmentField(state) {
         ${fragments.map((fragment, index) => {
           const node = positions[fragment.id];
           const relevant = !query || node.relevance === 1;
-          return `<button id="fragment-focus-${index}" class="field-node field-node--${fragment.type}" style="--field-x:${node.x + (state.field?.camera?.x || 0)}px;--field-y:${node.y + (state.field?.camera?.y || 0)}px;--field-z:${node.z}px;--field-scale:${state.field?.camera?.scale || 1};--node-index:${index};opacity:${node.relevance}" type="button" data-field-node data-particle-anchor data-particle-id="${fragment.id}" data-particle-role="fragment" data-particle-weight="1" data-relevance="${relevant ? 'focused' : 'background'}" data-action="open-lens" data-fragment-id="${fragment.id}">
+          return `<button id="fragment-focus-${index}" class="field-node field-node--${fragment.type}" style="--field-x:${node.x + (state.field?.camera?.x || 0)}px;--field-y:${node.y + (state.field?.camera?.y || 0)}px;--field-z:${node.z}px;--field-scale:${state.field?.camera?.scale || 1};--node-index:${index};opacity:${node.relevance}" type="button" data-field-node data-particle-anchor data-particle-id="${fragment.id}" data-particle-role="fragment" data-particle-weight="1" data-particle-depth="${-4 + node.z / 24}" data-relevance="${relevant ? 'focused' : 'background'}" data-action="open-lens" data-fragment-id="${fragment.id}">
             ${renderMedia(fragment, { className: 'field-node__media' })}
             <span class="field-node__type">${typeLabel[fragment.type] || fragment.type}</span>
             <span class="field-node__label">${escapeHtml(fragment.evidencePreview)}</span>
@@ -148,15 +148,22 @@ export function renderReceiptPage(batchId) {
     };
   }
   return {
-    sceneMode: 'import', scenePayload: { target: 'city-field', distribution: batch.result }, afterRender: null,
+    sceneMode: 'import',
+    scenePayload: {
+      target: 'city-field',
+      distribution: batch.result,
+      itemCount: batch.itemCount,
+      items: Object.entries(batch.result).map(([id, value]) => ({ id: `receipt-${id}`, role: id, status: value > 0 ? 'present' : 'empty' })),
+    },
+    afterRender: null,
     html: `<main class="page receipt-page" data-page-id="world-receipt">
       <header><p class="eyebrow">这批碎片已经改变了世界</p><h1>整理回执</h1><p>${batch.itemCount} 个原件已保存，并分流到城市、地点、连接与待判断项。</p></header>
       <section class="receipt-distribution" aria-label="导入结果">
-        <div class="receipt-core" aria-label="${batch.result.saved} 个原件"><strong>${batch.result.saved}</strong><span>个原件</span></div>
-        <div class="receipt-stream receipt-stream--city" aria-label="${batch.result.cities} 座城市"><i></i><strong>${batch.result.cities}</strong><span>座城市</span></div>
-        <div class="receipt-stream receipt-stream--place" aria-label="${batch.result.places} 个地点"><i></i><strong>${batch.result.places}</strong><span>个地点</span></div>
-        <div class="receipt-stream receipt-stream--relation" aria-label="${batch.result.connections} 条新连接"><i></i><strong>${batch.result.connections}</strong><span>条新连接</span></div>
-        <div class="receipt-stream receipt-stream--review" aria-label="${batch.result.needsReview} 项待判断"><i></i><strong>${batch.result.needsReview}</strong><span>项待判断</span></div>
+        <div class="receipt-core" data-particle-anchor data-particle-id="receipt-saved" data-particle-role="batch" data-particle-weight="${Math.max(1, batch.result.saved)}" aria-label="${batch.result.saved} 个原件"><strong>${batch.result.saved}</strong><span>个原件</span></div>
+        <div class="receipt-stream receipt-stream--city" data-particle-anchor data-particle-id="receipt-cities" data-particle-role="city" data-particle-weight="${Math.max(1, batch.result.cities)}" aria-label="${batch.result.cities} 座城市"><i></i><strong>${batch.result.cities}</strong><span>座城市</span></div>
+        <div class="receipt-stream receipt-stream--place" data-particle-anchor data-particle-id="receipt-places" data-particle-role="place" data-particle-weight="${Math.max(1, batch.result.places)}" aria-label="${batch.result.places} 个地点"><i></i><strong>${batch.result.places}</strong><span>个地点</span></div>
+        <div class="receipt-stream receipt-stream--relation" data-particle-anchor data-particle-id="receipt-connections" data-particle-role="relation" data-particle-weight="${Math.max(1, batch.result.connections)}" aria-label="${batch.result.connections} 条新连接"><i></i><strong>${batch.result.connections}</strong><span>条新连接</span></div>
+        <div class="receipt-stream receipt-stream--review" data-particle-anchor data-particle-id="receipt-review" data-particle-role="unresolved" data-particle-weight="${Math.max(1, batch.result.needsReview)}" aria-label="${batch.result.needsReview} 项待判断"><i></i><strong>${batch.result.needsReview}</strong><span>项待判断</span></div>
       </section>
       <p class="receipt-truth">${batch.result.failed === 0 ? '没有终态失败项。' : `${batch.result.failed} 个原件处理失败。`} 待判断内容不会被当作已确认事实。</p>
       ${renderProcessingTrace(batch.processingTrace)}
@@ -168,10 +175,16 @@ export function renderReceiptPage(batchId) {
 export function renderInboxPage() {
   const review = reviewQueue[0];
   return {
-    sceneMode: 'quiet-tool', scenePayload: { target: 'quiet' }, afterRender: null,
+    sceneMode: 'quiet-tool',
+    scenePayload: {
+      target: 'inboxDecision',
+      itemCount: 2,
+      items: [{ id: 'review-pending', role: 'evidence', status: 'unresolved' }, { id: 'review-reference', role: 'evidence', status: 'confirmed' }],
+    },
+    afterRender: null,
     html: `<main class="page inbox-page" data-page-id="world-inbox">
       <header class="inbox-header"><p class="eyebrow">收件箱 · 一次只做一个判断</p><h1>这张交通截图<br>是否也靠近<br>Chao Phraya Ferry？</h1><p>截图文字包含 ferry，但缺少可确认的具体码头。你的选择会改变地点连接，不会修改原件。</p></header>
-      <section class="review-comparison"><div class="review-source review-source--pending"><span>22 OCT · 18:04</span><strong>交通截图</strong><small>具体码头待确认</small></div><div class="review-link" aria-hidden="true"><i></i><span class="review-link__question">?</span><i></i></div><div class="review-source"><img src="/assets/bangkok-photo-02-riverside.jpg" alt="已确认的河岸原件"><span>18 OCT · 17:59</span><strong>Chao Phraya Ferry</strong></div></section>
+      <section class="review-comparison"><div class="review-source review-source--pending" data-particle-anchor data-particle-id="review-pending" data-particle-role="evidence" data-particle-weight="1"><span>22 OCT · 18:04</span><strong>交通截图</strong><small>具体码头待确认</small></div><div class="review-link" aria-hidden="true"><i></i><span class="review-link__question">?</span><i></i></div><div class="review-source" data-particle-anchor data-particle-id="review-reference" data-particle-role="evidence" data-particle-weight="1"><img src="/assets/bangkok-photo-02-riverside.jpg" alt="已确认的河岸原件"><span>18 OCT · 17:59</span><strong>Chao Phraya Ferry</strong></div></section>
       <div class="review-choices">${review.choices.map((choice, index) => `<button type="button" data-review-choice data-action="review-choice" data-value="${index}">${escapeHtml(choice)}</button>`).join('')}</div>
       <section class="inbox-queues"><div class="inbox-queue-item"><span>正在整理</span><strong>${escapeHtml(processingItems[0].label)}</strong></div><div class="inbox-queue-item"><span>需要原件</span><strong>${escapeHtml(exceptions[0].label)}</strong></div></section>
       ${primary('回到全部碎片', '#/world/fragments')}
