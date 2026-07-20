@@ -140,6 +140,54 @@ Backend verification after release: 627 ordinary tests with 618 pass, 9 expected
 skips and 0 failures; Firebase Emulator suite 71/71. Frontend unit tests are 90/90 and the production
 build remains successful.
 
+## Data-truth and spatial-coherence frontend release
+
+The recording surfaces now use one route-scoped memory view for content, copy, semantic anchors and particle
+payloads. Empty data produces an unformed World with no invented cities or totals. Small, current and dense
+fixtures produce different city counts, visible fragment anchors, particle density, relationship paths and copy.
+Unknown city or authority ids render an explicit unavailable state instead of borrowing Bangkok data.
+
+The World globe now uses a perspective-correct fit inside a dedicated DOM visual region. OrbitControls no longer
+recentres the globe after layout, zoom is bounded to a narrow range, and projected city pins remain attached to the
+same Three.js group. Page scroll, field pan/zoom, route transitions, Fragment Lens and Else overlays continue to
+move or rebind the shared particle pool instead of creating a fixed background scene.
+
+The same release also restores the animated Else IP as a single movable instance, compacts City Capsule and the
+three Explore authority views, places object identity before supporting evidence on detail pages, verifies every
+rendered button has a supported action, and prevents sample URLs from pointing at missing authority objects.
+
+Fresh local and public verification:
+
+```text
+npm test
+146 passed
+
+npx playwright test routes/data-scenarios/particle-space/interactions/authority-layout/performance \
+  --project=mobile-390
+54 passed
+
+npx playwright test data-scenarios/particle-space/authority-layout/interactions \
+  --project=mobile-430
+24 passed
+
+npx playwright test tests/e2e/visual-all.spec.js --project=mobile-390
+1 passed; all routed top and mid stable frames regenerated
+
+npm run build:firebase-hosting
+83 modules transformed; Hosting package prepared
+
+npx firebase-tools deploy --project elsewhere-memory-tyx-2026 \
+  --config firebase/firebase.json --only hosting
+Deploy complete: https://elsewhere-memory-tyx-2026.web.app
+
+ELSEWHERE_PUBLIC_URL=https://elsewhere-memory-tyx-2026.web.app \
+  npx playwright test --config playwright.public.config.js
+3 passed
+```
+
+The App Check debug token used by the public smoke test is injected only into the test browser from a local ignored
+environment file. It is not compiled into the Hosting bundle.
+
 ## Submission collector status
 
 The official `vibe-submission-collector` rendered all numbered documents and technical evidence. The remaining
