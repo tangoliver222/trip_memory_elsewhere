@@ -476,3 +476,93 @@ test('default fake roots construct and call no paid Google capability adapter', 
     documentAiCalled: 0,
   });
 });
+
+test('production Else constructs Vertex and budget adapters only in the API root', async (t) => {
+  const calls = [];
+  const client = { models: { async generateContent() { throw new Error('not reached'); } } };
+  const reader = { async readOwnerSnapshot() { throw new Error('not reached'); } };
+  const loader = { async load() { throw new Error('not reached'); } };
+  const budget = { async reserve() { throw new Error('not reached'); } };
+  const provider = { async answer() { throw new Error('not reached'); } };
+  const service = { async ask() { throw new Error('not reached'); } };
+  const app = createRuntimeApp({
+    ...appConfig,
+    serviceMode: 'api',
+    firebaseProjectId: 'elsewhere-production',
+    allowedAppIds: ['elsewhere-web-test'],
+    storageBuckets: [],
+    elseQuery: {
+      vertex: {
+        projectId: 'elsewhere-production',
+        location: 'global',
+        model: 'gemini-2.5-flash',
+      },
+      budget: { ownerDailyLimit: 10, projectDailyLimit: 100 },
+    },
+  }, {
+    firebaseFactory() {
+      return {
+        db: {},
+        auth: { async verifyIdToken() { return { uid: 'user_alpha' }; } },
+        appCheck: { async verifyToken() { return { appId: 'elsewhere-web-test' }; } },
+        storage: { bucket() { return {}; } },
+      };
+    },
+    repositoryFactory() { return createMemoryRepository(); },
+    memorySnapshotReaderFactory(input) {
+      calls.push(['reader', input]);
+      return reader;
+    },
+    memorySnapshotLoaderFactory(input) {
+      calls.push(['loader', input]);
+      return loader;
+    },
+    elseBudgetFactory(input) {
+      calls.push(['budget', input]);
+      return budget;
+    },
+    geminiClientFactory(input) {
+      calls.push(['vertex', input]);
+      return client;
+    },
+    elseProviderFactory(input) {
+      calls.push(['provider', input]);
+      return provider;
+    },
+    elseQueryServiceFactory(input) {
+      calls.push(['service', input]);
+      return service;
+    },
+  });
+  t.after(() => app.close());
+
+  assert.deepEqual(calls.map(([name]) => name), [
+    'reader', 'loader', 'budget', 'vertex', 'provider', 'service',
+  ]);
+  assert.deepEqual(calls.find(([name]) => name === 'vertex')[1], {
+    vertexai: true,
+    project: 'elsewhere-production',
+    location: 'global',
+  });
+  assert.deepEqual(calls.find(([name]) => name === 'budget')[1], {
+    db: {}, ownerDailyLimit: 10, projectDailyLimit: 100,
+  });
+  assert.strictEqual(calls.find(([name]) => name === 'provider')[1].client, client);
+  assert.equal(calls.find(([name]) => name === 'provider')[1].model, 'gemini-2.5-flash');
+  assert.strictEqual(calls.find(([name]) => name === 'service')[1].memorySnapshotLoader, loader);
+  assert.strictEqual(calls.find(([name]) => name === 'service')[1].budgetGate, budget);
+  assert.strictEqual(calls.find(([name]) => name === 'service')[1].provider, provider);
+});
+
+test('Google Cloud deployment grants Vertex only to API and uploads no API key', async () => {
+  const source = await readFile(
+    new URL('../../../../scripts/deploy-google-cloud-services.sh', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /aiplatform\.googleapis\.com/);
+  assert.match(source, /grant_project_role "serviceAccount:\$\{API_ACCOUNT\}" roles\/aiplatform\.user/);
+  assert.equal((source.match(/roles\/aiplatform\.user/g) ?? []).length, 1);
+  assert.match(source, /ELSE_QUERY_ENABLED=true/);
+  assert.match(source, /ELSE_MODEL_FAST=gemini-2\.5-flash/);
+  assert.equal(source.includes('GEMINI_API_KEY'), false);
+});

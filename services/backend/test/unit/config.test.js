@@ -22,6 +22,46 @@ test('loadConfig returns safe local defaults', () => {
     cleanupMarginMs: 30000,
   });
   assert.equal(Object.isFrozen(result.processing), true);
+  assert.equal(result.elseQuery, null);
+});
+
+test('production Else requires one Vertex-only API boundary with bounded budgets', () => {
+  const base = {
+    NODE_ENV: 'production',
+    ELSEWHERE_SERVICE_MODE: 'api',
+    FIREBASE_PROJECT_ID: 'elsewhere-production',
+    ELSEWHERE_ALLOWED_APP_IDS: 'elsewhere-web',
+    ELSE_QUERY_ENABLED: 'true',
+    GOOGLE_GENAI_USE_VERTEXAI: 'true',
+    GOOGLE_CLOUD_PROJECT: 'elsewhere-production',
+    GOOGLE_CLOUD_LOCATION: 'global',
+    ELSE_MODEL_FAST: 'gemini-2.5-flash',
+    ELSE_QUERY_OWNER_DAILY_LIMIT: '10',
+    ELSE_QUERY_PROJECT_DAILY_LIMIT: '100',
+  };
+  const result = loadConfig(base);
+  assert.deepEqual(result.elseQuery, {
+    vertex: {
+      projectId: 'elsewhere-production',
+      location: 'global',
+      model: 'gemini-2.5-flash',
+    },
+    budget: { ownerDailyLimit: 10, projectDailyLimit: 100 },
+  });
+  assert.equal(Object.isFrozen(result.elseQuery), true);
+  assert.equal(Object.isFrozen(result.elseQuery.vertex), true);
+  assert.equal(result.apiKey, '');
+
+  for (const overrides of [
+    { GOOGLE_GENAI_USE_VERTEXAI: 'false' },
+    { GOOGLE_CLOUD_PROJECT: 'another-project' },
+    { GOOGLE_CLOUD_LOCATION: '' },
+    { ELSE_MODEL_FAST: '' },
+    { GEMINI_API_KEY: 'must-not-enter-production' },
+    { ELSEWHERE_SERVICE_MODE: 'ingestion', ELSEWHERE_STORAGE_BUCKETS: 'bucket.example' },
+  ]) {
+    assert.throws(() => loadConfig({ ...base, ...overrides }), /Invalid backend configuration/);
+  }
 });
 
 test('loadConfig rejects an invalid port before startup', () => {
