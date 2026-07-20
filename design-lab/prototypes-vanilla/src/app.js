@@ -164,7 +164,9 @@ function updateShell() {
   const nextSceneKey = `${route.path}|${desiredMode}|${topOverlay}|${state.else.state}|${state.field.filters.query}`;
   const sceneChanged = sceneKey !== nextSceneKey;
   if (sceneChanged && sceneManager.debug().particlePoolId) {
-    const isFirstWorld = route.pageId === 'world-home' && !window.sessionStorage.getItem('elsewhere:world-formed');
+    const isFirstWorld = route.pageId === 'world-home'
+      && desiredMode === view.sceneMode
+      && !window.sessionStorage.getItem('elsewhere:world-formed');
     const mode = isFirstWorld ? 'world-intro' : desiredMode;
     const transition = route.pageId === 'world-city-home' && window.sessionStorage.getItem('elsewhere:previous-page') === 'world-home'
       ? 'globeToCity'
@@ -201,7 +203,9 @@ function updateShell() {
       role: element.dataset.particleRole,
       status: element.dataset.particleStatus,
     }));
-    const firstWorld = route.pageId === 'world-home' && !window.sessionStorage.getItem('elsewhere:world-formed');
+    const firstWorld = route.pageId === 'world-home'
+      && desiredMode === view.sceneMode
+      && !window.sessionStorage.getItem('elsewhere:world-formed');
     spatialCleanup = sceneManager.bindPageSpace({
       elements: spatialElements,
       scrollRoot: spatialRoot?.querySelector?.('[data-particle-scroll-root]') || (overlayLayer || pageLayer),

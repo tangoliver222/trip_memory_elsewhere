@@ -708,6 +708,32 @@ function elseOrb(count, payload = {}) {
   return result;
 }
 
+/** Fragment Lens: particles gather around the extracted original, while the rest recedes. */
+function lensField(count, payload = {}) {
+  const focus = payload.anchors?.[0] ? { z: -1.5, ...payload.anchors[0] } : { x: 0, y: 0, z: -1.5 };
+  const result = new Float32Array(count * 3);
+  const mainEnd = Math.floor(count * POOL_MAIN);
+  const haloEnd = Math.floor(count * POOL_HALO);
+  for (let i = 0; i < mainEnd; i += 1) {
+    const theta = seeded(i, 122) * TAU;
+    const radius = 1.1 + Math.pow(seeded(i, 123), 1.7) * 4.2;
+    write(result, i,
+      focus.x + Math.cos(theta) * radius,
+      focus.y + Math.sin(theta) * radius * 0.72,
+      focus.z - seeded(i, 124) * 3.2);
+  }
+  for (let i = mainEnd; i < haloEnd; i += 1) {
+    write(result, i,
+      focus.x + (seeded(i, 125) - 0.5) * 18,
+      focus.y + (seeded(i, 126) - 0.5) * 22,
+      focus.z - 18 - seeded(i, 127) * 20);
+  }
+  for (let i = haloEnd; i < count; i += 1) {
+    write(result, i, focus.x + gaussian(i, 128) * 0.42, focus.y + gaussian(i, 129) * 0.42, focus.z + 0.5);
+  }
+  return result;
+}
+
 function capsuleDust(count) {
   const result = new Float32Array(count * 3);
   for (let i = 0; i < count; i += 1) {
@@ -746,5 +772,6 @@ export function createSemanticTarget(mode, count, payload = {}) {
   if (mode === 'inbox' || mode === 'inboxDecision') return inboxDecision(count, payload);
   if (mode === 'import' || mode === 'importBatch') return importBatch(count, payload);
   if (mode === 'else') return elseOrb(count, payload);
+  if (mode === 'lens') return lensField(count, payload);
   return quiet(count);
 }

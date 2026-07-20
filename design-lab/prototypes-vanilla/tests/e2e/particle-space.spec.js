@@ -106,3 +106,27 @@ test('route changes reuse one pool while current data and anchors change scene s
   expect(city.anchorCount).toBeGreaterThan(0);
   expect(discovery.anchorCount).toBeGreaterThan(0);
 });
+
+test('Lens and Else rebind the shared particle world to their overlay sources', async ({ page }) => {
+  await page.goto('/#/world/fragments');
+  await waitForParticles(page);
+  await page.locator('[data-field-node]').first().click();
+  await page.waitForSelector('.fragment-lens');
+  await nextFrame(page);
+  const lens = await page.evaluate(() => window.__ELSEWHERE_DEBUG__.snapshot());
+  expect(lens.mode).toBe('lens');
+  expect(lens.anchorCount).toBe(1);
+  expect(lens.dataSignature).toContain('"mode":"lens"');
+
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.goto('/#/world');
+  await waitForParticles(page);
+  await page.locator('[data-else-orb]').click();
+  await page.waitForSelector('.else-drawer');
+  await page.waitForFunction(() => window.__ELSEWHERE_DEBUG__.snapshot().mode === 'else');
+  await nextFrame(page);
+  const elseScene = await page.evaluate(() => window.__ELSEWHERE_DEBUG__.snapshot());
+  expect(elseScene.mode).toBe('else');
+  expect(elseScene.anchorCount).toBeGreaterThanOrEqual(1);
+  expect(elseScene.dataSignature).toContain('"mode":"else"');
+});
