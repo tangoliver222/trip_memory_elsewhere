@@ -70,3 +70,24 @@ test('same cluster ratios with different totals still produce different visible 
   assert.ok(large.activeCount > small.activeCount);
   assert.notEqual(large.dataSignature, small.dataSignature);
 });
+
+const averageX = (positions) => {
+  let sum = 0;
+  for (let index = 0; index < positions.length; index += 3) sum += positions[index];
+  return sum / (positions.length / 3);
+};
+
+for (const mode of ['multiCityField', 'timeline', 'placeMap']) {
+  test(`${mode} geometry follows rendered DOM anchors`, () => {
+    const left = compileParticleScene(mode, 300, {
+      itemCount: 2,
+      anchors: [anchor('a', -9, -2), anchor('b', -5, 3)],
+    });
+    const right = compileParticleScene(mode, 300, {
+      itemCount: 2,
+      anchors: [anchor('a', 5, -2), anchor('b', 9, 3)],
+    });
+
+    assert.ok(averageX(right.positions) - averageX(left.positions) > 6);
+  });
+}
