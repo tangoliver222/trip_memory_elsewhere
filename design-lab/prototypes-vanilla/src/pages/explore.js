@@ -49,13 +49,41 @@ const dateRange = (members) => {
   return `${shortDate(dates[0])}—${shortDate(dates.at(-1))}`;
 };
 
+function polarPositions(count, { radiusX = 30, radiusY = 32, centerX = 50, centerY = 50 } = {}) {
+  if (count <= 1) return [{ x: centerX, y: centerY }];
+  return Array.from({ length: count }, (_, index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / count;
+    const ring = index % 2 === 0 ? 1 : 0.82;
+    return {
+      x: centerX + Math.cos(angle) * radiusX * ring,
+      y: centerY + Math.sin(angle) * radiusY * ring,
+    };
+  });
+}
+
+function placePositions(items) {
+  const hasCoordinates = items.every(({ coordinates }) => Number.isFinite(coordinates?.lat) && Number.isFinite(coordinates?.lng));
+  if (!hasCoordinates) return polarPositions(items.length, { radiusX: 28, radiusY: 34 });
+  const latitudes = items.map(({ coordinates }) => coordinates.lat);
+  const longitudes = items.map(({ coordinates }) => coordinates.lng);
+  const latMin = Math.min(...latitudes);
+  const latMax = Math.max(...latitudes);
+  const lngMin = Math.min(...longitudes);
+  const lngMax = Math.max(...longitudes);
+  if (latMax === latMin && lngMax === lngMin) return polarPositions(items.length, { radiusX: 28, radiusY: 34 });
+  return items.map(({ coordinates }) => ({
+    x: 22 + ((coordinates.lng - lngMin) / Math.max(0.000001, lngMax - lngMin)) * 56,
+    y: 18 + ((latMax - coordinates.lat) / Math.max(0.000001, latMax - latMin)) * 64,
+  }));
+}
+
 function renderTimeView(context) {
   if (!context.scenes.length) return `<section class="explore-empty"><h2>${escapeHtml(context.city.name)} 还没有可探索的时间结构</h2><p>只有形成可回溯的到访或事件后，时间骨架才会出现。</p></section>`;
   const dates = [...new Set(context.scenes.map(({ date }) => date).filter(Boolean))].sort();
   return `<section class="time-explore">
     <div class="date-rail" aria-label="当前城市日期轨">${dates.map((date, index) => `<span>${escapeHtml(shortDate(date))}</span>${index < dates.length - 1 ? '<i></i>' : ''}`).join('')}</div>
-    <div class="time-moments">
-      ${context.scenes.map((moment, index) => `<button type="button" class="time-moment" data-particle-anchor data-particle-id="${moment.id}" data-particle-role="scene" data-particle-weight="${Math.max(1, moment.fragmentIds?.length || 1)}" data-action="navigate" data-route="${getAuthorityLink('scene', moment.id)}" style="--moment-order:${index}">
+    <div class="time-moments" style="--timeline-height:${Math.max(520, 128 + context.scenes.length * 92)}px">
+      ${context.scenes.map((moment, index) => `<button type="button" class="time-moment" data-particle-anchor data-particle-id="${moment.id}" data-particle-role="scene" data-particle-weight="${Math.max(1, moment.fragmentIds?.length || 1)}" data-action="navigate" data-route="${getAuthorityLink('scene', moment.id)}" style="--moment-order:${index};--moment-x:${index % 2 === 0 ? '4px' : 'calc(100% - 130px)'};--moment-y:${22 + index * 88}px">
         <span>${escapeHtml(moment.timeRange)}</span><strong>${escapeHtml(moment.label)}</strong><small>${escapeHtml(moment.observation)}</small>
         ${moment.primaryAsset ? `<img src="${moment.primaryAsset}" alt="">` : '<i class="missing-dot"></i>'}
       </button>`).join('')}
@@ -67,10 +95,11 @@ function renderPlaceView(context) {
   if (!context.places.length) return `<section class="explore-empty"><h2>${escapeHtml(context.city.name)} 还没有可确认的地点</h2><p>没有来源支撑的位置不会被补进地图。</p></section>`;
   const confirmed = context.places.filter(({ status }) => ['confirmed', 'accepted_by_user'].includes(status)).length;
   const open = context.places.length - confirmed;
+  const positions = placePositions(context.places);
   return `<section class="place-explore">
     <div class="memory-map" aria-label="${escapeHtml(context.city.name)} 记忆地点图">
       <div class="river-line" aria-hidden="true"></div>
-      ${context.places.map((place, index) => `<button class="map-place map-place--${index + 1}" type="button" data-particle-anchor data-particle-id="${place.id}" data-particle-role="place" data-particle-weight="${Math.max(1, place.visitCount || 1)}" data-action="navigate" data-route="${getAuthorityLink('place', place.id)}"><i></i><span>${escapeHtml(place.name)}</span><small>${escapeHtml(place.area)}</small></button>`).join('')}
+      ${context.places.map((place, index) => `<button class="map-place" style="--place-x:${positions[index].x.toFixed(2)};--place-y:${positions[index].y.toFixed(2)}" type="button" data-particle-anchor data-particle-id="${place.id}" data-particle-role="place" data-particle-weight="${Math.max(1, place.visitCount || 1)}" data-action="navigate" data-route="${getAuthorityLink('place', place.id)}"><i></i><span>${escapeHtml(place.name)}</span><small>${escapeHtml(place.area)}</small></button>`).join('')}
     </div>
     <div class="map-caption"><p>地图只显示有来源支撑的地点与候选，不补全缺失轨迹。</p><span>${confirmed} 已确认${open ? ` · ${open} 待确认` : ''}</span></div>
   </section>`;
@@ -78,14 +107,15 @@ function renderPlaceView(context) {
 
 function renderConnectionView(context) {
   if (!context.connections.length) return `<section class="explore-empty"><h2>${escapeHtml(context.city.name)} 还没有可检查的连接</h2><p>碎片之间尚未形成有来源支撑的关系。</p></section>`;
+  const positions = polarPositions(context.connections.length, { radiusX: 31, radiusY: 34 });
   const pathMarkup = context.connections.slice(1).map((connection, index) => {
-    const startY = 110 + index * 78;
-    const endY = 160 + (index % 3) * 96;
-    return `<path class="${['suggested', 'unresolved', 'conflicted'].includes(connection.status) ? 'is-open' : ''}" d="M${120 + index * 45} ${startY} C 340 ${Math.max(30, startY - 80)}, 610 ${endY + 80}, ${850 - index * 28} ${endY}"/>`;
+    const start = positions[index];
+    const end = positions[index + 1];
+    return `<path class="${['suggested', 'unresolved', 'conflicted'].includes(connection.status) ? 'is-open' : ''}" d="M${start.x * 10} ${start.y * 5.4} Q ${(start.x + end.x) * 5} ${(start.y + end.y) * 2.7} ${end.x * 10} ${end.y * 5.4}"/>`;
   }).join('');
   return `<section class="connection-explore">
     <div class="relation-space">
-      ${context.connections.map((connection, index) => `<button class="relation-node relation-node--${index + 1} relation-node--${connection.status}" type="button" data-particle-anchor data-particle-id="${connection.id}" data-particle-role="relation" data-particle-weight="${Math.max(1, connection.evidence.length)}" data-action="navigate" data-route="${getAuthorityLink('connection', connection.id)}"><span>${escapeHtml(connectionTypeLabel[connection.type] || '连接')}</span><small>${connection.evidence.length} 条来源说明</small></button>`).join('')}
+      ${context.connections.map((connection, index) => `<button class="relation-node relation-node--${connection.status}" style="--relation-x:${positions[index].x.toFixed(2)};--relation-y:${positions[index].y.toFixed(2)}" type="button" data-particle-anchor data-particle-id="${connection.id}" data-particle-role="relation" data-particle-weight="${Math.max(1, connection.evidence.length)}" data-action="navigate" data-route="${getAuthorityLink('connection', connection.id)}"><span>${escapeHtml(connectionTypeLabel[connection.type] || '连接')}</span><small>${connection.evidence.length} 条来源说明</small></button>`).join('')}
       <svg class="relation-paths" aria-hidden="true" viewBox="0 0 1000 540" preserveAspectRatio="none">${pathMarkup}</svg>
     </div>
     <div class="relation-legend"><span><i></i>已确认</span><span><i></i>来源支持</span><span><i></i>仍待判断</span></div>
