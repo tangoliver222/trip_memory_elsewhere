@@ -15,11 +15,13 @@ export function isLiveDataMode(environment = {}) {
 export async function resolveSnapshotMedia(snapshot, client) {
   if (!snapshot?.fragments || typeof client?.resolveStoragePath !== 'function') return snapshot;
   const fragments = await Promise.all(snapshot.fragments.map(async (fragment) => {
-    const path = fragment.thumbnailPath || fragment.originalPath;
+    const thumbnailPath = fragment.thumbnailPath || fragment.thumbnail?.storagePath;
+    const originalPath = fragment.originalPath || fragment.original?.storagePath;
+    const path = thumbnailPath || originalPath;
     if (!path) return fragment;
     try {
       const resolvedUrl = await client.resolveStoragePath(path);
-      return fragment.thumbnailPath
+      return thumbnailPath
         ? { ...fragment, resolvedThumbnailUrl: resolvedUrl }
         : { ...fragment, resolvedOriginalUrl: resolvedUrl };
     } catch {

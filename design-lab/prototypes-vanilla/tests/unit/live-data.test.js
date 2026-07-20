@@ -19,6 +19,7 @@ import {
 } from '../../src/data/demo-client.js';
 import {
   bootstrapLiveData,
+  resolveSnapshotMedia,
   runtimeState,
 } from '../../src/data/runtime.js';
 
@@ -258,6 +259,105 @@ test('production memory snapshot uses the reviewed read boundary', async () => {
     'http://127.0.0.1:8787/v1/memory-snapshot',
     'GET',
   ]]);
+});
+
+test('production owner snapshot hydrates an empty world without demo collections', () => {
+  const snapshot = {
+    revision: 'production-empty',
+    summary: {
+      totalFragments: 0,
+      totalImportBatches: 0,
+      returnedFragments: 0,
+      returnedImportBatches: 0,
+      needsReview: 0,
+    },
+    fragments: [],
+    importBatches: [],
+    page: { fragmentsTruncated: false, importBatchesTruncated: false },
+  };
+
+  assert.doesNotThrow(() => hydrateLiveCollections(snapshot));
+  assert.equal(world.totalFragments, 0);
+  assert.equal(world.totalCities, 0);
+  assert.deepEqual(cities, []);
+  assert.deepEqual(fragments, []);
+});
+
+test('production owner snapshot preserves nested original metadata without inventing a city', async () => {
+  const snapshot = {
+    revision: 'production-one',
+    summary: {
+      totalFragments: 1,
+      totalImportBatches: 1,
+      returnedFragments: 1,
+      returnedImportBatches: 1,
+      needsReview: 0,
+    },
+    fragments: [{
+      id: 'frag_production_1',
+      batchId: 'batch_production_1',
+      type: 'photo',
+      status: 'processing',
+      createdAt: '2026-07-20T04:00:00.000Z',
+      updatedAt: '2026-07-20T04:01:00.000Z',
+      original: {
+        name: 'IMG_2048.JPG',
+        contentType: 'image/jpeg',
+        sizeBytes: 2048,
+        storagePath: 'users/test/originals/batch_production_1/frag_production_1',
+      },
+      thumbnail: {
+        storagePath: 'users/test/derived/frag_production_1/thumbnail.webp',
+        contentType: 'image/webp',
+        width: 960,
+        height: 640,
+      },
+      source: {
+        provider: 'local_file',
+        importMethod: 'file_picker',
+        sourceCreatedAt: '2026-07-19T01:02:03.000Z',
+        sourceModifiedAt: null,
+        timezoneOffsetMinutes: 420,
+        locationHint: {
+          lat: 13.7791,
+          lng: 100.5443,
+          accuracyMeters: 12,
+          source: 'camera_device',
+        },
+        media: { width: 4032, height: 3024 },
+      },
+      facts: {},
+      relationships: { journeyId: null, sceneId: null, placeId: null },
+      deterministic: null,
+    }],
+    importBatches: [{
+      id: 'batch_production_1',
+      status: 'processing',
+      uploadStatus: 'complete',
+      inputCount: 1,
+      counters: { saved: 1, processed: 0, failed: 0, needsReview: 0 },
+      createdAt: '2026-07-20T04:00:00.000Z',
+      updatedAt: '2026-07-20T04:01:00.000Z',
+    }],
+    page: { fragmentsTruncated: false, importBatchesTruncated: false },
+  };
+  const resolved = await resolveSnapshotMedia(snapshot, {
+    resolveStoragePath: async (path) => `resolved://${path}`,
+  });
+
+  hydrateLiveCollections(resolved);
+
+  assert.equal(world.totalFragments, 1);
+  assert.equal(world.totalCities, 0);
+  assert.deepEqual(cities, []);
+  assert.equal(fragments[0].capturedAt, '2026-07-19T01:02:03.000Z');
+  assert.equal(fragments[0].thumbnailStoragePath,
+    'users/test/derived/frag_production_1/thumbnail.webp');
+  assert.equal(fragments[0].asset,
+    'resolved://users/test/derived/frag_production_1/thumbnail.webp');
+  assert.equal(fragments[0].cityId, null);
+  assert.equal(importBatches[0].itemCount, 1);
+  assert.deepEqual(importBatches[0].representativeFragmentIds, ['frag_production_1']);
 });
 
 test('production Else query uses the authenticated evidence-only boundary', async () => {

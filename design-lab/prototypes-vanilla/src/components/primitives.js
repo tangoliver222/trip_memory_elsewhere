@@ -97,6 +97,13 @@ export function renderMedia(fragment, { className = 'memory-original', decorativ
 }
 
 export const renderStatus = (status) => {
-  const labels = { confirmed: '已确认', supported: '来源支持', unresolved: '待确认', suggested: '候选' };
+  const labels = {
+    confirmed: '已确认',
+    supported: '来源支持',
+    unresolved: '待确认',
+    suggested: '候选',
+    processing: '整理中',
+    failed: '处理失败',
+  };
   return `<span class="status status--${escapeHtml(status)}">${labels[status] || escapeHtml(status)}</span>`;
 };

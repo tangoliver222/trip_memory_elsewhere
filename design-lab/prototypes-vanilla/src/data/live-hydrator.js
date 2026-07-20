@@ -40,20 +40,121 @@ const fragmentTypeLabel = Object.freeze({
   text: '文字',
 });
 
+function factValue(fragment, name) {
+  const fact = fragment.facts?.[name];
+  return fact && typeof fact === 'object' && 'value' in fact ? fact.value : null;
+}
+
+function processingTrace(fragment) {
+  const deterministic = fragment.deterministic;
+  if (!deterministic) {
+    return ['uploaded', 'processing'].includes(fragment.status) ? [{
+      stage: 'deterministic',
+      label: '确定性整理',
+      provider: 'Elsewhere',
+      detail: '等待格式、metadata 与重复关系整理',
+      status: 'pending',
+    }] : [];
+  }
+  const status = deterministic.state === 'succeeded'
+    ? 'confirmed'
+    : deterministic.state.startsWith('failed') ? 'failed' : 'pending';
+  return [{
+    stage: 'deterministic',
+    label: '确定性整理',
+    provider: 'Elsewhere',
+    detail: deterministic.state === 'succeeded' ? '格式与基础事实已保存' : '基础事实仍在整理',
+    status,
+  }];
+}
+
+function normalizeProductionSnapshot(snapshot) {
+  if (snapshot.world || Array.isArray(snapshot.cities)) return snapshot;
+  if (!snapshot.summary || !snapshot.page) throw new TypeError('Live snapshot is invalid');
+
+  const normalizedFragments = snapshot.fragments.map((fragment) => {
+    const geo = factValue(fragment, 'geo') || fragment.source?.locationHint || null;
+    return {
+      id: fragment.id,
+      batchId: fragment.batchId,
+      type: fragment.type,
+      status: fragment.status,
+      originalName: fragment.original?.name || null,
+      capturedAt: factValue(fragment, 'capturedAt')
+        || fragment.source?.sourceCreatedAt
+        || fragment.source?.sourceModifiedAt
+        || fragment.createdAt
+        || null,
+      originalPath: fragment.original?.storagePath || null,
+      thumbnailPath: fragment.thumbnail?.storagePath || null,
+      resolvedOriginalUrl: fragment.resolvedOriginalUrl || null,
+      resolvedThumbnailUrl: fragment.resolvedThumbnailUrl || null,
+      geo: Number.isFinite(geo?.lat) && Number.isFinite(geo?.lng)
+        ? { lat: geo.lat, lng: geo.lng }
+        : null,
+      cityId: null,
+      journeyId: fragment.relationships?.journeyId || null,
+      sceneId: fragment.relationships?.sceneId || null,
+      placeId: fragment.relationships?.placeId || null,
+      placeName: null,
+      sourceProvider: fragment.source?.provider || null,
+      sourceIds: [fragment.id],
+      processingTrace: processingTrace(fragment),
+    };
+  });
+  const sourceIdsByBatch = new Map();
+  for (const fragment of normalizedFragments) {
+    const sourceIds = sourceIdsByBatch.get(fragment.batchId) || [];
+    sourceIds.push(fragment.id);
+    sourceIdsByBatch.set(fragment.batchId, sourceIds);
+  }
+
+  return {
+    ...snapshot,
+    world: {
+      totalCities: 0,
+      totalFragments: snapshot.summary.totalFragments,
+      totalPlaces: 0,
+      placedFragments: 0,
+      unplacedFragments: snapshot.summary.totalFragments,
+      sourceIds: normalizedFragments.map(({ id }) => id),
+    },
+    cities: [],
+    fragments: normalizedFragments,
+    places: [],
+    visits: [],
+    connections: [],
+    discoveries: [],
+    inboxItems: [],
+    userNotes: [],
+    importBatches: snapshot.importBatches.map((batch) => ({
+      ...batch,
+      sourceIds: sourceIdsByBatch.get(batch.id) || [],
+    })),
+  };
+}
+
 function mappedFragments(snapshot) {
   return snapshot.fragments.map((fragment) => ({
     id: fragment.id,
     type: fragment.type,
     capturedAt: fragment.capturedAt,
+    originalName: fragment.originalName || null,
     asset: fragment.resolvedThumbnailUrl || fragment.resolvedOriginalUrl || null,
     storagePath: fragment.originalPath,
     thumbnailStoragePath: fragment.thumbnailPath,
+    coordinates: fragment.geo ? { ...fragment.geo } : null,
+    sourceProvider: fragment.sourceProvider || null,
     cityId: fragment.cityId,
-    journeyId: fragment.cityId ? journeyId(fragment.cityId) : null,
-    sceneId: snapshot.visits.find(({ sourceIds }) => sourceIds.includes(fragment.id))?.id ?? null,
+    journeyId: fragment.journeyId || (fragment.cityId ? journeyId(fragment.cityId) : null),
+    sceneId: fragment.sceneId
+      || snapshot.visits.find(({ sourceIds }) => sourceIds.includes(fragment.id))?.id
+      || null,
     placeId: fragment.placeId,
     placeCandidate: fragment.placeName || '地点待确认',
-    status: fragment.status === 'placed' ? 'confirmed' : fragment.status,
+    status: fragment.status === 'placed'
+      ? 'confirmed'
+      : ['uploaded', 'processing'].includes(fragment.status) ? 'processing' : fragment.status,
     displayRole: fragment.placeId ? 'primary-original' : 'unplaced-edge',
     evidencePreview: `${fragmentTypeLabel[fragment.type] || '原件'} · ${dateLabel(fragment.capturedAt)} · ${timeLabel(fragment.capturedAt)}`,
     source: '持久化原件与确定性 metadata',
@@ -69,6 +170,7 @@ export function hydrateLiveCollections(snapshot) {
   if (!snapshot || typeof snapshot !== 'object' || !Array.isArray(snapshot.fragments)) {
     throw new TypeError('Live snapshot is invalid');
   }
+  snapshot = normalizeProductionSnapshot(snapshot);
   const liveFragments = mappedFragments(snapshot);
   const byId = new Map(liveFragments.map((fragment) => [fragment.id, fragment]));
   const liveCities = snapshot.cities.map((city) => {
@@ -165,27 +267,34 @@ export function hydrateLiveCollections(snapshot) {
     uncertainty: null,
     saved: false,
   }));
-  const liveBatches = snapshot.importBatches.map((batch) => ({
-    id: batch.id,
-    createdAt: null,
-    itemCount: batch.inputCount,
-    types: {},
-    journeyCandidate: liveJourneys[0]?.id ?? null,
-    representativeFragmentIds: [...batch.sourceIds],
-    result: {
-      saved: batch.counters.saved,
-      cities: liveCities.length,
-      places: livePlaces.length,
-      connections: liveConnections.length,
-      needsReview: batch.counters.needsReview,
-      duplicates: 0,
-      failed: batch.counters.failed,
-    },
-    status: batch.status,
-    processingTrace: Array.isArray(batch.processingTrace)
-      ? batch.processingTrace.map((stage) => ({ ...stage }))
-      : [],
-  }));
+  const liveBatches = snapshot.importBatches.map((batch) => {
+    const batchFragments = liveFragments.filter((fragment) => batch.sourceIds.includes(fragment.id));
+    const types = batchFragments.reduce((counts, fragment) => ({
+      ...counts,
+      [fragment.type]: (counts[fragment.type] || 0) + 1,
+    }), {});
+    return {
+      id: batch.id,
+      createdAt: batch.createdAt || null,
+      itemCount: batch.inputCount,
+      types,
+      journeyCandidate: liveJourneys[0]?.id ?? null,
+      representativeFragmentIds: [...batch.sourceIds],
+      result: {
+        saved: batch.counters.saved,
+        cities: liveCities.length,
+        places: livePlaces.length,
+        connections: liveConnections.length,
+        needsReview: batch.counters.needsReview,
+        duplicates: 0,
+        failed: batch.counters.failed,
+      },
+      status: batch.status,
+      processingTrace: Array.isArray(batch.processingTrace)
+        ? batch.processingTrace.map((stage) => ({ ...stage }))
+        : [],
+    };
+  });
   const liveReviews = snapshot.inboxItems.map((item) => ({
     id: item.id,
     kind: item.type,
