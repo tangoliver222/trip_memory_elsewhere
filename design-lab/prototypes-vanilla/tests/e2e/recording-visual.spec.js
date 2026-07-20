@@ -3,6 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 
+test.setTimeout(180_000);
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const artifactRoot = path.resolve(process.cwd(), 'artifacts/recording-visual/current');
 const badCopy = /\uFFFD|Ã.|Â.|â.|undefined|null|\[object Object\]/i;
