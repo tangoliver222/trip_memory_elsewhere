@@ -1,5 +1,6 @@
 import { createApp } from '../app.js';
 import { registerAuthBoundary } from '../auth/boundary.js';
+import { registerElseQueryRoutes } from '../else/routes.js';
 import { registerImportRoutes } from '../imports/routes.js';
 import { createImportService } from '../imports/service.js';
 import { registerMemorySnapshotRoutes } from '../memory/routes.js';
@@ -10,6 +11,7 @@ export function createApiComposition({
   tokenVerifier,
   allowedAppIds,
   memorySnapshotReader,
+  elseQueryService,
   randomUUID,
   clock,
 }) {
@@ -19,6 +21,9 @@ export function createApiComposition({
   registerImportRoutes(app, { requireAuth, importService });
   if (memorySnapshotReader) {
     registerMemorySnapshotRoutes(app, { requireAuth, memorySnapshotReader });
+  }
+  if (elseQueryService) {
+    registerElseQueryRoutes(app, { requireAuth, elseQueryService });
   }
   return app;
 }
