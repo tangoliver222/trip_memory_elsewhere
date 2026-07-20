@@ -30,13 +30,17 @@ test('Fragment Field search, Lens, Original Viewer and return stay coherent', as
 
 test('Else moves one Orb, forms a sourced answer and offers one next action', async ({ page }) => {
   await page.goto('/#/world/place/place-chao-phraya-ferry');
+  await expect(page.locator('[data-else-lottie] svg')).toHaveCount(1);
   await page.locator('[data-else-orb]').click();
   await expect(page.locator('[data-else-orb-slot] [data-else-orb]')).toHaveCount(1);
+  await expect(page.locator('[data-else-lottie] svg')).toHaveCount(1);
   await page.getByRole('button', { name: '哪些到访已确认？' }).click();
   await expect(page.locator('.else-drawer--found')).toBeVisible();
   await expect(page.locator('.else-sources button')).toHaveCount(3);
   await expect(page.locator('[data-else-next-action]')).toHaveCount(1);
   await expect(page.locator('[data-else-orb]')).toHaveCount(1);
+  await expect(page.locator('[data-else-lottie] svg')).toHaveCount(1);
+  expect(await page.evaluate(() => window.__ELSEWHERE_DEBUG__.elseIp)).toMatchObject({ activeInstances: 1, mountCount: 1, state: 'found' });
 });
 
 test('Explore reforms between time, place and relation structures', async ({ page }) => {

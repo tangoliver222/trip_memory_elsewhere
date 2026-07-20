@@ -28,6 +28,7 @@ import {
   runtimeState,
 } from './data/runtime.js';
 import { applyDevScenario } from './data/dev-scenarios.js';
+import { debugElseIp, destroyElseIp, syncElseIp } from './components/else-ip.js';
 
 const root = document.querySelector('#app-root');
 const initialHash = window.location.hash || '#/onboarding';
@@ -83,6 +84,7 @@ Object.defineProperties(debugApi, {
   profile: { enumerable: true, get: () => sceneManager.debug().profile },
   paused: { enumerable: true, get: () => sceneManager.debug().paused },
   mode: { enumerable: true, get: () => sceneManager.debug().mode },
+  elseIp: { enumerable: true, get: () => debugElseIp() },
 });
 debugApi.snapshot = () => sceneManager.debug();
 debugApi.loseContext = () => sceneManager.loseContext();
@@ -227,6 +229,7 @@ function updateShell() {
   if (routeChanged || renderedRoute === null || sceneChanged) scheduleVisualReady(route, desiredMode);
   renderedRoute = state.route;
   syncElseOrbPlacement(state);
+  syncElseIp(root, state.else.state || 'idle');
 }
 
 store.subscribe((_state, action) => {
@@ -289,4 +292,4 @@ const syncVisualViewport = () => document.documentElement.style.setProperty('--v
 syncVisualViewport();
 window.visualViewport?.addEventListener('resize', syncVisualViewport);
 
-window.addEventListener('pagehide', () => { pageCleanup?.(); window.visualViewport?.removeEventListener('resize', syncVisualViewport); sceneManager.dispose(); }, { once: true });
+window.addEventListener('pagehide', () => { pageCleanup?.(); destroyElseIp(); window.visualViewport?.removeEventListener('resize', syncVisualViewport); sceneManager.dispose(); }, { once: true });

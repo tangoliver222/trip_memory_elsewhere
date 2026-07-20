@@ -5,8 +5,8 @@ export function renderElseOrb(state, route) {
   const orbState = state?.else?.state || 'idle';
   const label = state?.else?.open ? '收起 Else' : '询问 Else';
   return `<button class="else-orb else-orb--${orbState}" type="button" data-else-orb data-action="toggle-else" aria-label="${label}" aria-expanded="${Boolean(state?.else?.open)}">
+    <span class="else-orb__ip" data-else-lottie data-animation-state="${orbState}" aria-hidden="true"><img src="/assets/else-idle.png" alt=""><span data-else-lottie-player></span></span>
     <span class="else-orb__dust" aria-hidden="true"></span>
-    <span class="else-orb__mark">E</span>
   </button>`;
 }
 

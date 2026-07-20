@@ -14,6 +14,9 @@ test('app shell has exactly one memory canvas, overlay root and Else instance', 
   assert.equal((html.match(/id="memory-canvas"/g) || []).length, 1);
   assert.equal((html.match(/id="overlay-root"/g) || []).length, 1);
   assert.equal((html.match(/data-else-orb/g) || []).length, 1);
+  assert.equal((html.match(/data-else-lottie(?:\s|=)/g) || []).length, 1);
+  assert.match(html, /src="\/assets\/else-idle\.png"/);
+  assert.doesNotMatch(html, /else-orb__mark|>E<\/span>/);
   assert.doesNotMatch(html, /onclick=|onchange=/);
 });
 

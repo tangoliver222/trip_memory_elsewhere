@@ -323,7 +323,7 @@
   .page { padding: max(20px, env(safe-area-inset-top)) 18px 118px; }
   .app-navigation { bottom: max(12px, env(safe-area-inset-bottom)); width: calc(100% - 28px); justify-content: space-between; }
   .nav-item { min-width: 0; flex: 1; font-size: .7rem; }
-  .else-orb { right: 18px; bottom: max(76px, calc(env(safe-area-inset-bottom) + 66px)); width: 52px; height: 52px; }
+  .else-orb { right: 16px; bottom: max(76px, calc(env(safe-area-inset-bottom) + 66px)); width: 60px; height: 60px; }
 
   .world-home { padding: 0 0 112px; }
   .globe-stage { height: 390px; }
