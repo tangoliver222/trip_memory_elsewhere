@@ -176,9 +176,23 @@ try {
     || verified.batch.uploadStatus !== 'complete') {
     throw new Error('Persisted production capability result is invalid.');
   }
+  const memory = await page.evaluate(() => (
+    globalThis.__elsewhereCloudRunSmokeClient.getMemorySnapshot()
+  ));
+  const projected = memory.fragments?.find(({ id }) => id === created.fragmentId);
+  if (!projected
+    || memory.summary?.totalFragments !== 1
+    || memory.summary?.totalImportBatches !== 1
+    || projected.original?.storagePath
+      !== `users/${uid}/originals/${created.batchId}/${created.fragmentId}`
+    || JSON.stringify(memory).includes('crc32c')
+    || JSON.stringify(memory).includes('hashes')) {
+    throw new Error('Production memory snapshot is invalid.');
+  }
 
   console.log('cloud-run-ingestion-smoke: PASS');
   console.log('authenticated_api=passed');
+  console.log('owner_memory_snapshot=passed');
   console.log('storage_eventarc_routing_tasks=passed');
   console.log('document_ai_result=completed');
 } finally {

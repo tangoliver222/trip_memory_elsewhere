@@ -212,6 +212,9 @@ export function createDemoClient(config, {
     getReceipt(batchId) {
       return request(`/v1/import-batches/${encodeURIComponent(batchId)}`);
     },
+    getMemorySnapshot() {
+      return request('/v1/memory-snapshot');
+    },
     getSnapshot() {
       return config.infrastructureMode === 'cloud'
         ? waitForCloudSnapshot()
