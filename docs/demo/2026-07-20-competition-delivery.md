@@ -110,6 +110,13 @@ npx playwright test tests/e2e/recording-visual.spec.js --project=mobile-390
 
 npm run build
 75 modules transformed; build completed
+
+npx firebase-tools deploy --project elsewhere-memory-tyx-2026 \
+  --config firebase/firebase.json --only hosting
+Deploy complete: https://elsewhere-memory-tyx-2026.web.app
+
+npx playwright test --config playwright.public.config.js
+3 passed
 ```
 
 ## Production data-path release
