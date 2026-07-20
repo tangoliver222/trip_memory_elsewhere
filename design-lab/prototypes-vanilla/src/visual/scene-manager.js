@@ -16,6 +16,47 @@ import { detectPerformanceProfile, getPerformanceProfile } from './performance-p
 const DEFAULT_CAMERA_Z = 44;
 const WORLD_GROUP_OFFSET = Object.freeze({ x: 0, y: 3.3, z: 0 });
 const WORLD_MODES = new Set(['world', 'world-intro', 'globe']);
+const PIN_LABEL_WIDTH = 104;
+const PIN_LABEL_HEIGHT = 38;
+
+const rectsOverlap = (left, right) => (
+  left.left < right.right + 4
+  && left.right + 4 > right.left
+  && left.top < right.bottom + 4
+  && left.bottom + 4 > right.top
+);
+
+/** Deterministic label placement for projected globe pins; points remain visible if labels run out of room. */
+export function layoutCityPinLabels(points, viewportWidth) {
+  const occupied = [];
+  const placements = new Map();
+  const candidates = [12, -46, 54, -84, 92];
+  const sorted = [...points].sort((left, right) => left.y - right.y || left.x - right.x || left.id.localeCompare(right.id));
+  for (const point of sorted) {
+    if (!point.visible) {
+      placements.set(point.id, { ...point, labelVisible: false, labelX: 0, labelY: 0, rect: null });
+      continue;
+    }
+    const preferredX = point.x > viewportWidth * 0.58 ? -PIN_LABEL_WIDTH - 10 : 12;
+    let placement = null;
+    for (const labelY of candidates) {
+      const labelX = Math.max(8 - point.x, Math.min(preferredX, viewportWidth - PIN_LABEL_WIDTH - 8 - point.x));
+      const rect = {
+        left: point.x + labelX,
+        right: point.x + labelX + PIN_LABEL_WIDTH,
+        top: point.y + labelY,
+        bottom: point.y + labelY + PIN_LABEL_HEIGHT,
+      };
+      if (occupied.every((other) => !rectsOverlap(rect, other))) {
+        placement = { ...point, labelVisible: true, labelX, labelY, rect };
+        occupied.push(rect);
+        break;
+      }
+    }
+    placements.set(point.id, placement || { ...point, labelVisible: false, labelX: 0, labelY: 0, rect: null });
+  }
+  return points.map((point) => placements.get(point.id));
+}
 
 const createBrowserControls = (camera, element) => (
   typeof element?.getRootNode === 'function' ? new OrbitControls(camera, element) : null
@@ -323,8 +364,8 @@ export class MemorySceneManager {
       offsetX = containerRect.left - canvasRect.left;
       offsetY = containerRect.top - canvasRect.top;
     }
-    this.trackedPins.forEach((pin) => {
-      if (!pin.el?.style) return;
+    const projected = this.trackedPins.map((pin) => {
+      if (!pin.el?.style) return null;
       this._pinVecA.set(pin.dir[0] * GLOBE_RADIUS, pin.dir[1] * GLOBE_RADIUS, pin.dir[2] * GLOBE_RADIUS);
       this.group.localToWorld(this._pinVecA);
       // 背面剔除：锚点法线与视线方向夹角
@@ -334,9 +375,17 @@ export class MemorySceneManager {
       this._pinVecA.project(this.camera);
       const x = (this._pinVecA.x * 0.5 + 0.5) * width - offsetX;
       const y = (-this._pinVecA.y * 0.5 + 0.5) * height - offsetY;
+      return { id: pin.el.dataset.cityPin || `${pin.lat}:${pin.lng}`, pin, x, y, visible: facing > 0.18 };
+    });
+    layoutCityPinLabels(projected.filter(Boolean), width).forEach(({ pin, x, y, visible, labelVisible, labelX, labelY }) => {
       pin.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
-      pin.el.style.opacity = facing > 0.18 ? '1' : '0';
-      pin.el.style.pointerEvents = facing > 0.18 ? 'auto' : 'none';
+      pin.el.style.opacity = visible ? '1' : '0';
+      pin.el.style.pointerEvents = visible ? 'auto' : 'none';
+      const label = pin.el.querySelector?.('[data-city-pin-label]');
+      if (label?.style) {
+        label.style.transform = `translate(${labelX.toFixed(1)}px, ${labelY.toFixed(1)}px)`;
+        label.style.opacity = labelVisible ? '1' : '0';
+      }
     });
   }
 

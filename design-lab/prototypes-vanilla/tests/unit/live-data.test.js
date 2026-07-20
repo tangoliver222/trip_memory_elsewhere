@@ -370,6 +370,37 @@ test('empty live data renders a stable city state instead of dereferencing fixtu
   assert.match(html, /放入碎片/);
 });
 
+test('empty live data renders an unformed World without a globe or invented memory entries', () => {
+  hydrateLiveCollections(snapshotWith([]));
+  const state = createInitialState({ runtime: { mode: 'live' } });
+  const view = renderRoute('#/world', state);
+
+  assert.equal(view.scenePayload.target, 'initializing');
+  assert.equal(view.scenePayload.itemCount, 0);
+  assert.deepEqual(view.scenePayload.items, []);
+  assert.match(view.html, /data-world-state="empty"/);
+  assert.match(view.html, /放入第一批碎片/);
+  assert.doesNotMatch(view.html, /data-globe-stage|world-city-pin|world-entry--city|个碎片的私人数据库/);
+  assert.equal((view.html.match(/data-primary-action/g) || []).length, 1);
+});
+
+test('unplaced fragments remain accessible without inventing a recommended city', () => {
+  const snapshot = snapshotWith(['frag_unplaced']);
+  snapshot.world.totalCities = 0;
+  snapshot.cities = [];
+  snapshot.fragments[0].cityId = null;
+  snapshot.fragments[0].placeId = null;
+  snapshot.fragments[0].placeName = null;
+  snapshot.places = [];
+  snapshot.visits = [];
+  hydrateLiveCollections(snapshot);
+
+  const view = renderRoute('#/world', createInitialState({ runtime: { mode: 'live' } }));
+  assert.match(view.html, /1 个碎片正在等待形成城市/);
+  assert.match(view.html, /data-route="#\/world\/fragments"/);
+  assert.doesNotMatch(view.html, /进入 .*城市/);
+});
+
 test('live route copy contains neither mojibake nor unresolved JavaScript values', () => {
   hydrateLiveCollections(snapshotWith(['frag_clean_copy']));
   const state = createInitialState({ runtime: { mode: 'live' } });

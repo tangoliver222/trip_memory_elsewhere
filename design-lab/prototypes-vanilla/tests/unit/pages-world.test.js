@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { renderRoute } from '../../src/pages/render-route.js';
 import { createInitialState } from '../../src/store.js';
 import { indexes } from '../../src/fixtures/indexes.js';
+import { readFile } from 'node:fs/promises';
 
 const paths = [
   '#/onboarding',
@@ -50,4 +51,12 @@ test('city world exposes Capsule and Explore before supporting details', () => {
   assert.ok(html.indexOf('City Capsule') < html.indexOf('63 个碎片'));
   assert.ok(html.indexOf('三个视角探索') < html.indexOf('63 个碎片'));
   assert.match(html, /照片、小票、菜单与地图/);
+});
+
+test('World Home uses one WebGL globe and no independent topology globe layer', async () => {
+  const html = renderRoute('#/world', state).html;
+  const css = await readFile(new URL('../../src/styles/pages.css', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(html, /globe-atmosphere/);
+  assert.doesNotMatch(css, /earth-topology\.png/);
 });

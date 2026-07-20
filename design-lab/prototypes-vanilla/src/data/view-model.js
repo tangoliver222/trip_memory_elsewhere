@@ -137,6 +137,12 @@ export function createMemoryView(catalog = currentMemoryCatalog()) {
       recommendedCity,
       cities: catalog.cities,
       statusItems,
+      unplacedItems: catalog.fragments.filter(({ cityId }) => !cityId).map((fragment) => ({
+        id: fragment.id,
+        role: 'fragment',
+        clusterId: 'unplaced',
+        status: fragment.status,
+      })),
       particleItems: catalog.cities.map((city) => ({
         id: city.id,
         role: 'city',

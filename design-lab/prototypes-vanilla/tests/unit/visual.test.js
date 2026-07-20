@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemorySceneManager } from '../../src/visual/scene-manager.js';
+import { layoutCityPinLabels } from '../../src/visual/scene-manager.js';
 import { createFlowController } from '../../src/visual/flow-controller.js';
 import { createSemanticTarget } from '../../src/visual/particle-targets.js';
 import { createSpatialAnchorRegistry } from '../../src/visual/spatial-anchor-registry.js';
@@ -255,4 +256,24 @@ test('page scroll and field camera transforms compose instead of overwriting eac
     source: 'composed',
   });
   manager.dispose();
+});
+
+test('projected city labels avoid collisions without city-name CSS exceptions', () => {
+  const placements = layoutCityPinLabels([
+    { id: 'tokyo', x: 302, y: 310, visible: true },
+    { id: 'kyoto', x: 306, y: 315, visible: true },
+    { id: 'osaka', x: 298, y: 321, visible: true },
+  ], 390);
+  const visible = placements.filter(({ labelVisible }) => labelVisible);
+
+  assert.equal(visible.length, 3);
+  for (let leftIndex = 0; leftIndex < visible.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < visible.length; rightIndex += 1) {
+      const left = visible[leftIndex].rect;
+      const right = visible[rightIndex].rect;
+      const overlaps = left.left < right.right && left.right > right.left
+        && left.top < right.bottom && left.bottom > right.top;
+      assert.equal(overlaps, false);
+    }
+  }
 });

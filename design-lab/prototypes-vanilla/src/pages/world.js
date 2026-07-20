@@ -1,15 +1,72 @@
-import { cities, discoveries, processingItems, reviewQueue, world } from '../fixtures/data.js';
+import { cities, reviewQueue, world } from '../fixtures/data.js';
 import { getCityByRouteId, getCityFragments } from '../selectors.js';
+import { getMemoryView } from '../data/view-model.js';
 import { escapeHtml } from '../components/primitives.js';
 import { renderMedia } from '../components/primitives.js';
 import { gsap } from 'gsap';
 
 const reducedMotionQuery = () => (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 
-function renderCityPins() {
-  return cities.map((city) => `<button class="world-city-pin" type="button" data-city-pin="${city.slug}" data-action="navigate" data-route="#/world/city/${city.slug}">
-    <i aria-hidden="true"></i><span>${escapeHtml(city.name)}</span><small>${escapeHtml(city.period)}</small>
+function renderCityPins(cityItems) {
+  return cityItems.filter(({ coordinates }) => coordinates).map((city) => `<button class="world-city-pin" type="button" data-city-pin="${city.slug}" data-action="navigate" data-route="#/world/city/${city.slug}">
+    <i aria-hidden="true"></i><b class="world-city-pin__label" data-city-pin-label><span>${escapeHtml(city.name)}</span><small>${escapeHtml(city.period)}</small></b>
   </button>`).join('');
+}
+
+function renderEmptyWorld() {
+  return {
+    sceneMode: 'world',
+    scenePayload: {
+      target: 'initializing',
+      itemCount: 0,
+      items: [],
+      cities: [],
+      pointSize: 1.15,
+      opacity: 0.24,
+      focus: 0,
+    },
+    html: `<main class="page world-home world-home--empty" data-page-id="world-home" data-world-state="empty">
+      <header class="world-brand world-brand--empty">
+        <span class="world-brand__mark">Elsewhere</span>
+      </header>
+      <section class="world-empty">
+        <div class="world-empty__seed" aria-hidden="true"><i></i><i></i><i></i></div>
+        <p class="eyebrow">世界尚未形成</p>
+        <h1>从一份真实原件开始。</h1>
+        <p>照片、小票、截图或文字进入后，时间与地点会在这里慢慢靠近。</p>
+        <button class="primary-action primary-action--filled" type="button" data-primary-action data-action="navigate" data-route="#/world/import">放入第一批碎片</button>
+      </section>
+    </main>`,
+    afterRender: null,
+  };
+}
+
+function renderUnplacedWorld(memory) {
+  const count = memory.world.counts.fragments;
+  return {
+    sceneMode: 'world',
+    scenePayload: {
+      target: 'multiCityField',
+      itemCount: count,
+      items: memory.world.unplacedItems,
+      clusters: [{ id: 'unplaced', slug: 'unplaced', weight: count }],
+      pointSize: 1.2,
+      opacity: 0.42,
+      focus: 0,
+    },
+    html: `<main class="page world-home world-home--empty" data-page-id="world-home" data-world-state="forming">
+      <header class="world-brand world-brand--empty"><span class="world-brand__mark">Elsewhere</span></header>
+      <section class="world-empty">
+        <div class="world-empty__seed world-empty__seed--forming" aria-hidden="true"><i></i><i></i><i></i></div>
+        <p class="eyebrow">世界正在形成</p>
+        <h1>${count} 个碎片正在等待形成城市。</h1>
+        <p>原件已经安全保留。补充地点或等待当前整理完成后，城市会在这里显影。</p>
+        <button class="primary-action primary-action--filled" type="button" data-primary-action data-action="navigate" data-route="#/world/fragments">查看这些碎片</button>
+        <button class="text-action" type="button" data-action="navigate" data-route="#/world/import">继续放入碎片</button>
+      </section>
+    </main>`,
+    afterRender: null,
+  };
 }
 
 /**
@@ -17,54 +74,65 @@ function renderCityPins() {
  * ① 点云地球（城市索引） ② 推荐城市 ③ 放入碎片 ④ 收件箱 ⑤ 全部碎片 + Else。
  */
 export function renderWorldHome() {
-  const bangkok = cities[0];
-  const pending = reviewQueue.length;
-  const newDiscoveries = discoveries.filter((discovery) => discovery.status === 'new').length;
-  const processing = processingItems.length;
+  const memory = getMemoryView();
+  if (!memory.world.hasFragments) return renderEmptyWorld();
+  const recommended = memory.world.recommendedCity;
+  if (!recommended) return renderUnplacedWorld(memory);
+  const recommendedContext = recommended ? memory.city(recommended.slug) : null;
+  const counts = memory.world.counts;
+  const locatedCities = memory.world.cities.filter(({ coordinates }) => coordinates);
+  const happening = memory.world.statusItems.map(({ count, label }) => `${count} ${label}`).join(' · ');
   return {
     sceneMode: 'world',
     scenePayload: {
       target: 'globe',
-      itemCount: world.totalFragments,
-      items: cities.map((city) => ({ id: city.id, role: 'city', clusterId: city.id, status: city.status?.[0] })),
-      cities: cities.map((city) => ({ ...city, lat: city.coordinates.lat, lng: city.coordinates.lng })),
+      itemCount: counts.fragments,
+      items: memory.world.particleItems,
+      cities: locatedCities.map((city) => ({ ...city, lat: city.coordinates.lat, lng: city.coordinates.lng })),
       pointSize: 1.7,
       opacity: 0.95,
       focus: 1,
     },
-    html: `<main class="page world-home" data-page-id="world-home">
+    html: `<main class="page world-home" data-page-id="world-home" data-world-state="populated">
       <header class="world-brand">
-        <span class="world-brand__mark">Elsewhere</span>
-        <span class="world-brand__sub">私人旅行记忆世界</span>
+        <div><span class="world-brand__mark">Elsewhere</span><span class="world-brand__sub">私人旅行记忆世界</span></div>
+        <div class="world-brand__actions">
+          <button type="button" data-action="navigate" data-route="#/world/inbox" aria-label="打开碎片收件箱">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v13H4zM4 14h4l1.7 2h4.6l1.7-2h4"/></svg>
+            ${reviewQueue.length ? `<span>${reviewQueue.length}</span>` : ''}
+          </button>
+          <button type="button" data-action="navigate" data-route="#/world/fragments" aria-label="搜索全部碎片">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5"/></svg>
+          </button>
+        </div>
       </header>
 
-      <section class="globe-stage" data-globe-stage data-particle-anchor data-particle-id="world-globe" data-particle-role="world" data-particle-weight="${Math.max(1, world.totalFragments)}" aria-label="点云地球：拖拽旋转，点击城市进入">
+      <section class="globe-stage" data-globe-stage data-particle-anchor data-particle-id="world-globe" data-particle-role="world" data-particle-weight="${Math.max(1, counts.fragments)}" aria-label="点云地球：拖拽旋转，点击城市进入">
         <div class="globe-lede will-flow" data-flow="1">
           <p class="eyebrow">世界</p>
           <h1>去过的每个地方，仍然相连。</h1>
-          <p class="world-stats">${world.totalCities} 座城市 · ${world.totalFragments} 个碎片 · ${world.totalConnections} 条连接</p>
+          <p class="world-stats">${counts.cities} 座城市 · ${counts.fragments} 个碎片 · ${counts.connections} 条连接</p>
         </div>
-        <div class="globe-atmosphere" aria-hidden="true"></div>
-        <div class="world-city-pins">${renderCityPins()}</div>
+        <div class="world-city-pins">${renderCityPins(locatedCities)}</div>
       </section>
 
       <section class="world-entries">
         <article class="world-entry world-entry--city will-flow" data-flow="2">
-          <div class="world-entry__visual">${bangkok?.representativeAsset
-    ? `<img src="${bangkok.representativeAsset}" alt="Bangkok 代表原件">`
-    : '<div class="city-index__cluster" aria-label="Bangkok 记忆群"><i></i><i></i><i></i></div>'}</div>
+          <div class="world-entry__visual">${recommended?.representativeAsset
+    ? `<img src="${recommended.representativeAsset}" alt="${escapeHtml(recommended.name)} 代表原件">`
+    : `<div class="city-index__cluster" aria-label="${escapeHtml(recommended?.name || '最近城市')} 记忆群"><i></i><i></i><i></i></div>`}</div>
           <div class="world-entry__copy">
             <span class="world-entry__label">最近的城市</span>
-            <h2>${escapeHtml(bangkok?.name || '等待第一座城市')}</h2>
-            <p>${escapeHtml(bangkok?.period || '尚未形成旅程')} · ${bangkok?.fragmentCount || 0} 碎片 · ${bangkok?.placeCount || 0} 地点</p>
-            <p class="world-entry__note">${escapeHtml(discoveries[0]?.title || '放入带有时间和地点的原件后，关系会从这里显影')}</p>
+            <h2>${escapeHtml(recommended?.name || '最近城市')}</h2>
+            <p>${escapeHtml(recommended?.period || '时间待确认')} · ${recommended?.fragmentCount || 0} 碎片 · ${recommended?.placeCount || 0} 地点</p>
+            ${recommendedContext?.discoveries[0]?.title ? `<p class="world-entry__note">${escapeHtml(recommendedContext.discoveries[0].title)}</p>` : ''}
           </div>
-          <button class="world-entry__go" type="button" data-primary-action data-action="navigate" data-route="${bangkok ? `#/world/city/${bangkok.slug}` : '#/world/import'}" aria-label="${bangkok ? `进入 ${escapeHtml(bangkok.name)}` : '放入第一批碎片'}">→</button>
+          <button class="world-entry__go" type="button" data-primary-action data-action="navigate" data-route="#/world/city/${recommended.slug}" aria-label="进入 ${escapeHtml(recommended.name)}">→</button>
         </article>
 
-        <p class="world-happening will-flow" data-flow="3">世界正在发生：${pending} 个连接待你判断 · ${newDiscoveries} 条发现新显影 · ${processing} 组照片正在整理</p>
+        ${happening ? `<p class="world-happening will-flow" data-flow="3">世界正在发生：${escapeHtml(happening)}</p>` : ''}
 
-        <button class="world-entry will-flow" data-flow="4" type="button" data-action="navigate" data-route="#/world/import" aria-label="放入新的碎片">
+        <button class="world-entry world-entry--utility will-flow" data-flow="4" type="button" data-action="navigate" data-route="#/world/import" aria-label="放入新的碎片">
           <div class="world-entry__visual world-entry__visual--import" aria-hidden="true">
             <i class="mini-photo"></i><i class="mini-receipt"></i><i class="mini-map"></i>
           </div>
@@ -76,31 +144,19 @@ export function renderWorldHome() {
           <span class="world-entry__go" aria-hidden="true">→</span>
         </button>
 
-        <button class="world-entry will-flow" data-flow="5" type="button" data-action="navigate" data-route="#/world/inbox">
-          <div class="world-entry__visual world-entry__visual--inbox" aria-hidden="true">
-            <svg viewBox="0 0 64 40"><circle cx="14" cy="20" r="3.4"/><circle cx="50" cy="20" r="3.4"/><path d="M18 20 H28 M36 20 H46"/><text x="32" y="24">?</text></svg>
-          </div>
-          <div class="world-entry__copy">
-            <span class="world-entry__label">碎片收件箱</span>
-            <h2>${pending} 个未闭合的关系</h2>
-            <p class="world-entry__meta">等待你的判断</p>
-          </div>
-          <span class="world-entry__go" aria-hidden="true">→</span>
-        </button>
-
-        <button class="world-entry will-flow" data-flow="6" type="button" data-action="navigate" data-route="#/world/fragments">
+        <button class="world-entry world-entry--utility will-flow" data-flow="5" type="button" data-action="navigate" data-route="#/world/fragments">
           <div class="world-entry__visual world-entry__visual--field" aria-hidden="true">
             <i style="--gx:22%;--gy:30%"></i><i style="--gx:66%;--gy:22%"></i><i style="--gx:48%;--gy:66%"></i>
           </div>
           <div class="world-entry__copy">
             <span class="world-entry__label">全部碎片</span>
-            <h2>${world.totalFragments} 个碎片的私人数据库</h2>
-            <p class="world-entry__meta">${world.totalCities} 座城市 · 可搜索 · 可问 Else</p>
+            <h2>${counts.fragments} 个碎片的私人数据库</h2>
+            <p class="world-entry__meta">${counts.cities} 座城市 · 可搜索 · 可问 Else</p>
           </div>
           <span class="world-entry__go" aria-hidden="true">→</span>
         </button>
 
-        <button class="text-action world-cities-link will-flow" data-flow="7" type="button" data-action="navigate" data-route="#/world/cities">查看全部城市 →</button>
+        <button class="text-action world-cities-link will-flow" data-flow="6" type="button" data-action="navigate" data-route="#/world/cities">查看全部城市 →</button>
       </section>
     </main>`,
     afterRender({ pageRoot, sceneManager }) {
@@ -109,7 +165,7 @@ export function renderWorldHome() {
         sceneManager.bindControls(stage);
         sceneManager.alignWorldToElement(stage);
       }
-      sceneManager.trackCityPins(cities.map((city) => ({
+      sceneManager.trackCityPins(locatedCities.map((city) => ({
         lat: city.coordinates.lat,
         lng: city.coordinates.lng,
         el: pageRoot.querySelector(`[data-city-pin="${city.slug}"]`),

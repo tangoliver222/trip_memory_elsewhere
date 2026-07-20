@@ -261,10 +261,6 @@ async function bootApplication() {
         return resolveSnapshotMedia(snapshot, client);
       },
     });
-    if (snapshot.fragments.length === 0) {
-      window.history.replaceState(null, '', '#/world/import');
-      store.dispatch({ type: 'NAVIGATE', route: '#/world/import', silentRender: true });
-    }
     store.dispatch({
       type: 'SET_RUNTIME',
       value: { mode: 'live', status: 'ready', client, error: null },
