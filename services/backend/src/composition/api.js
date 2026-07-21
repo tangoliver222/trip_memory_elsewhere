@@ -4,6 +4,7 @@ import { registerElseQueryRoutes } from '../else/routes.js';
 import { registerImportRoutes } from '../imports/routes.js';
 import { createImportService } from '../imports/service.js';
 import { registerMemorySnapshotRoutes } from '../memory/routes.js';
+import { registerExperienceRoutes } from '../experience/routes.js';
 
 export function createApiComposition({
   appConfig,
@@ -12,6 +13,7 @@ export function createApiComposition({
   allowedAppIds,
   memorySnapshotReader,
   elseQueryService,
+  experienceService,
   randomUUID,
   clock,
 }) {
@@ -24,6 +26,9 @@ export function createApiComposition({
   }
   if (elseQueryService) {
     registerElseQueryRoutes(app, { requireAuth, elseQueryService });
+  }
+  if (experienceService) {
+    registerExperienceRoutes(app, { requireAuth, experienceService });
   }
   return app;
 }
