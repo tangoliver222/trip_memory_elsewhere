@@ -11,9 +11,9 @@ const matchesQuery = (fragment, query) => {
 export function createFieldLayout(query = '', { compact = false } = {}) {
   const focused = query ? fragments.filter((fragment) => matchesQuery(fragment, query)).map((fragment) => fragment.id) : [];
   const compactAnchors = [
-    [-148, -118, -44], [-4, -138, 24], [137, -104, -82],
-    [-176, 6, 8], [-48, 3, 54], [87, 20, -26],
-    [174, 77, -96], [-112, 132, -18], [29, 143, 34],
+    [-132, -118, -44], [-4, -138, 24], [126, -104, -82],
+    [-128, 6, 8], [-48, 3, 54], [87, 20, -26],
+    [132, 77, -96], [-112, 132, -18], [29, 143, 34],
   ];
   let focusIndex = 0;
   return fragments.map((fragment, index) => {

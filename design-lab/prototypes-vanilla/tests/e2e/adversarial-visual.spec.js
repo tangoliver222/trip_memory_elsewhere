@@ -83,9 +83,18 @@ test('Import receipt keeps its distribution geometry inside the mobile app viewp
     return {
       horizontalOverflow: layer.scrollWidth - layer.clientWidth,
       clippedStreams: streams.filter((rect) => rect.left < app.left || rect.right > app.right).length,
+      overflowSources: [...document.querySelectorAll('[data-page-id="world-receipt"] *')]
+        .map((element) => ({
+          className: element.className,
+          right: Math.round(element.getBoundingClientRect().right),
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+        }))
+        .filter((item) => item.right > app.right + 1 || item.scrollWidth > item.clientWidth + 1)
+        .slice(0, 12),
     };
   });
 
-  expect(receipt.horizontalOverflow).toBeLessThanOrEqual(1);
+  expect(receipt.horizontalOverflow, JSON.stringify(receipt.overflowSources)).toBeLessThanOrEqual(1);
   expect(receipt.clippedStreams).toBe(0);
 });

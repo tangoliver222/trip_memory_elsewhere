@@ -63,7 +63,7 @@ test('field camera publishes the exact DOM transform to particle space', () => {
 
 test('compact field layout keeps a useful ring of originals inside a phone-scale spatial radius', () => {
   const layout = createFieldLayout('', { compact: true });
-  assert.ok(layout.every((node) => Math.abs(node.x) <= 245));
+  assert.ok(layout.every((node) => Math.abs(node.x) <= 132));
   assert.ok(layout.every((node) => Math.abs(node.y) <= 150));
   assert.ok(new Set(layout.map((node) => node.z)).size > 2);
 });

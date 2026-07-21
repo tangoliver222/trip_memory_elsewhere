@@ -77,9 +77,7 @@ export function renderFragmentField(state) {
           const relevant = !query || node.relevance === 1;
           return `<button id="fragment-focus-${index}" class="field-node field-node--${fragment.type}" style="--field-x:${node.x + (state.field?.camera?.x || 0)}px;--field-y:${node.y + (state.field?.camera?.y || 0)}px;--field-z:${node.z}px;--field-scale:${state.field?.camera?.scale || 1};--node-index:${index};opacity:${node.relevance}" type="button" data-field-node data-particle-anchor data-particle-id="${fragment.id}" data-particle-role="fragment" data-particle-weight="1" data-particle-depth="${-4 + node.z / 24}" data-relevance="${relevant ? 'focused' : 'background'}" data-action="open-lens" data-fragment-id="${fragment.id}">
             ${renderMedia(fragment, { className: 'field-node__media' })}
-            <span class="field-node__type">${typeLabel[fragment.type] || fragment.type}</span>
-            <span class="field-node__label">${escapeHtml(fragment.evidencePreview)}</span>
-            ${fragment.ocr ? `<span class="field-node__provenance">Document AI · ${fragment.ocr.pageCount} 页</span>` : ''}
+            ${fragment.asset ? `<span class="field-node__type">${typeLabel[fragment.type] || fragment.type}</span><span class="field-node__label">${escapeHtml(fragment.evidencePreview)}</span>${fragment.ocr ? `<span class="field-node__provenance">Document AI · ${fragment.ocr.pageCount} 页</span>` : ''}` : ''}
           </button>`;
         }).join('')}
       </section>
