@@ -139,6 +139,28 @@ test('Firebase client app identity remains stable across page reloads', () => {
   assert.deepEqual(names, ['elsewhere-emulator-demo-elsewhere', 'elsewhere-emulator-demo-elsewhere']);
 });
 
+test('Firebase client waits for and reuses the persisted anonymous owner', async () => {
+  const persistedUser = { uid: 'persisted-owner' };
+  let signInCalls = 0;
+  const client = createDemoClient(demoClientConfigFromEnv({}), {
+    initializeAppFn: () => ({}),
+    getAuthFn: () => ({
+      currentUser: persistedUser,
+      async authStateReady() {},
+    }),
+    getStorageFn: () => ({}),
+    connectAuthEmulatorFn() {},
+    connectStorageEmulatorFn() {},
+    signInAnonymouslyFn: async () => {
+      signInCalls += 1;
+      return { user: { uid: 'new-owner' } };
+    },
+  });
+
+  assert.equal(await client.signIn(), persistedUser);
+  assert.equal(signInCalls, 0);
+});
+
 test('cloud Firebase configuration is strict and contains no Emulator addresses', () => {
   const config = demoClientConfigFromEnv(cloudEnvironment);
 

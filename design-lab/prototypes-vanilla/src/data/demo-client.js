@@ -123,9 +123,14 @@ export function createDemoClient(config, {
   let signInPromise = null;
 
   async function signIn() {
-    if (!signInPromise) signInPromise = signInAnonymouslyFn(auth);
-    const credential = await signInPromise;
-    return credential.user;
+    if (!signInPromise) {
+      signInPromise = (async () => {
+        if (typeof auth.authStateReady === 'function') await auth.authStateReady();
+        if (auth.currentUser) return auth.currentUser;
+        return (await signInAnonymouslyFn(auth)).user;
+      })();
+    }
+    return signInPromise;
   }
 
   async function request(path, { method = 'GET', body } = {}) {
