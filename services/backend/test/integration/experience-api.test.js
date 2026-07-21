@@ -93,7 +93,7 @@ test('experience snapshot and mutations always use the verified owner', async (t
   const requests = [
     ['GET', '/v1/experience-snapshot?ownerId=user_beta', undefined],
     ['PUT', '/v1/experience/reviews/inbox-place-frag_12345678', {
-      decision: 'yes', ownerId: 'user_beta',
+      decision: 'yes',
     }],
     ['PUT', '/v1/experience/connections/connection_12345678', { decision: 'confirmed' }],
     ['PUT', '/v1/experience/discoveries/discovery_12345678', { saved: true }],
@@ -110,6 +110,14 @@ test('experience snapshot and mutations always use the verified owner', async (t
   assert.equal(calls.length, requests.length);
   assert.equal(calls.every(([, ownerId]) => ownerId === 'user_alpha'), true);
   assert.equal(calls[1][2].ownerId, undefined);
+  const forgedOwner = await app.inject({
+    method: 'PUT',
+    url: '/v1/experience/reviews/inbox-place-frag_12345678',
+    headers: authHeaders,
+    payload: { decision: 'yes', ownerId: 'user_beta' },
+  });
+  assert.equal(forgedOwner.statusCode, 400);
+  assert.equal(calls.length, requests.length);
   assert.equal((await app.inject({ url: '/demo/v1/snapshot' })).statusCode, 404);
 });
 
