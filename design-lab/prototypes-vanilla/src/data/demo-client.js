@@ -94,14 +94,18 @@ export function createDemoClient(config, {
   connectStorageEmulatorFn = connectStorageEmulator,
   deleteUserFn = deleteUser,
   fetchFn = globalThis.fetch,
+  getAuthFn = getAuth,
+  getStorageFn = getStorage,
+  initializeAppFn = initializeApp,
   signInAnonymouslyFn = signInAnonymously,
   waitFn = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 } = {}) {
   if (!config?.firebase) throw new TypeError('Firebase client config is required');
   if (typeof waitFn !== 'function') throw new TypeError('waitFn is required');
-  const app = initializeApp(config.firebase, `elsewhere-demo-${Date.now()}`);
-  const auth = getAuth(app);
-  const storage = getStorage(app);
+  const appName = `elsewhere-${config.infrastructureMode}-${config.firebase.projectId}`;
+  const app = initializeAppFn(config.firebase, appName);
+  const auth = getAuthFn(app);
+  const storage = getStorageFn(app);
   let appCheckProvider = null;
   if (config.infrastructureMode === 'cloud') {
     appCheckProvider = appCheckFactory({ app, ...config.appCheck });

@@ -119,6 +119,26 @@ test('Firebase infrastructure defaults to the existing Emulator configuration', 
   assert.equal(config.appCheck, null);
 });
 
+test('Firebase client app identity remains stable across page reloads', () => {
+  const names = [];
+  const config = demoClientConfigFromEnv({});
+  const dependencies = {
+    initializeAppFn(options, name) {
+      names.push(name);
+      return { options, name };
+    },
+    getAuthFn: () => ({ currentUser: null }),
+    getStorageFn: () => ({}),
+    connectAuthEmulatorFn() {},
+    connectStorageEmulatorFn() {},
+  };
+
+  createDemoClient(config, dependencies);
+  createDemoClient(config, dependencies);
+
+  assert.deepEqual(names, ['elsewhere-emulator-demo-elsewhere', 'elsewhere-emulator-demo-elsewhere']);
+});
+
 test('cloud Firebase configuration is strict and contains no Emulator addresses', () => {
   const config = demoClientConfigFromEnv(cloudEnvironment);
 
