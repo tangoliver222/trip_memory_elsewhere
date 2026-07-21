@@ -58,14 +58,14 @@ export function renderWritingDetail(noteId, state) {
     <header class="tool-header"><p class="eyebrow">${escapeHtml(note.createdAt || '草稿')} · ${escapeHtml(relatedLabel(note))}</p><h1>一段只属于你的解释</h1><p>编辑不会改变原件、时间、地点或连接。</p></header>
     <div class="writing-paper"><span>YOUR WORDS</span><textarea data-store-action="note-editor" data-note-id="${note.id}" aria-label="书写内容">${escapeHtml(text)}</textarea><div class="writing-paper__rule"></div></div>
     <section class="writing-relations"><span>关联到</span><div><i></i><strong>${escapeHtml(relatedLabel(note))}</strong><small>移除关联不会删除文字</small></div></section>
-    ${primary('保存修改', '#/me/writing', 'data-action="save-note"')}
+    ${primary('保存修改', '#/me/writing', `data-action="save-note" data-note-id="${escapeHtml(note.id)}"`)}
   </main>`);
 }
 
 export function renderPrivacy(state) {
   const current = { ...settings, ...state.settings };
   return quiet(`<main class="page privacy-page" data-page-id="me-privacy">
-    <header class="tool-header"><p class="eyebrow">每个开关都说明关闭影响</p><h1>隐私与权限</h1><p>当前原型以本地 fixture 和你主动放入的演示原件工作；真实云同步尚未接入。</p></header>
+    <header class="tool-header"><p class="eyebrow">每个开关都说明关闭影响</p><h1>隐私与权限</h1><p>你的选择会通过认证服务保存；设备系统权限仍由操作系统单独管理。</p></header>
     <section class="privacy-boundary"><div class="privacy-boundary__rings" aria-hidden="true"><i></i><i></i><span>YOU</span></div><div><strong>Else 的当前读取范围</strong><p>默认只读取当前页面关联的来源。原件、派生关系和你的文字保持可区分。</p></div></section>
     <section class="control-list">
       <label><span><strong>模糊敏感内容</strong><small>关闭后，原件查看器可能显示完整票据金额。</small></span><input type="checkbox" data-store-action="setting" data-key="sensitiveBlur" ${current.sensitiveBlur ? 'checked' : ''}></label>
@@ -73,7 +73,7 @@ export function renderPrivacy(state) {
       <label><span><strong>派生关系处理</strong><small>关闭后仍保留原件，但不再生成新的地点与连接候选。</small></span><input type="checkbox" data-store-action="setting" data-key="cloudProcessing" ${current.cloudProcessing ? 'checked' : ''}></label>
       <label><span><strong>应用锁</strong><small>真实设备接入后可使用系统认证保护入口。</small></span><input type="checkbox" data-store-action="setting" data-key="appLock" ${current.appLock ? 'checked' : ''}></label>
     </section>
-    <p class="tool-caveat">权限状态在当前演示会话内保存；不会声称已修改系统权限。</p>
+    <p class="tool-caveat">产品偏好会同步到你的私有空间；这里不会声称已修改系统权限。</p>
     ${primary('保存当前控制', '#/me')}
   </main>`);
 }

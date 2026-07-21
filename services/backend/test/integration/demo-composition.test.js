@@ -108,6 +108,21 @@ function demoHarness() {
       };
     },
   });
+  const experienceService = Object.freeze({
+    async getSnapshot(uid) {
+      calls.push(['experienceSnapshot', uid]);
+      return { ownerId: uid, userState: { revision: 0 } };
+    },
+    async saveReview(uid, input) {
+      calls.push(['experienceReview', uid, input]);
+      return { revision: 1, reviewDecisions: { [input.itemId]: input } };
+    },
+    async saveConnection() {},
+    async saveDiscovery() {},
+    async saveNote() {},
+    async saveSetting() {},
+    async excludeJourney() {},
+  });
   const app = createDemoComposition({
     appConfig,
     repository: createMemoryRepository(),
@@ -117,6 +132,7 @@ function demoHarness() {
     finalizeUpload,
     afterFinalize,
     elseService,
+    experienceService,
     projectSnapshot,
     storageBucket: BUCKET,
     randomUUID: () => '00000000-0000-4000-8000-000000000001',
@@ -124,6 +140,25 @@ function demoHarness() {
   });
   return { app, calls, decisions };
 }
+
+test('demo composition exposes the same authenticated experience operation boundary', async (t) => {
+  const { app, calls } = demoHarness();
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: 'PUT',
+    url: '/v1/experience/reviews/review_alpha',
+    headers: authHeaders,
+    payload: { decision: 'yes' },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(calls.find(([name]) => name === 'experienceReview'), [
+    'experienceReview',
+    OWNER_ID,
+    { itemId: 'review_alpha', decision: 'yes' },
+  ]);
+});
 
 test('demo routes remain absent from the production API composition', async (t) => {
   const productionApi = createApiComposition({

@@ -483,6 +483,20 @@ test('hydration changes world counts and fragment identities from the snapshot',
   assert.deepEqual(cities.map(({ id }) => id), ['city-bangkok']);
 });
 
+test('persisted journey exclusions remove its projected content after refresh', () => {
+  const snapshot = snapshotWith(['frag_excluded']);
+  snapshot.userState = {
+    revision: 1,
+    excludedJourneyIds: ['journey-city-bangkok'],
+  };
+
+  hydrateLiveCollections(snapshot);
+
+  assert.equal(world.totalFragments, 0);
+  assert.deepEqual(cities, []);
+  assert.deepEqual(fragments, []);
+});
+
 test('storage identities remain paths until the Firebase client resolves them', () => {
   const snapshot = snapshotWith(['frag_real_path']);
   hydrateLiveCollections(snapshot);

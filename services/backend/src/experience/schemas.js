@@ -24,7 +24,7 @@ const SettingValueSchemas = Object.freeze({
   cloudProcessing: z.boolean(),
   appLock: z.boolean(),
   photoAccess: z.boolean(),
-  aiTone: z.enum(['fact', 'gentle', 'narrative']),
+  aiTone: z.enum(['fact', 'balanced', 'narrative']),
 });
 
 export function parseSettingInput(key, body) {
@@ -63,7 +63,7 @@ export const ExperienceStateSchema = z.strictObject({
     cloudProcessing: z.boolean().optional(),
     appLock: z.boolean().optional(),
     photoAccess: z.boolean().optional(),
-    aiTone: z.enum(['fact', 'gentle', 'narrative']).optional(),
+    aiTone: z.enum(['fact', 'balanced', 'narrative']).optional(),
   }),
   excludedJourneyIds: z.array(IdSchema).max(200),
   updatedAt: IsoDateTimeSchema.nullable(),
@@ -87,7 +87,7 @@ export const ExperienceCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     type: z.literal('setting'), id: CommandIdSchema,
-    value: z.strictObject({ value: z.union([z.boolean(), z.enum(['fact', 'gentle', 'narrative'])]) }),
+    value: z.strictObject({ value: z.union([z.boolean(), z.enum(['fact', 'balanced', 'narrative'])]) }),
     updatedAt: IsoDateTimeSchema,
   }),
   z.strictObject({

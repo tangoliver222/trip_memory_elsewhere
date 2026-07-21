@@ -11,6 +11,9 @@ import { createSharpRoutingFeatureReader } from '../adapters/sharp-routing-featu
 import { createCapabilityScheduler } from '../capabilities/scheduler.js';
 import { createStorageFinalizedPipeline } from '../ingestion/pipeline.js';
 import { createOriginalFinalizer } from '../ingestion/service.js';
+import { createExperienceService } from '../experience/service.js';
+import { createFirestoreExperienceState } from '../experience/firestore-state.js';
+import { createFirestoreMemorySnapshotReader } from '../memory/reader.js';
 import { createDeterministicProcessor } from '../processing/service.js';
 import { createFirestoreRepository } from '../repositories/firestore.js';
 import { createAuthoritativeRouter } from '../routing/service.js';
@@ -94,6 +97,12 @@ export function createDemoRuntime({
       ? createGeminiElseProvider({ client: geminiClient, model: appConfig.models.FAST_MULTIMODAL })
       : null,
   });
+  const experienceService = createExperienceService({
+    memorySnapshotReader: createFirestoreMemorySnapshotReader({ db: firebase.db }),
+    stateRepository: createFirestoreExperienceState({ db: firebase.db }),
+    projectSnapshot: projectCompetitionSnapshot,
+    clock,
+  });
 
   return createDemoComposition({
     appConfig,
@@ -104,6 +113,7 @@ export function createDemoRuntime({
     finalizeUpload,
     afterFinalize,
     elseService,
+    experienceService,
     projectSnapshot: projectCompetitionSnapshot,
     storageBucket,
     randomUUID: uuid,

@@ -59,3 +59,18 @@ test('navigation closes spatial overlays and returns Else to its route-safe idle
   assert.equal(store.getState().else.open, false);
   assert.equal(store.getState().else.state, 'idle');
 });
+
+test('an older remote mutation response cannot overwrite newer owner state', () => {
+  const store = createStore(createInitialState());
+  store.dispatch({
+    type: 'HYDRATE_REMOTE_STATE',
+    value: { revision: 3, savedDiscoveryIds: ['discovery_new'] },
+  });
+  store.dispatch({
+    type: 'HYDRATE_REMOTE_STATE',
+    value: { revision: 2, savedDiscoveryIds: [] },
+  });
+
+  assert.equal(store.getState().remoteRevision, 3);
+  assert.deepEqual(store.getState().savedDiscoveryIds, ['discovery_new']);
+});

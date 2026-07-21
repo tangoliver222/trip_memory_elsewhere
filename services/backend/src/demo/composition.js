@@ -2,6 +2,7 @@ import { createApp } from '../app.js';
 import { registerAuthBoundary } from '../auth/boundary.js';
 import { registerImportRoutes } from '../imports/routes.js';
 import { createImportService } from '../imports/service.js';
+import { registerExperienceRoutes } from '../experience/routes.js';
 import { registerDemoRoutes } from './routes.js';
 
 export function createDemoComposition({
@@ -13,6 +14,7 @@ export function createDemoComposition({
   finalizeUpload,
   afterFinalize,
   elseService,
+  experienceService,
   projectSnapshot,
   storageBucket,
   randomUUID,
@@ -22,6 +24,9 @@ export function createDemoComposition({
   const requireAuth = registerAuthBoundary(app, { tokenVerifier, allowedAppIds });
   const importService = createImportService({ repository, randomUUID, clock });
   registerImportRoutes(app, { requireAuth, importService });
+  if (experienceService) {
+    registerExperienceRoutes(app, { requireAuth, experienceService });
+  }
   registerDemoRoutes(app, {
     requireAuth,
     demoRepository,

@@ -5,7 +5,7 @@ import './styles/shell.css';
 import './styles/motion.css';
 import './styles/components.css';
 import './styles/pages.css';
-import { renderAppShell, renderElseOrb } from './components/app-shell.js';
+import { renderAppShell, renderElseOrb, renderOperationStatus } from './components/app-shell.js';
 import { renderNavigation } from './components/navigation.js';
 import { createActionController } from './controllers/action-controller.js';
 import { renderFragmentLens } from './overlays/fragment-lens.js';
@@ -161,6 +161,7 @@ function updateShell() {
     updateElseOrb(state, route);
     root.querySelector('#else-drawer-host').innerHTML = elseHtml;
     root.querySelector('#overlay-root').innerHTML = overlayHtml;
+    root.querySelector('#operation-status-host').innerHTML = renderOperationStatus(state);
   }
 
   const topOverlay = state.overlays.at(-1)?.name || '';
@@ -271,6 +272,9 @@ async function bootApplication() {
       value: { mode: 'live', status: 'ready', client, error: null },
       silentRender: true,
     });
+    if (snapshot.userState) {
+      store.dispatch({ type: 'HYDRATE_REMOTE_STATE', value: snapshot.userState, silentRender: true });
+    }
     updateShell();
   } catch (error) {
     store.dispatch({

@@ -10,6 +10,15 @@ export function renderElseOrb(state, route) {
   </button>`;
 }
 
+export function renderOperationStatus(state) {
+  const operation = state?.operation;
+  if (!operation || operation.status === 'idle') return '';
+  const label = operation.status === 'pending' ? '正在安全保存…'
+    : operation.status === 'success' ? '已同步到你的记忆空间'
+      : '保存失败，页面数据未被修改';
+  return `<div class="operation-status operation-status--${operation.status}" role="status" aria-live="polite">${label}</div>`;
+}
+
 export function renderAppShell({ pageHtml = '', route, state, overlayHtml = '', elseHtml = '' }) {
   const intensity = route?.contract?.intensity || 'C';
   const scene = route?.contract?.sceneMode || 'quiet-tool';
@@ -22,5 +31,6 @@ export function renderAppShell({ pageHtml = '', route, state, overlayHtml = '', 
     <div id="else-orb-host">${renderElseOrb(state, route)}</div>
     <div id="else-drawer-host">${elseHtml}</div>
     <div id="overlay-root" class="overlay-root" aria-live="polite">${overlayHtml}</div>
+    <div id="operation-status-host">${renderOperationStatus(state)}</div>
   </div>`;
 }

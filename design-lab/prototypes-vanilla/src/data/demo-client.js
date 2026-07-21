@@ -171,7 +171,7 @@ export function createDemoClient(config, {
   async function waitForCloudSnapshot() {
     for (let attempt = 0; attempt < CLOUD_POLL_ATTEMPTS; attempt += 1) {
       try {
-        return await request('/v1/memory-snapshot');
+        return await request('/v1/experience-snapshot');
       } catch (error) {
         if (error?.status !== 503) throw error;
         if (attempt + 1 < CLOUD_POLL_ATTEMPTS) await waitFn(CLOUD_POLL_INTERVAL_MS);
@@ -224,13 +224,42 @@ export function createDemoClient(config, {
         : request('/demo/v1/snapshot');
     },
     saveInboxDecision(itemId, decision) {
-      return request(`/demo/v1/inbox/${encodeURIComponent(itemId)}/decision`, {
-        method: 'POST',
+      const path = config.infrastructureMode === 'cloud'
+        ? `/v1/experience/reviews/${encodeURIComponent(itemId)}`
+        : `/demo/v1/inbox/${encodeURIComponent(itemId)}/decision`;
+      return request(path, {
+        method: config.infrastructureMode === 'cloud' ? 'PUT' : 'POST',
         body: decision,
       });
     },
     askElse(question, scope) {
-      return request('/demo/v1/else/ask', { method: 'POST', body: { question, scope } });
+      const path = config.infrastructureMode === 'cloud' ? '/v1/else/ask' : '/demo/v1/else/ask';
+      return request(path, { method: 'POST', body: { question, scope } });
+    },
+    saveConnectionDecision(connectionId, decision) {
+      return request(`/v1/experience/connections/${encodeURIComponent(connectionId)}`, {
+        method: 'PUT', body: { decision },
+      });
+    },
+    saveDiscovery(discoveryId, saved) {
+      return request(`/v1/experience/discoveries/${encodeURIComponent(discoveryId)}`, {
+        method: 'PUT', body: { saved },
+      });
+    },
+    saveNote(noteId, text) {
+      return request(`/v1/experience/notes/${encodeURIComponent(noteId)}`, {
+        method: 'PUT', body: { text },
+      });
+    },
+    saveSetting(key, value) {
+      return request(`/v1/experience/settings/${encodeURIComponent(key)}`, {
+        method: 'PUT', body: { value },
+      });
+    },
+    excludeJourney(journeyId) {
+      return request(`/v1/experience/journeys/${encodeURIComponent(journeyId)}`, {
+        method: 'DELETE',
+      });
     },
     reset() {
       return request('/demo/v1/reset', {

@@ -31,7 +31,17 @@ function controllerHarness({ client, mode = 'live' }) {
   const click = (dataset) => listeners.get('click')({
     target: { closest: () => ({ dataset }) },
   });
-  return { actions, click, state };
+  const input = (storeAction, properties = {}, type = 'input') => listeners.get(type)({
+    type,
+    target: {
+      dataset: { storeAction, ...(properties.dataset || {}) },
+      type: properties.type,
+      checked: properties.checked,
+      value: properties.value,
+      closest() { return this; },
+    },
+  });
+  return { actions, click, input, state };
 }
 
 test('live review failure never dispatches a local success decision', async () => {
@@ -69,4 +79,42 @@ test('fixture review remains an explicit local design-lab action', () => {
   assert.deepEqual(actions, [{
     type: 'SET_REVIEW_DECISION', reviewId: 'review_fixture', value: '1',
   }]);
+});
+
+test('live discovery success hydrates the authoritative response without toggling it again', async () => {
+  const remoteState = { revision: 4, savedDiscoveryIds: ['discovery_alpha'] };
+  const { actions, click } = controllerHarness({
+    client: {
+      async saveDiscovery() { return { userState: remoteState }; },
+    },
+  });
+
+  click({ action: 'save-discovery', discoveryId: 'discovery_alpha' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(actions.filter(({ type }) => type === 'HYDRATE_REMOTE_STATE'), [{
+    type: 'HYDRATE_REMOTE_STATE', value: remoteState,
+  }]);
+  assert.equal(actions.some(({ type }) => type === 'SAVE_DISCOVERY'), false);
+});
+
+test('a setting control persists once even when the browser emits input then change', async () => {
+  const calls = [];
+  const { input } = controllerHarness({
+    client: {
+      async saveSetting(key, value) {
+        calls.push([key, value]);
+        return { userState: { revision: 1, settings: { [key]: value } } };
+      },
+    },
+  });
+
+  const properties = {
+    type: 'checkbox', checked: true, dataset: { key: 'highAccuracyGPS' },
+  };
+  input('setting', properties, 'input');
+  input('setting', properties, 'change');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(calls, [['highAccuracyGPS', true]]);
 });

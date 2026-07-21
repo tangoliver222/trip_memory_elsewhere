@@ -8,12 +8,40 @@ import { currentMemoryCatalog } from '../data/view-model.js';
 
 const valueFor = (element) => element.dataset.value ?? element.value;
 
-export const SUPPORTED_ACTIONS = new Set([
-  'navigate', 'run-live-import', 'back', 'toggle-else', 'close-overlay', 'open-original',
-  'open-share', 'confirm-share', 'set-field-type', 'review-choice', 'connection-decision',
-  'set-discovery-filter', 'save-discovery', 'ask-else', 'submit-else', 'open-delete',
-  'confirm-delete', 'clear-cache', 'save-note', 'export-data', 'open-lens',
-]);
+export const ACTION_AUTHORITIES = Object.freeze({
+  navigate: 'client-router',
+  'run-live-import': 'firebase-import-api',
+  back: 'client-router',
+  'toggle-else': 'client-overlay',
+  'close-overlay': 'client-overlay',
+  'open-original': 'client-overlay',
+  'open-share': 'client-overlay',
+  'confirm-share': 'device-download',
+  'set-field-type': 'client-filter',
+  'review-choice': 'firebase-experience-api',
+  'connection-decision': 'firebase-experience-api',
+  'set-discovery-filter': 'client-filter',
+  'save-discovery': 'firebase-experience-api',
+  'ask-else': 'gemini-else-api',
+  'submit-else': 'gemini-else-api',
+  'open-delete': 'client-overlay',
+  'confirm-delete': 'firebase-experience-api',
+  'clear-cache': 'device-cache',
+  'save-note': 'firebase-experience-api',
+  'export-data': 'device-download',
+  'open-lens': 'client-overlay',
+});
+
+export const STORE_ACTION_AUTHORITIES = Object.freeze({
+  'delete-ack': 'client-validation',
+  'else-query': 'client-draft',
+  'field-query': 'client-filter',
+  'live-files': 'device-file-picker',
+  'note-editor': 'client-draft',
+  setting: 'firebase-experience-api',
+});
+
+export const SUPPORTED_ACTIONS = new Set(Object.keys(ACTION_AUTHORITIES));
 
 const downloadBlob = (content, type, filename) => {
   const blob = new Blob([content], { type });
@@ -41,6 +69,34 @@ const shareSvg = (title, copy) => `<svg xmlns="http://www.w3.org/2000/svg" width
 
 export function createActionController({ root, store }) {
   const timers = new Set();
+  const completeLocal = (action) => store.dispatch(action);
+  const runOwnerMutation = async ({ name, invoke, success }) => {
+    const runtime = store.getState().runtime;
+    if (runtime.mode !== 'live') {
+      success(null);
+      return;
+    }
+    store.dispatch({
+      type: 'SET_OPERATION_STATUS',
+      value: { status: 'pending', name, error: null },
+    });
+    try {
+      const response = await invoke(runtime.client);
+      if (response?.userState) {
+        store.dispatch({ type: 'HYDRATE_REMOTE_STATE', value: response.userState });
+      }
+      success(response);
+      store.dispatch({
+        type: 'SET_OPERATION_STATUS',
+        value: { status: 'success', name, error: null },
+      });
+    } catch (error) {
+      store.dispatch({
+        type: 'SET_OPERATION_STATUS',
+        value: { status: 'error', name, error: error?.code || 'experience/unavailable' },
+      });
+    }
+  };
   const startLiveImport = async () => {
     const state = store.getState();
     const { client } = state.runtime;
@@ -135,16 +191,72 @@ export function createActionController({ root, store }) {
     if (action === 'open-original') store.dispatch({ type: 'OPEN_ORIGINAL' });
     if (action === 'open-share') store.dispatch({ type: 'OPEN_SHARE', payload: { title: target.dataset.title, text: target.dataset.text } });
     if (action === 'set-field-type') store.dispatch({ type: 'SET_FIELD_FILTERS', filters: { type: target.dataset.value } });
-    if (action === 'review-choice') store.dispatch({ type: 'SET_REVIEW_DECISION', reviewId: target.dataset.reviewId, value: target.dataset.value });
-    if (action === 'connection-decision') store.dispatch({ type: 'SET_CONNECTION_DECISION', connectionId: target.dataset.connectionId, value: target.dataset.value });
+    if (action === 'review-choice') {
+      const decisions = ['yes', 'no', 'later'];
+      const value = target.dataset.value;
+      void runOwnerMutation({
+        name: 'review',
+        invoke: (client) => client.saveInboxDecision(target.dataset.reviewId, {
+          decision: decisions[Number(value)],
+        }),
+        success: (response) => {
+          if (!response?.userState) completeLocal({
+            type: 'SET_REVIEW_DECISION', reviewId: target.dataset.reviewId, value,
+          });
+        },
+      });
+    }
+    if (action === 'connection-decision') {
+      void runOwnerMutation({
+        name: 'connection',
+        invoke: (client) => client.saveConnectionDecision(
+          target.dataset.connectionId,
+          target.dataset.value,
+        ),
+        success: (response) => {
+          if (!response?.userState) completeLocal({
+            type: 'SET_CONNECTION_DECISION',
+            connectionId: target.dataset.connectionId,
+            value: target.dataset.value,
+          });
+        },
+      });
+    }
     if (action === 'set-discovery-filter') store.dispatch({ type: 'SET_DISCOVERY_FILTER', filter: target.dataset.value });
-    if (action === 'save-discovery') store.dispatch({ type: 'SAVE_DISCOVERY', discoveryId: target.dataset.discoveryId });
+    if (action === 'save-discovery') {
+      const discoveryId = target.dataset.discoveryId;
+      const saved = !store.getState().savedDiscoveryIds.includes(discoveryId);
+      void runOwnerMutation({
+        name: 'discovery',
+        invoke: (client) => client.saveDiscovery(discoveryId, saved),
+        success: (response) => {
+          if (!response?.userState) completeLocal({ type: 'SAVE_DISCOVERY', discoveryId });
+        },
+      });
+    }
     if (action === 'ask-else') void askElse(target.dataset.question);
     if (action === 'submit-else') void askElse(store.getState().else.query);
     if (action === 'open-delete') store.dispatch({ type: 'OPEN_DELETE', targetId: target.dataset.targetId });
-    if (action === 'confirm-delete') store.dispatch({ type: 'CONFIRM_DELETE', targetId: target.dataset.targetId });
+    if (action === 'confirm-delete') {
+      void runOwnerMutation({
+        name: 'journey',
+        invoke: (client) => client.excludeJourney(target.dataset.targetId),
+        success: (response) => {
+          if (response?.userState) completeLocal({ type: 'CLOSE_OVERLAY' });
+          else completeLocal({ type: 'CONFIRM_DELETE', targetId: target.dataset.targetId });
+        },
+      });
+    }
     if (action === 'clear-cache') store.dispatch({ type: 'CLEAR_CACHE' });
-    if (action === 'save-note') navigate('#/me/writing');
+    if (action === 'save-note') {
+      const noteId = target.dataset.noteId;
+      const text = store.getState().notes[noteId] || '';
+      void runOwnerMutation({
+        name: 'note',
+        invoke: (client) => client.saveNote(noteId, text),
+        success: () => navigate('#/me/writing'),
+      });
+    }
     if (action === 'confirm-share' && typeof document !== 'undefined') {
       downloadBlob(shareSvg(target.dataset.title || '一段旅行记忆', target.dataset.text || '来源已隐藏敏感信息。'), 'image/svg+xml', 'elsewhere-memory.svg');
       store.dispatch({ type: 'CLOSE_OVERLAY' });
@@ -174,7 +286,21 @@ export function createActionController({ root, store }) {
     if (!target) return;
     if (target.dataset.storeAction === 'field-query') store.dispatch({ type: 'SET_FIELD_FILTERS', filters: { query: target.value } });
     if (target.dataset.storeAction === 'field-type') store.dispatch({ type: 'SET_FIELD_FILTERS', filters: { type: valueFor(target) } });
-    if (target.dataset.storeAction === 'setting') store.dispatch({ type: 'SET_SETTING', key: target.dataset.key, value: target.type === 'checkbox' ? target.checked : valueFor(target) });
+    if (target.dataset.storeAction === 'setting' && event.type === 'change') {
+      const key = target.dataset.key;
+      const value = target.type === 'checkbox' ? target.checked : valueFor(target);
+      void runOwnerMutation({
+        name: 'setting',
+        invoke: (client) => client.saveSetting(key, value),
+        success: (response) => {
+          if (!response?.userState) completeLocal({ type: 'SET_SETTING', key, value });
+        },
+      });
+    }
+    if (target.dataset.storeAction === 'delete-ack') {
+      const confirmation = root.querySelector?.('[data-action="confirm-delete"]');
+      if (confirmation) confirmation.disabled = !target.checked;
+    }
     if (target.dataset.storeAction === 'else-query') store.dispatch({ type: 'SET_ELSE', value: { query: target.value }, silentRender: true });
     if (target.dataset.storeAction === 'note-editor') store.dispatch({ type: 'SET_NOTE', noteId: target.dataset.noteId, text: target.value, silentRender: true });
     if (target.dataset.storeAction === 'live-files') {

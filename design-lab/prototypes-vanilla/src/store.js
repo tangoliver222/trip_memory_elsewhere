@@ -51,6 +51,12 @@ export function createInitialState(overrides = {}) {
       client: null,
       error: null,
     },
+    operation: {
+      status: 'idle',
+      name: null,
+      error: null,
+    },
+    remoteRevision: 0,
     settings: { ...fixtureSettings },
     cacheCleared: false,
     deletedTargets: [],
@@ -223,6 +229,35 @@ function reduce(state, action) {
       return { state: { ...state, connectionDecisions: { ...state.connectionDecisions, [action.connectionId || 'current']: action.value } }, result: {} };
     case 'SET_RUNTIME':
       return { state: { ...state, runtime: { ...state.runtime, ...action.value } }, result: {} };
+    case 'SET_OPERATION_STATUS':
+      return { state: { ...state, operation: { ...state.operation, ...action.value } }, result: {} };
+    case 'HYDRATE_REMOTE_STATE': {
+      const remote = action.value || {};
+      const remoteRevision = Number.isSafeInteger(remote.revision)
+        ? remote.revision
+        : state.remoteRevision;
+      if (remoteRevision < state.remoteRevision) return { state, result: {} };
+      const reviewValue = { yes: '0', no: '1', later: '2' };
+      return {
+        state: {
+          ...state,
+          remoteRevision,
+          reviewDecisions: Object.fromEntries(Object.entries(remote.reviewDecisions || {}).map(
+            ([id, value]) => [id, reviewValue[value?.decision] ?? value?.decision],
+          )),
+          connectionDecisions: Object.fromEntries(Object.entries(remote.connectionDecisions || {}).map(
+            ([id, value]) => [id, value?.decision],
+          )),
+          savedDiscoveryIds: [...(remote.savedDiscoveryIds || [])],
+          notes: Object.fromEntries(Object.entries(remote.notes || {}).map(
+            ([id, value]) => [id, value?.text ?? ''],
+          )),
+          settings: { ...state.settings, ...(remote.settings || {}) },
+          deletedTargets: [...(remote.excludedJourneyIds || [])],
+        },
+        result: {},
+      };
+    }
     case 'SET_IMPORT_FILES':
       return {
         state: {

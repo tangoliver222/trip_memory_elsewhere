@@ -134,6 +134,42 @@ function normalizeProductionSnapshot(snapshot) {
   };
 }
 
+function applyUserExclusions(snapshot) {
+  const excluded = new Set(snapshot.userState?.excludedJourneyIds || []);
+  if (excluded.size === 0) return snapshot;
+  const isExcludedCity = (cityId) => cityId && excluded.has(journeyId(cityId));
+  const visibleFragments = snapshot.fragments.filter((fragment) => (
+    !excluded.has(fragment.journeyId) && !isExcludedCity(fragment.cityId)
+  ));
+  const visibleIds = new Set(visibleFragments.map(({ id }) => id));
+  const visibleCities = snapshot.cities.filter(({ id }) => !isExcludedCity(id));
+  const visiblePlaces = snapshot.places.filter(({ cityId }) => !isExcludedCity(cityId));
+  const allSourcesVisible = ({ sourceIds = [] }) => (
+    sourceIds.length > 0 && sourceIds.every((id) => visibleIds.has(id))
+  );
+  const placedFragments = visibleFragments.filter(({ cityId }) => cityId !== null);
+
+  return {
+    ...snapshot,
+    world: {
+      ...snapshot.world,
+      totalFragments: visibleFragments.length,
+      totalCities: visibleCities.length,
+      totalPlaces: visiblePlaces.length,
+      placedFragments: placedFragments.length,
+      unplacedFragments: visibleFragments.length - placedFragments.length,
+      sourceIds: visibleFragments.map(({ id }) => id),
+    },
+    cities: visibleCities,
+    fragments: visibleFragments,
+    places: visiblePlaces,
+    visits: snapshot.visits.filter(allSourcesVisible),
+    connections: snapshot.connections.filter(allSourcesVisible),
+    discoveries: snapshot.discoveries.filter(allSourcesVisible),
+    inboxItems: snapshot.inboxItems.filter(allSourcesVisible),
+  };
+}
+
 function mappedFragments(snapshot) {
   return snapshot.fragments.map((fragment) => ({
     id: fragment.id,
@@ -171,6 +207,7 @@ export function hydrateLiveCollections(snapshot) {
     throw new TypeError('Live snapshot is invalid');
   }
   snapshot = normalizeProductionSnapshot(snapshot);
+  snapshot = applyUserExclusions(snapshot);
   const liveFragments = mappedFragments(snapshot);
   const byId = new Map(liveFragments.map((fragment) => [fragment.id, fragment]));
   const liveCities = snapshot.cities.map((city) => {
