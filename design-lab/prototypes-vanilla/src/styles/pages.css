@@ -389,7 +389,7 @@
   .discovery-time-node--3 { left: 8%; top: 326px; }
   .discovery-relation-forming { height: 125px; margin-top: -128px; transform: rotate(8deg); }
   .discovery-relation-forming>span { transform: translate(-50%,-50%) rotate(-8deg); }
-  .discovery-entity-forming { position: absolute; right: 6%; bottom: 46px; }
+  .discovery-entity-forming { position: absolute; right: 6%; bottom: 132px; }
   .discovery-title-reveal { position: relative; z-index: 3; margin: 28px 0 48px; text-align: left; }
   .discovery-title-reveal h1 { margin: 8px 0 10px; font-size: 1.74rem; line-height: 1.04; letter-spacing: -.025em; }
   .discovery-title-reveal>p:last-child { max-width: 340px; margin: 0; font-size: .72rem; line-height: 1.45; }

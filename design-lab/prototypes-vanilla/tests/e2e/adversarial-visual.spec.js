@@ -45,14 +45,20 @@ test('Discover Detail keeps the evidence field before the final conclusion in se
     const evidence = document.querySelector('[data-discovery-evidence]').getBoundingClientRect();
     const title = document.querySelector('.discovery-title-reveal').getBoundingClientRect();
     const firstOriginal = document.querySelector('.discovery-time-node').getBoundingClientRect();
+    const entity = document.querySelector('.discovery-entity-forming').getBoundingClientRect();
+    const orb = document.querySelector('[data-else-orb]').getBoundingClientRect();
+    const entityOverlapsOrb = entity.left < orb.right && entity.right > orb.left
+      && entity.top < orb.bottom && entity.bottom > orb.top;
     return {
       firstOriginalBeforeTitle: firstOriginal.top < title.top,
       evidenceBeforeTitle: evidence.bottom + 16 <= title.top,
+      entityOverlapsOrb,
     };
   });
 
   expect(sequence.firstOriginalBeforeTitle).toBe(true);
   expect(sequence.evidenceBeforeTitle).toBe(true);
+  expect(sequence.entityOverlapsOrb).toBe(false);
 });
 
 test('Fragment Field keeps every initial mobile node bounded and renders artifact copy once', async ({ page }) => {
