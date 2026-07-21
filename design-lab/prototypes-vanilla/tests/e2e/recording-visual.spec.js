@@ -167,14 +167,14 @@ test('recording fixture remains readable, bounded and visually stable', async ({
     await assertHealthy(page, 'discover-detail');
     expect(await page.locator('[data-discovery-evidence] [data-fragment-id]').count()).toBeGreaterThanOrEqual(3);
     await expect(page.locator('.discovery-title-reveal')).toBeVisible();
-    await expect(page.locator('.discovery-title-reveal')).toBeInViewport();
+    await expect(page.locator('.discovery-time-node').first()).toBeInViewport();
     await assertRecordingComposition(page, 'discover-detail');
     const titleEvidenceGap = await page.evaluate(() => {
       const title = document.querySelector('.discovery-title-reveal').getBoundingClientRect();
-      const firstEvidence = document.querySelector('.discovery-time-node').getBoundingClientRect();
-      return firstEvidence.top - title.bottom;
+      const evidence = document.querySelector('[data-discovery-evidence]').getBoundingClientRect();
+      return title.top - evidence.bottom;
     });
-    expect(titleEvidenceGap).toBeGreaterThanOrEqual(8);
+    expect(titleEvidenceGap).toBeGreaterThanOrEqual(16);
     await capture(page, viewport, '06-discover-detail');
 
     await page.locator('[data-else-orb]').click();

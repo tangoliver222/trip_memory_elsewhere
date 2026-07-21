@@ -375,7 +375,7 @@
   .map-place--4 { right: 5%; bottom: 14%; }
   .map-caption { display: grid; gap: 3px; font-size: .62rem; }
 
-  .discovery-detail { position: relative; padding: 182px 18px 118px; }
+  .discovery-detail { position: relative; padding: max(20px, env(safe-area-inset-top)) 18px 118px; }
   .discovery-growth { min-height: 790px; align-content: start; padding-top: 0; }
   .discovery-time-nodes { position: relative; display: block; height: 485px; }
   .discovery-time-node { position: absolute; width: 46%; gap: 5px; transform: translate3d(0,0,calc((var(--date-index) - 1) * -100px)); }
@@ -390,7 +390,7 @@
   .discovery-relation-forming { height: 125px; margin-top: -128px; transform: rotate(8deg); }
   .discovery-relation-forming>span { transform: translate(-50%,-50%) rotate(-8deg); }
   .discovery-entity-forming { position: absolute; right: 6%; bottom: 46px; }
-  .discovery-title-reveal { position: absolute; z-index: 3; top: 32px; left: 18px; right: 18px; margin: 0; text-align: left; }
+  .discovery-title-reveal { position: relative; z-index: 3; margin: 28px 0 48px; text-align: left; }
   .discovery-title-reveal h1 { margin: 8px 0 10px; font-size: 1.74rem; line-height: 1.04; letter-spacing: -.025em; }
   .discovery-title-reveal>p:last-child { max-width: 340px; margin: 0; font-size: .72rem; line-height: 1.45; }
 
