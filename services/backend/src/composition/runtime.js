@@ -20,6 +20,9 @@ import { createMemorySnapshotLoader } from '../memory/loader.js';
 import { createFirestoreElseQueryBudget } from '../else/firestore-budget.js';
 import { createGeminiElseProvider } from '../else/gemini-provider.js';
 import { createElseQueryService } from '../else/service.js';
+import { createExperienceService } from '../experience/service.js';
+import { createFirestoreExperienceState } from '../experience/firestore-state.js';
+import { projectCompetitionSnapshot } from '../demo/projection.js';
 import { createFirestoreRepository } from '../repositories/firestore.js';
 import { createAuthoritativeRouter } from '../routing/service.js';
 import { createApiComposition } from './api.js';
@@ -53,6 +56,9 @@ export function createRuntimeApp(appConfig, {
   geminiClientFactory = (options) => new GoogleGenAI(options),
   elseProviderFactory = createGeminiElseProvider,
   elseQueryServiceFactory = createElseQueryService,
+  experienceStateFactory = createFirestoreExperienceState,
+  experienceServiceFactory = createExperienceService,
+  experienceProjector = projectCompetitionSnapshot,
   clock = () => new Date().toISOString(),
   randomUUID = nodeRandomUUID,
 } = {}) {
@@ -64,6 +70,12 @@ export function createRuntimeApp(appConfig, {
 
   if (appConfig.serviceMode === 'api') {
     const memorySnapshotReader = memorySnapshotReaderFactory({ db: firebase.db });
+    const experienceService = experienceServiceFactory({
+      memorySnapshotReader,
+      stateRepository: experienceStateFactory({ db: firebase.db }),
+      projectSnapshot: experienceProjector,
+      clock,
+    });
     let elseQueryService = null;
     if (appConfig.elseQuery) {
       const memorySnapshotLoader = memorySnapshotLoaderFactory({ memorySnapshotReader });
@@ -93,6 +105,7 @@ export function createRuntimeApp(appConfig, {
       allowedAppIds: appConfig.allowedAppIds,
       memorySnapshotReader,
       elseQueryService,
+      experienceService,
     });
   }
 
