@@ -388,6 +388,55 @@ test('production Else query uses the authenticated evidence-only boundary', asyn
   ]]);
 });
 
+test('cloud product operations use only authenticated production routes', async () => {
+  const requests = [];
+  const client = createDemoClient(demoClientConfigFromEnv(cloudEnvironment), {
+    appCheckFactory: () => Object.freeze({ getToken: async () => 'app-check-token' }),
+    signInAnonymouslyFn: async () => ({
+      user: Object.freeze({ getIdToken: async () => 'firebase-id-token' }),
+    }),
+    fetchFn: async (url, init) => {
+      requests.push([url, init.method, init.body ? JSON.parse(init.body) : null]);
+      return Object.freeze({
+        ok: true,
+        status: 200,
+        json: async () => ({ userState: { revision: requests.length } }),
+      });
+    },
+  });
+
+  await client.getSnapshot();
+  await client.askElse('我反复去过哪里？', { type: 'world' });
+  await client.saveInboxDecision('inbox-place-frag_12345678', { decision: 'yes' });
+  await client.saveConnectionDecision('connection_12345678', 'confirmed');
+  await client.saveDiscovery('discovery_12345678', true);
+  await client.saveNote('note_12345678', '私人文字');
+  await client.saveSetting('aiTone', 'fact');
+  await client.excludeJourney('journey_12345678');
+
+  assert.deepEqual(requests, [
+    ['http://127.0.0.1:8787/v1/experience-snapshot', 'GET', null],
+    ['http://127.0.0.1:8787/v1/else/ask', 'POST', {
+      question: '我反复去过哪里？', scope: { type: 'world' },
+    }],
+    ['http://127.0.0.1:8787/v1/experience/reviews/inbox-place-frag_12345678', 'PUT', {
+      decision: 'yes',
+    }],
+    ['http://127.0.0.1:8787/v1/experience/connections/connection_12345678', 'PUT', {
+      decision: 'confirmed',
+    }],
+    ['http://127.0.0.1:8787/v1/experience/discoveries/discovery_12345678', 'PUT', {
+      saved: true,
+    }],
+    ['http://127.0.0.1:8787/v1/experience/notes/note_12345678', 'PUT', {
+      text: '私人文字',
+    }],
+    ['http://127.0.0.1:8787/v1/experience/settings/aiTone', 'PUT', { value: 'fact' }],
+    ['http://127.0.0.1:8787/v1/experience/journeys/journey_12345678', 'DELETE', null],
+  ]);
+  assert.equal(requests.some(([url]) => url.includes('/demo/v1/')), false);
+});
+
 test('cloud snapshot waits through a retryable projection gap', async () => {
   let calls = 0;
   const requests = [];
@@ -419,8 +468,8 @@ test('cloud snapshot waits through a retryable projection gap', async () => {
   assert.deepEqual(await client.getSnapshot(), { revision: 'cloud-ready' });
   assert.equal(calls, 2);
   assert.deepEqual(requests, [
-    ['http://127.0.0.1:8787/v1/memory-snapshot', 'GET'],
-    ['http://127.0.0.1:8787/v1/memory-snapshot', 'GET'],
+    ['http://127.0.0.1:8787/v1/experience-snapshot', 'GET'],
+    ['http://127.0.0.1:8787/v1/experience-snapshot', 'GET'],
   ]);
   assert.deepEqual(waits, [500]);
 });
