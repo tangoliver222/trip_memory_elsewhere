@@ -43,7 +43,7 @@ const sequence = () => {
   return () => `00000000-0000-4000-8000-${String(value += 1).padStart(12, '0')}`;
 };
 
-test('API composition exposes only public probes and protected Import Batch routes', async (t) => {
+test('API composition exposes only public probes and protected product routes', async (t) => {
   const app = createApiComposition({
     appConfig,
     repository: createMemoryRepository(),
