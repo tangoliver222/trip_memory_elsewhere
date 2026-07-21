@@ -208,7 +208,7 @@ export function renderInboxPage(state = {}) {
     role: 'evidence',
     status: index === 0 ? 'unresolved' : fragment.status,
   }));
-  const renderSource = (fragment, index) => `<div class="review-source ${index === 0 ? 'review-source--pending' : ''}" data-particle-anchor data-particle-id="${escapeHtml(fragment.id)}" data-particle-role="evidence" data-particle-weight="1">
+  const renderSource = (fragment) => `<div class="review-source" data-particle-anchor data-particle-id="${escapeHtml(fragment.id)}" data-particle-role="evidence" data-particle-weight="1">
     ${renderMedia(fragment, { className: 'review-source__media' })}
     <span>${escapeHtml(fragment.capturedAt?.slice(0, 16).replace('T', ' · ') || '时间待确认')}</span>
     <strong>${escapeHtml(typeLabel[fragment.type] || '原件')}</strong>
@@ -224,7 +224,7 @@ export function renderInboxPage(state = {}) {
     afterRender: null,
     html: `<main class="page inbox-page" data-page-id="world-inbox">
       <header class="inbox-header"><p class="eyebrow">收件箱 · 一次只做一个判断</p><h1>${escapeHtml(review.prompt)}</h1><p>你的选择会改变派生关系，不会修改或删除原件。</p></header>
-      ${reviewFragments.length ? `<section class="review-comparison">${renderSource(reviewFragments[0], 0)}${reviewFragments.length > 1 ? `<div class="review-link" aria-hidden="true"><i></i><span class="review-link__question">?</span><i></i></div>${renderSource(reviewFragments[1], 1)}` : ''}</section>` : '<p class="tool-caveat">关联原件暂时不可用，这个判断不会被自动确认。</p>'}
+      ${reviewFragments.length ? `<section class="review-comparison">${renderSource(reviewFragments[0])}${reviewFragments.length > 1 ? `<div class="review-link" aria-hidden="true"><i></i><span class="review-link__question">?</span><i></i></div>${renderSource(reviewFragments[1])}` : ''}</section>` : '<p class="tool-caveat">关联原件暂时不可用，这个判断不会被自动确认。</p>'}
       <div class="review-choices">${review.choices.map((choice, index) => `<button type="button" data-review-choice data-action="review-choice" data-review-id="${review.id}" data-value="${index}"${String(index) === decision ? ' class="is-selected"' : ''}>${escapeHtml(choice)}</button>`).join('')}</div>
       ${decision == null ? '' : `<p class="decision-feedback" role="status">已记录“${escapeHtml(review.choices[Number(decision)])}”；原件本身没有改变。</p>`}
       ${(processingItems.length || exceptions.length) ? `<section class="inbox-queues">${processingItems[0] ? `<div class="inbox-queue-item"><span>正在整理</span><strong>${escapeHtml(processingItems[0].label)}</strong></div>` : ''}${exceptions[0] ? `<div class="inbox-queue-item"><span>需要原件</span><strong>${escapeHtml(exceptions[0].label)}</strong></div>` : ''}</section>` : ''}
