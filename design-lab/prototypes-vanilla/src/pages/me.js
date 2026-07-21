@@ -74,7 +74,7 @@ export function renderPrivacy(state) {
       <label><span><strong>应用锁</strong><small>真实设备接入后可使用系统认证保护入口。</small></span><input type="checkbox" data-store-action="setting" data-key="appLock" ${current.appLock ? 'checked' : ''}></label>
     </section>
     <p class="tool-caveat">产品偏好会同步到你的私有空间；这里不会声称已修改系统权限。</p>
-    ${primary('保存当前控制', '#/me')}
+    ${primary('完成', '#/me')}
   </main>`);
 }
 
@@ -100,7 +100,7 @@ export function renderPreferences(state) {
     <header class="tool-header"><p class="eyebrow">表达方式不会改变事实</p><h1>外观与叙述</h1><p>用同一组来源比较三个语气；你随时可以改回事实优先。</p></header>
     <section class="tone-examples">${examples.map(([value,label,copy]) => `<label class="${tone === value ? 'is-selected' : ''}"><input type="radio" name="tone" value="${value}" data-store-action="setting" data-key="aiTone" ${tone === value ? 'checked' : ''}><span>${label}</span><p>${copy}</p><i></i></label>`).join('')}</section>
     <section class="language-row"><span>语言</span><strong>简体中文</strong><small>日期与地点名称保留来源中的原文</small></section>
-    ${primary('保存偏好', '#/me')}
+    ${primary('完成', '#/me')}
   </main>`);
 }
 
